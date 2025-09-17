@@ -8,15 +8,17 @@ to search for and access geospatial data from STAC catalogs.
 
 import asyncio
 import json
-from typing import Dict, Any
+from typing import Any, Dict
+
 from mcp.types import CallToolRequest, CallToolResult
+
 from stac_mcp.server import handle_call_tool, handle_list_tools
 
 
 async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
     """Helper function to call a tool."""
     request = CallToolRequest(
-        params=CallToolRequest.Params(name=name, arguments=arguments)
+        params=CallToolRequest.Params(name=name, arguments=arguments),
     )
     return await handle_call_tool(request)
 
@@ -38,7 +40,7 @@ async def demonstrate_stac_usage():
         result = await call_tool("search_collections", {"limit": 5})
         if result.isError:
             print(
-                f"   ❌ Error (expected in this environment): {result.content[0].text[:100]}..."
+                f"   ❌ Error (expected in this environment): {result.content[0].text[:100]}...",
             )
         else:
             print("   ✅ Success:")

@@ -1,18 +1,15 @@
 """Main MCP Server implementation for STAC requests."""
 
 import asyncio
-import json
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
-import anyio
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import (
     CallToolRequest,
     CallToolResult,
-    ListToolsRequest,
     TextContent,
     Tool,
 )
@@ -31,7 +28,7 @@ class STACClient:
     """STAC Client wrapper for common operations."""
 
     def __init__(
-        self, catalog_url: str = "https://planetarycomputer.microsoft.com/api/stac/v1"
+        self, catalog_url: str = "https://planetarycomputer.microsoft.com/api/stac/v1",
     ):
         """Initialize STAC client with default to Microsoft Planetary Computer."""
         self.catalog_url = catalog_url
@@ -63,7 +60,7 @@ class STACClient:
                             if collection.providers
                             else []
                         ),
-                    }
+                    },
                 )
                 if len(collections) >= limit:
                     break
@@ -131,7 +128,7 @@ class STACClient:
                         ),
                         "properties": item.properties,
                         "assets": {k: v.to_dict() for k, v in item.assets.items()},
-                    }
+                    },
                 )
                 if len(items) >= limit:
                     break
@@ -156,7 +153,7 @@ class STACClient:
             }
         except APIError as e:
             logger.error(
-                f"Error fetching item {item_id} from collection {collection_id}: {e}"
+                f"Error fetching item {item_id} from collection {collection_id}: {e}",
             )
             raise
 
@@ -299,7 +296,7 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                 isError=False,
             )
 
-        elif request.params.name == "get_collection":
+        if request.params.name == "get_collection":
             collection_id = request.params.arguments["collection_id"]
             collection = client.get_collection(collection_id)
 
@@ -327,7 +324,7 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                 isError=False,
             )
 
-        elif request.params.name == "search_items":
+        if request.params.name == "search_items":
             collections = request.params.arguments.get("collections")
             bbox = request.params.arguments.get("bbox")
             datetime = request.params.arguments.get("datetime")
@@ -359,7 +356,7 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                 isError=False,
             )
 
-        elif request.params.name == "get_item":
+        if request.params.name == "get_item":
             collection_id = request.params.arguments["collection_id"]
             item_id = request.params.arguments["item_id"]
 
@@ -373,7 +370,7 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                 bbox = item["bbox"]
                 result_text += f"BBox: [{bbox[0]:.2f}, {bbox[1]:.2f}, {bbox[2]:.2f}, {bbox[3]:.2f}]\n"
 
-            result_text += f"\n**Properties:**\n"
+            result_text += "\n**Properties:**\n"
             for key, value in item["properties"].items():
                 if isinstance(value, (str, int, float, bool)):
                     result_text += f"  {key}: {value}\n"
@@ -390,20 +387,19 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                 isError=False,
             )
 
-        else:
-            return CallToolResult(
-                content=[
-                    TextContent(
-                        type="text", text=f"Unknown tool: {request.params.name}"
-                    )
-                ],
-                isError=True,
-            )
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text", text=f"Unknown tool: {request.params.name}",
+                ),
+            ],
+            isError=True,
+        )
 
     except Exception as e:
         logger.error(f"Error in tool call {request.params.name}: {e}")
         return CallToolResult(
-            content=[TextContent(type="text", text=f"Error: {str(e)}")],
+            content=[TextContent(type="text", text=f"Error: {e!s}")],
             isError=True,
         )
 

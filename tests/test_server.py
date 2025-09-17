@@ -1,6 +1,5 @@
 """Test STAC MCP Server functionality."""
 
-import pytest
 from unittest.mock import Mock, patch
 
 from stac_mcp.server import STACClient

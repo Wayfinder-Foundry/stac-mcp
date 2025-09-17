@@ -1,11 +1,10 @@
 """Test MCP protocol compliance."""
 
-import asyncio
-import json
-import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-from mcp.types import CallToolRequest, CallToolRequestParams, ListToolsRequest
+import pytest
+from mcp.types import CallToolRequest, CallToolRequestParams
+
 from stac_mcp.server import handle_call_tool, handle_list_tools
 
 
@@ -41,7 +40,7 @@ async def test_list_tools():
 async def test_call_tool_unknown():
     """Test calling an unknown tool returns an error."""
     request = CallToolRequest(
-        params=CallToolRequestParams(name="unknown_tool", arguments={})
+        params=CallToolRequestParams(name="unknown_tool", arguments={}),
     )
 
     result = await handle_call_tool(request)
@@ -61,11 +60,11 @@ async def test_call_tool_search_collections(mock_stac_client):
             "title": "Test Collection",
             "description": "A test collection",
             "license": "MIT",
-        }
+        },
     ]
 
     request = CallToolRequest(
-        params=CallToolRequestParams(name="search_collections", arguments={"limit": 1})
+        params=CallToolRequestParams(name="search_collections", arguments={"limit": 1}),
     )
 
     result = await handle_call_tool(request)
@@ -82,7 +81,7 @@ async def test_call_tool_with_error(mock_stac_client):
     mock_stac_client.search_collections.side_effect = Exception("Network error")
 
     request = CallToolRequest(
-        params=CallToolRequestParams(name="search_collections", arguments={"limit": 1})
+        params=CallToolRequestParams(name="search_collections", arguments={"limit": 1}),
     )
 
     result = await handle_call_tool(request)
