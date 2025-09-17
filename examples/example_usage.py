@@ -8,19 +8,22 @@ to search for and access geospatial data from STAC catalogs.
 
 import asyncio
 import json
-from typing import Dict, Any
+from typing import Any, Dict
 
 from mcp.types import CallToolRequest, CallToolRequestParams, CallToolResult
-from stac_mcp.server import handle_call_tool, handle_list_tools
+
+from stac_mcp.server import handle_list_tools, server
+
+
 async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
-    """Helper function to call a tool."""
+    """Helper function to call a tool through MCP server."""
+    # Use the MCP server's internal mechanism to call the tool
     request = CallToolRequest(
-        params=CallToolRequestParams(
-            name=name,
-            arguments=arguments
-        )
+        params=CallToolRequestParams(name=name, arguments=arguments),
     )
-    return await handle_call_tool(request)
+    handler = server.request_handlers[CallToolRequest]
+    result = await handler(request)
+    return result.root if hasattr(result, "root") else result
 
 
 async def demonstrate_stac_usage():

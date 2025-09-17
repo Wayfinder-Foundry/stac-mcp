@@ -8,8 +8,6 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import (
-    CallToolRequest,
-    CallToolResult,
     TextContent,
     Tool,
 )
@@ -28,7 +26,8 @@ class STACClient:
     """STAC Client wrapper for common operations."""
 
     def __init__(
-        self, catalog_url: str = "https://planetarycomputer.microsoft.com/api/stac/v1",
+        self,
+        catalog_url: str = "https://planetarycomputer.microsoft.com/api/stac/v1",
     ):
         """Initialize STAC client with default to Microsoft Planetary Computer."""
         self.catalog_url = catalog_url
@@ -270,18 +269,18 @@ async def handle_list_tools() -> List[Tool]:
 
 
 @server.call_tool()
-async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
+async def handle_call_tool(tool_name: str, arguments: dict):
     """Handle tool calls for STAC operations."""
     try:
         # Check if custom catalog URL is provided
-        catalog_url = request.params.arguments.get("catalog_url")
+        catalog_url = arguments.get("catalog_url")
         if catalog_url:
             client = STACClient(catalog_url)
         else:
             client = stac_client
 
-        if request.params.name == "search_collections":
-            limit = request.params.arguments.get("limit", 10)
+        if tool_name == "search_collections":
+            limit = arguments.get("limit", 10)
             collections = client.search_collections(limit=limit)
 
             result_text = f"Found {len(collections)} collections:\n\n"
@@ -291,13 +290,10 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                     result_text += f"  {collection['description'][:200]}{'...' if len(collection['description']) > 200 else ''}\n"
                 result_text += f"  License: {collection['license']}\n\n"
 
-            return CallToolResult(
-                content=[TextContent(type="text", text=result_text)],
-                isError=False,
-            )
+            return [TextContent(type="text", text=result_text)]
 
-        if request.params.name == "get_collection":
-            collection_id = request.params.arguments["collection_id"]
+        if tool_name == "get_collection":
+            collection_id = arguments["collection_id"]
             collection = client.get_collection(collection_id)
 
             result_text = f"**Collection: {collection['title']}**\n\n"
@@ -319,17 +315,14 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                 for provider in collection["providers"]:
                     result_text += f"  - {provider.get('name', 'Unknown')} ({provider.get('roles', [])})\n"
 
-            return CallToolResult(
-                content=[TextContent(type="text", text=result_text)],
-                isError=False,
-            )
+            return [TextContent(type="text", text=result_text)]
 
-        if request.params.name == "search_items":
-            collections = request.params.arguments.get("collections")
-            bbox = request.params.arguments.get("bbox")
-            datetime = request.params.arguments.get("datetime")
-            query = request.params.arguments.get("query")
-            limit = request.params.arguments.get("limit", 10)
+        if tool_name == "search_items":
+            collections = arguments.get("collections")
+            bbox = arguments.get("bbox")
+            datetime = arguments.get("datetime")
+            query = arguments.get("query")
+            limit = arguments.get("limit", 10)
 
             items = client.search_items(
                 collections=collections,
@@ -351,14 +344,11 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                     result_text += f"  BBox: [{bbox[0]:.2f}, {bbox[1]:.2f}, {bbox[2]:.2f}, {bbox[3]:.2f}]\n"
                 result_text += f"  Assets: {len(item['assets'])}\n\n"
 
-            return CallToolResult(
-                content=[TextContent(type="text", text=result_text)],
-                isError=False,
-            )
+            return [TextContent(type="text", text=result_text)]
 
-        if request.params.name == "get_item":
-            collection_id = request.params.arguments["collection_id"]
-            item_id = request.params.arguments["item_id"]
+        if tool_name == "get_item":
+            collection_id = arguments["collection_id"]
+            item_id = arguments["item_id"]
 
             item = client.get_item(collection_id, item_id)
 
@@ -382,26 +372,13 @@ async def handle_call_tool(request: CallToolRequest) -> CallToolResult:
                 if "href" in asset:
                     result_text += f"    URL: {asset['href']}\n"
 
-            return CallToolResult(
-                content=[TextContent(type="text", text=result_text)],
-                isError=False,
-            )
+            return [TextContent(type="text", text=result_text)]
 
-        return CallToolResult(
-            content=[
-                TextContent(
-                    type="text", text=f"Unknown tool: {request.params.name}",
-                ),
-            ],
-            isError=True,
-        )
+        raise ValueError(f"Unknown tool: {tool_name}")
 
     except Exception as e:
-        logger.error(f"Error in tool call {request.params.name}: {e}")
-        return CallToolResult(
-            content=[TextContent(type="text", text=f"Error: {e!s}")],
-            isError=True,
-        )
+        logger.error(f"Error in tool call {tool_name}: {e}")
+        raise
 
 
 async def main():

@@ -3,7 +3,6 @@
 from unittest.mock import patch
 
 import pytest
-from mcp.types import CallToolRequest, CallToolRequestParams
 
 from stac_mcp.server import handle_call_tool, handle_list_tools
 
@@ -39,14 +38,11 @@ async def test_list_tools():
 @pytest.mark.asyncio
 async def test_call_tool_unknown():
     """Test calling an unknown tool returns an error."""
-    request = CallToolRequest(
-        params=CallToolRequestParams(name="unknown_tool", arguments={}),
-    )
-
-    result = await handle_call_tool(request)
-
-    assert result.isError is True
-    assert "Unknown tool" in result.content[0].text
+    try:
+        await handle_call_tool("unknown_tool", {})
+        assert False, "Expected ValueError for unknown tool"
+    except ValueError as e:
+        assert "Unknown tool: unknown_tool" in str(e)
 
 
 @pytest.mark.asyncio
@@ -63,15 +59,13 @@ async def test_call_tool_search_collections(mock_stac_client):
         },
     ]
 
-    request = CallToolRequest(
-        params=CallToolRequestParams(name="search_collections", arguments={"limit": 1}),
-    )
+    result = await handle_call_tool("search_collections", {"limit": 1})
 
-    result = await handle_call_tool(request)
-
-    assert result.isError is False
-    assert "Test Collection" in result.content[0].text
-    assert "test-collection" in result.content[0].text
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].type == "text"
+    assert "Test Collection" in result[0].text
+    assert "test-collection" in result[0].text
 
 
 @pytest.mark.asyncio
@@ -80,14 +74,11 @@ async def test_call_tool_with_error(mock_stac_client):
     """Test calling a tool that raises an exception."""
     mock_stac_client.search_collections.side_effect = Exception("Network error")
 
-    request = CallToolRequest(
-        params=CallToolRequestParams(name="search_collections", arguments={"limit": 1}),
-    )
-
-    result = await handle_call_tool(request)
-
-    assert result.isError is True
-    assert "Network error" in result.content[0].text
+    try:
+        await handle_call_tool("search_collections", {"limit": 1})
+        assert False, "Expected exception to be raised"
+    except Exception as e:
+        assert "Network error" in str(e)
 
 
 @pytest.mark.asyncio
