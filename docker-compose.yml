@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  stac-mcp:
+    build:
+      context: .
+      dockerfile: Containerfile
+    # For direct interaction via stdin/stdout
+    stdin_open: true
+    tty: true
+    # Alternatively, for production use:
+    # image: ghcr.io/bnjam/stac-mcp:latest
+    
+    # Container runs as non-root user by default
+    # No ports exposed - uses stdio transport
+    
+    # Optional: Add environment variables for configuration
+    # environment:
+    #   - PYTHONUNBUFFERED=1
+    
+    # Optional: Add volume mounts for logs or configuration
+    # volumes:
+    #   - ./logs:/app/logs:rw
+    
+    # Resource limits for production deployment
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'

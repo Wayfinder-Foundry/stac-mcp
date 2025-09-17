@@ -2,6 +2,10 @@
   "mcpServers": {
     "stac": {
       "command": "stac-mcp"
+    },
+    "stac-container": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "ghcr.io/bnjam/stac-mcp:latest"]
     }
   }
 }

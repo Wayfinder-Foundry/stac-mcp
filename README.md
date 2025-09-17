@@ -25,11 +25,13 @@ By default, the server connects to Microsoft Planetary Computer STAC API, but it
 
 ## Installation
 
+### PyPI Package
+
 ```bash
 pip install stac-mcp
 ```
 
-Or for development:
+### Development Installation
 
 ```bash
 git clone https://github.com/BnJam/stac-mcp.git
@@ -37,9 +39,41 @@ cd stac-mcp
 pip install -e .
 ```
 
+### Container
+
+The STAC MCP server is available as a secure distroless container image:
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/bnjam/stac-mcp:latest
+
+# Run the container (uses stdio transport for MCP)
+docker run --rm -i ghcr.io/bnjam/stac-mcp:latest
+```
+
+#### Building the Container
+
+To build the container locally using the provided Containerfile:
+
+```bash
+# Build with Docker
+docker build -f Containerfile -t stac-mcp .
+
+# Or build with Podman  
+podman build -f Containerfile -t stac-mcp .
+```
+
+The container uses a multi-stage build with:
+- **Builder stage**: Python 3.12 slim image for building dependencies
+- **Runtime stage**: Distroless Python image for security and minimal size
+- **Security**: Runs as non-root user, minimal attack surface
+- **Transport**: Uses stdio for MCP protocol communication
+
 ## Usage
 
 ### As an MCP Server
+
+#### Native Installation
 
 Configure your MCP client to connect to this server:
 
@@ -53,12 +87,50 @@ Configure your MCP client to connect to this server:
 }
 ```
 
+#### Container Usage
+
+To use the containerized version with an MCP client:
+
+```json
+{
+  "mcpServers": {
+    "stac": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "ghcr.io/bnjam/stac-mcp:latest"]
+    }
+  }
+}
+```
+
+Or with Podman:
+
+```json
+{
+  "mcpServers": {
+    "stac": {
+      "command": "podman", 
+      "args": ["run", "--rm", "-i", "ghcr.io/bnjam/stac-mcp:latest"]
+    }
+  }
+}
+```
+
 ### Command Line
 
-You can also run the server directly:
+#### Native Installation
 
 ```bash
 stac-mcp
+```
+
+#### Container Usage
+
+```bash
+# With Docker
+docker run --rm -i ghcr.io/bnjam/stac-mcp:latest
+
+# With Podman
+podman run --rm -i ghcr.io/bnjam/stac-mcp:latest
 ```
 
 ### Examples
@@ -125,6 +197,31 @@ pytest
 black stac_mcp/
 ruff check stac_mcp/
 ```
+
+### Container Development
+
+To develop with containers:
+
+```bash
+# Build development image
+docker build -f Containerfile -t stac-mcp:dev .
+
+# Test the container
+docker run --rm -i stac-mcp:dev
+
+# Using docker-compose for development
+docker-compose up --build
+
+# For debugging, use an interactive shell (requires modifying Containerfile)
+# docker run --rm -it --entrypoint=/bin/sh stac-mcp:dev
+```
+
+The Containerfile uses a secure multi-stage build approach:
+- **Distroless base**: Minimal attack surface with no shell or package manager
+- **Non-root user**: Container runs as unprivileged user
+- **Minimal dependencies**: Only runtime dependencies included in final image
+- **Build optimization**: Dependencies built in separate stage and copied over
+- **Production ready**: Includes resource limits and security best practices
 
 ## STAC Resources
 
