@@ -12,7 +12,7 @@ async def test_list_tools():
     """Test that list_tools returns proper MCP tool definitions."""
     tools = await handle_list_tools()
 
-    assert len(tools) == 4
+    assert len(tools) == 6
 
     tool_names = [tool.name for tool in tools]
     expected_tools = [
@@ -20,6 +20,8 @@ async def test_list_tools():
         "get_collection",
         "search_items",
         "get_item",
+        "code-catalog-connect",
+        "code-catalog-search",
     ]
 
     for expected_tool in expected_tools:
@@ -99,3 +101,76 @@ async def test_tool_schemas_validation():
 
             for field in required_fields:
                 assert field in properties
+
+
+@pytest.mark.asyncio
+async def test_call_tool_code_catalog_connect():
+    """Test calling code-catalog-connect tool."""
+    result = await handle_call_tool("code-catalog-connect", {})
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].type == "text"
+    assert "Python Code Snippet - STAC Catalog Connection" in result[0].text
+    assert "import pystac_client" in result[0].text
+    assert "catalog = pystac_client.Client.open" in result[0].text
+    assert "planetarycomputer.microsoft.com" in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_call_tool_code_catalog_connect_custom():
+    """Test calling code-catalog-connect tool with custom parameters."""
+    result = await handle_call_tool(
+        "code-catalog-connect",
+        {
+            "catalog_url": "https://example.com/stac",
+            "variable_name": "my_catalog",
+        },
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].type == "text"
+    assert "my_catalog = pystac_client.Client.open" in result[0].text
+    assert "https://example.com/stac" in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_call_tool_code_catalog_search():
+    """Test calling code-catalog-search tool."""
+    result = await handle_call_tool(
+        "code-catalog-search",
+        {
+            "collections": ["landsat-c2l2-sr"],
+            "bbox": [-122.5, 37.7, -122.3, 37.8],
+            "datetime": "2023-01-01/2023-12-31",
+        },
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].type == "text"
+    assert "Python Code Snippet - StackSTAC Query Operation" in result[0].text
+    assert "import stackstac" in result[0].text
+    assert "import pystac_client" in result[0].text
+    assert 'collections=["landsat-c2l2-sr"]' in result[0].text
+    assert "bbox=[-122.5, 37.7, -122.3, 37.8]" in result[0].text
+    assert 'datetime="2023-01-01/2023-12-31"' in result[0].text
+    assert "stackstac.stack" in result[0].text
+
+
+@pytest.mark.asyncio
+async def test_call_tool_code_catalog_search_minimal():
+    """Test calling code-catalog-search tool with minimal parameters."""
+    result = await handle_call_tool(
+        "code-catalog-search",
+        {
+            "collections": ["sentinel-2-l2a"],
+        },
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].type == "text"
+    assert 'collections=["sentinel-2-l2a"]' in result[0].text
+    assert "limit=10" in result[0].text

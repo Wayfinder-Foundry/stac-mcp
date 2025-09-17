@@ -265,6 +265,70 @@ async def handle_list_tools() -> List[Tool]:
                 "required": ["collection_id", "item_id"],
             },
         ),
+        Tool(
+            name="code-catalog-connect",
+            description="Generate Python code snippet to connect to a STAC catalog",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "catalog_url": {
+                        "type": "string",
+                        "description": "STAC catalog URL (optional, defaults to Microsoft Planetary Computer)",
+                    },
+                    "variable_name": {
+                        "type": "string",
+                        "description": "Variable name for the catalog client (optional, defaults to 'catalog')",
+                        "default": "catalog",
+                    },
+                },
+            },
+        ),
+        Tool(
+            name="code-catalog-search",
+            description="Generate Python code snippet for stackstac.query operation with given AOI and timeseries",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "collections": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of collection IDs to search within",
+                    },
+                    "bbox": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 4,
+                        "maxItems": 4,
+                        "description": "Bounding box [west, south, east, north] in WGS84",
+                    },
+                    "datetime": {
+                        "type": "string",
+                        "description": "Date/time filter (ISO 8601 format, e.g., '2023-01-01/2023-12-31')",
+                    },
+                    "query": {
+                        "type": "object",
+                        "description": "Additional query parameters for filtering items",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of items to return",
+                        "default": 10,
+                        "minimum": 1,
+                        "maximum": 1000,
+                    },
+                    "catalog_url": {
+                        "type": "string",
+                        "description": "STAC catalog URL (optional, defaults to Microsoft Planetary Computer)",
+                    },
+                    "variable_name": {
+                        "type": "string",
+                        "description": "Variable name for the search results (optional, defaults to 'stack')",
+                        "default": "stack",
+                    },
+                },
+                "required": ["collections"],
+            },
+        ),
     ]
 
 
@@ -371,6 +435,100 @@ async def handle_call_tool(tool_name: str, arguments: dict):
                 result_text += f"    Type: {asset.get('type', 'unknown')}\n"
                 if "href" in asset:
                     result_text += f"    URL: {asset['href']}\n"
+
+            return [TextContent(type="text", text=result_text)]
+
+        if tool_name == "code-catalog-connect":
+            catalog_url = arguments.get(
+                "catalog_url", "https://planetarycomputer.microsoft.com/api/stac/v1"
+            )
+            variable_name = arguments.get("variable_name", "catalog")
+
+            code_snippet = f"""# Connect to STAC Catalog
+import pystac_client
+
+# Open STAC catalog
+{variable_name} = pystac_client.Client.open("{catalog_url}")
+print(f"Connected to STAC catalog: {{catalog.title}}")
+"""
+
+            result_text = f"**Python Code Snippet - STAC Catalog Connection:**\n\n```python\n{code_snippet.strip()}\n```\n\n"
+            result_text += "This code snippet will connect to the STAC catalog and print its title. "
+            result_text += f"The catalog client will be available as the variable `{variable_name}` for further use."
+
+            return [TextContent(type="text", text=result_text)]
+
+        if tool_name == "code-catalog-search":
+            collections = arguments.get("collections", [])
+            bbox = arguments.get("bbox")
+            datetime_filter = arguments.get("datetime")
+            query = arguments.get("query")
+            limit = arguments.get("limit", 10)
+            catalog_url = arguments.get(
+                "catalog_url", "https://planetarycomputer.microsoft.com/api/stac/v1"
+            )
+            variable_name = arguments.get("variable_name", "stack")
+
+            # Build the code snippet
+            code_lines = [
+                "# StackSTAC Query Operation",
+                "import stackstac",
+                "import pystac_client",
+                "",
+                "# Connect to STAC catalog",
+                f'catalog = pystac_client.Client.open("{catalog_url}")',
+                "",
+                "# Search for STAC items",
+                "search = catalog.search(",
+            ]
+
+            # Add search parameters
+            search_params = []
+            if collections:
+                collections_str = str(collections).replace("'", '"')
+                search_params.append(f"    collections={collections_str},")
+
+            if bbox:
+                search_params.append(f"    bbox={bbox},")
+
+            if datetime_filter:
+                search_params.append(f'    datetime="{datetime_filter}",')
+
+            if query:
+                query_str = str(query).replace("'", '"')
+                search_params.append(f"    query={query_str},")
+
+            search_params.append(f"    limit={limit}")
+
+            code_lines.extend(search_params)
+            code_lines.append(")")
+            code_lines.extend(
+                [
+                    "",
+                    "# Convert to xarray using stackstac",
+                    f"{variable_name} = stackstac.stack(search.items())",
+                    f'print(f"Created data stack with shape: {{{variable_name}.shape}}")',
+                    f'print(f"Data variables: {{list({variable_name}.data_vars)}}")',
+                ]
+            )
+
+            code_snippet = "\n".join(code_lines)
+
+            result_text = f"**Python Code Snippet - StackSTAC Query Operation:**\n\n```python\n{code_snippet}\n```\n\n"
+            result_text += "This code snippet will:\n"
+            result_text += "1. Connect to the STAC catalog\n"
+            result_text += "2. Search for STAC items based on your criteria\n"
+            result_text += (
+                "3. Convert the results to an xarray Dataset using stackstac\n"
+            )
+            result_text += f"4. The resulting stack will be available as the variable `{variable_name}`\n\n"
+
+            if bbox:
+                result_text += f"**Spatial Filter:** Bounding box {bbox}\n"
+            if datetime_filter:
+                result_text += f"**Temporal Filter:** {datetime_filter}\n"
+            if collections:
+                result_text += f"**Collections:** {', '.join(collections)}\n"
 
             return [TextContent(type="text", text=result_text)]
 

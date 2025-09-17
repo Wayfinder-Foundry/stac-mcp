@@ -92,8 +92,45 @@ async def demonstrate_stac_usage():
     print("🎯 Summary:")
     print("   The STAC MCP Server is working correctly!")
     print("   Network access to STAC APIs is required for actual data retrieval.")
+    print(
+        "   The new StackSTAC code generation tools provide ready-to-use Python snippets."
+    )
+    print(
+        "   Use code-catalog-connect and code-catalog-search to generate stackstac code!"
+    )
     print("   In a real environment with network access, these calls would")
     print("   return actual geospatial data from STAC catalogs.")
+
+    # Demonstrate the new StackSTAC code generation tools
+    print("\n7. Example code-catalog-connect call:")
+    try:
+        result = await call_tool("code-catalog-connect", {})
+        if result.isError:
+            print(f"   ❌ Error: {result.content[0].text[:100]}...")
+        else:
+            print("   ✅ Success:")
+            print("   Generated code snippet for catalog connection")
+            print(f"   {result.content[0].text[:300]}...")
+    except Exception as e:
+        print(f"   ❌ Exception: {str(e)[:100]}...")
+
+    print("\n8. Example code-catalog-search call:")
+    stackstac_params = {
+        "collections": ["landsat-c2l2-sr"],
+        "bbox": [-122.5, 37.7, -122.3, 37.8],
+        "datetime": "2023-01-01/2023-12-31",
+        "limit": 50,
+    }
+    try:
+        result = await call_tool("code-catalog-search", stackstac_params)
+        if result.isError:
+            print(f"   ❌ Error: {result.content[0].text[:100]}...")
+        else:
+            print("   ✅ Success:")
+            print("   Generated StackSTAC query code snippet")
+            print(f"   {result.content[0].text[:300]}...")
+    except Exception as e:
+        print(f"   ❌ Exception: {str(e)[:100]}...")
 
 
 if __name__ == "__main__":
