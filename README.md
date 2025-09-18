@@ -209,7 +209,16 @@ ruff check stac_mcp/
 
 ### Version Management
 
-The project uses semantic versioning (SemVer) with centralized version management:
+The project uses semantic versioning (SemVer) with automated version management based on branch naming:
+
+#### Branch-Based Automatic Versioning
+When PRs are merged to main, versions are automatically incremented based on branch prefixes:
+- **hotfix/** branches → patch increment (0.1.0 → 0.1.1) for bug fixes
+- **feature/** branches → minor increment (0.1.0 → 0.2.0) for new features  
+- **release/** branches → major increment (0.1.0 → 1.0.0) for breaking changes
+
+#### Manual Version Management
+You can also manually manage versions using the version script:
 
 ```bash
 # Show current version
@@ -224,7 +233,7 @@ python scripts/version.py major    # Breaking changes (0.1.0 -> 1.0.0)
 python scripts/version.py set 1.2.3
 ```
 
-The version script maintains consistency across:
+The version system maintains consistency across:
 - `pyproject.toml` (project version)
 - `stac_mcp/__init__.py` (__version__)
 - `stac_mcp/server.py` (server_version in MCP initialization)

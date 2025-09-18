@@ -222,19 +222,31 @@ python scripts/version.py set 1.2.3
 ```
 
 ### Version Guidelines for PRs
-For each PR merged into main, increment version based on content:
-- **Patch (0.1.0 -> 0.1.1)**: Bug fixes, documentation updates, minor improvements, security patches
-- **Minor (0.1.0 -> 0.2.0)**: New features, new tools, non-breaking API changes, performance improvements
-- **Major (0.1.0 -> 1.0.0)**: Breaking changes, major architecture changes, incompatible API changes
+Use branch prefixes to control automatic version increments when PRs are merged into main:
+- **hotfix/** branches: Trigger patch version increments (0.1.0 -> 0.1.1)
+  - Bug fixes, security patches, documentation updates, minor improvements
+- **feature/** branches: Trigger minor version increments (0.1.0 -> 0.2.0)  
+  - New features, new tools, non-breaking API changes, performance improvements
+- **release/** branches: Trigger major version increments (0.1.0 -> 1.0.0)
+  - Breaking changes, major architecture changes, incompatible API changes
+- Other prefixes (chore/, docs/, copilot/): No automatic version increment
+
+Examples:
+- `hotfix/fix-authentication-bug`
+- `feature/add-stac-search-tool`
+- `release/v2-breaking-api-changes`
 
 ### Container Release Process
-1. **Development**: PRs build containers but don't push to registry
-2. **Version Tag**: When ready to release, tag with semantic version: `git tag v1.2.3`
-3. **Container Build**: GitHub Actions automatically builds and pushes containers with semantic tags:
-   - `ghcr.io/bnjam/stac-mcp:1.2.3` (exact version)
-   - `ghcr.io/bnjam/stac-mcp:1.2` (major.minor)
-   - `ghcr.io/bnjam/stac-mcp:1` (major)
-   - `ghcr.io/bnjam/stac-mcp:latest` (for main branch)
+1. **Development**: Create PR from appropriately prefixed branch
+2. **Merge to Main**: Automatic version increment based on branch prefix
+3. **Container Build**: GitHub Actions automatically:
+   - Increments version in all files
+   - Creates git tag (e.g., v1.2.3)
+   - Builds and pushes containers with semantic tags:
+     - `ghcr.io/bnjam/stac-mcp:1.2.3` (exact version)
+     - `ghcr.io/bnjam/stac-mcp:1.2` (major.minor)
+     - `ghcr.io/bnjam/stac-mcp:1` (major)
+     - `ghcr.io/bnjam/stac-mcp:latest` (for main branch)
 
 ### Version Synchronization
 The version management script maintains consistency across:
