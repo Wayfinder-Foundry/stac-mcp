@@ -1,5 +1,11 @@
 # STAC MCP Server
 
+[![PyPI Version](https://img.shields.io/pypi/v/stac-mcp?style=flat-square&logo=pypi)](https://pypi.org/project/stac-mcp/)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/BnJam/stac-mcp/container.yml?branch=main&style=flat-square&logo=github)](https://github.com/BnJam/stac-mcp/actions/workflows/container.yml)
+[![Container](https://img.shields.io/badge/container-ghcr.io-blue?style=flat-square&logo=docker)](https://github.com/BnJam/stac-mcp/pkgs/container/stac-mcp)
+[![Python](https://img.shields.io/pypi/pyversions/stac-mcp?style=flat-square&logo=python)](https://pypi.org/project/stac-mcp/)
+[![License](https://img.shields.io/github/license/BnJam/stac-mcp?style=flat-square)](https://github.com/BnJam/stac-mcp/blob/main/LICENSE)
+
 An MCP (Model Context Protocol) Server that provides access to STAC (SpatioTemporal Asset Catalog) APIs for geospatial data discovery and access.
 
 ## Overview
