@@ -202,3 +202,56 @@ Configure MCP clients with:
 - **Asset Access**: Metadata only (no direct asset download)
 
 Always validate your changes with the complete workflow above before committing to ensure compatibility and prevent CI failures.
+
+## Semantic Versioning & Release Management
+
+### Version Management
+The project uses semantic versioning (SemVer) with centralized version management:
+
+```bash
+# Show current version
+python scripts/version.py current
+
+# Increment version based on change type
+python scripts/version.py patch    # Bug fixes (0.1.0 -> 0.1.1)
+python scripts/version.py minor    # New features (0.1.0 -> 0.2.0)  
+python scripts/version.py major    # Breaking changes (0.1.0 -> 1.0.0)
+
+# Set specific version
+python scripts/version.py set 1.2.3
+```
+
+### Version Guidelines for PRs
+Use branch prefixes to control automatic version increments when PRs are merged into main:
+- **hotfix/** branches: Trigger patch version increments (0.1.0 -> 0.1.1)
+  - Bug fixes, security patches, documentation updates, minor improvements
+- **feature/** branches: Trigger minor version increments (0.1.0 -> 0.2.0)  
+  - New features, new tools, non-breaking API changes, performance improvements
+- **release/** branches: Trigger major version increments (0.1.0 -> 1.0.0)
+  - Breaking changes, major architecture changes, incompatible API changes
+- Other prefixes (chore/, docs/, copilot/): No automatic version increment
+
+Examples:
+- `hotfix/fix-authentication-bug`
+- `feature/add-stac-search-tool`
+- `release/v2-breaking-api-changes`
+
+### Container Release Process
+1. **Development**: Create PR from appropriately prefixed branch
+2. **Merge to Main**: Automatic version increment based on branch prefix
+3. **Container Build**: GitHub Actions automatically:
+   - Increments version in all files
+   - Creates git tag (e.g., v1.2.3)
+   - Builds and pushes containers with semantic tags:
+     - `ghcr.io/bnjam/stac-mcp:1.2.3` (exact version)
+     - `ghcr.io/bnjam/stac-mcp:1.2` (major.minor)
+     - `ghcr.io/bnjam/stac-mcp:1` (major)
+     - `ghcr.io/bnjam/stac-mcp:latest` (for main branch)
+
+### Version Synchronization
+The version management script maintains consistency across:
+- `pyproject.toml` (project version)
+- `stac_mcp/__init__.py` (__version__)
+- `stac_mcp/server.py` (server_version in MCP initialization)
+
+Never manually edit versions in individual files - always use the script to ensure synchronization.

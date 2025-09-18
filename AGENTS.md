@@ -44,6 +44,29 @@ Commit & PR guidance
 - Run formatting and tests before pushing.
 - Keep PRs focused and small; include a brief description of changes and validation steps.
 
+Branch naming conventions
+- Use branch prefixes to control automatic version increments:
+  - **hotfix/** for bug fixes (triggers patch version increment: 0.1.0 -> 0.1.1)
+  - **feature/** for new features (triggers minor version increment: 0.1.0 -> 0.2.0)
+  - **release/** for breaking changes (triggers major version increment: 0.1.0 -> 1.0.0)
+- Examples: hotfix/fix-authentication, feature/add-new-stac-tool, release/v2-api-changes
+- Other branch prefixes (e.g., chore/, docs/, copilot/) will not trigger automatic version increments
+- Version increments happen automatically when PRs are merged to main
+
+Semantic versioning & releases
+- Follow semantic versioning (SemVer) for all releases: MAJOR.MINOR.PATCH
+- Use the version management script to maintain consistency across files:
+  - python scripts/version.py current  # Show current version
+  - python scripts/version.py patch    # Bug fixes (0.1.0 -> 0.1.1)
+  - python scripts/version.py minor    # New features (0.1.0 -> 0.2.0)
+  - python scripts/version.py major    # Breaking changes (0.1.0 -> 1.0.0)
+- Automatic version increments based on branch prefixes when PRs are merged:
+  - Patch: hotfix/* branches - Bug fixes, security patches, minor improvements
+  - Minor: feature/* branches - New features, non-breaking API changes, performance improvements
+  - Major: release/* branches - Breaking changes, major architecture changes, incompatible API changes
+- Container images are automatically tagged with semantic versions on version bump
+- Never push non-semantic tags like "cache" or "main" for production containers
+
 CI & pre-merge checks
 - Ensure Black and Ruff pass.
 - Ensure all tests pass locally and in the CI.
