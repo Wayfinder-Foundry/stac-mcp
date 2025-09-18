@@ -95,10 +95,10 @@ jobs:
         git push origin "v$NEW_VERSION"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+  
   pypi-publish:
     runs-on: ubuntu-latest
-    needs: [version-bump]
+    needs: version-bump
     if: needs.version-bump.outputs.version_changed == 'true'
     environment:
       name: pypi
