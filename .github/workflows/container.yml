@@ -112,6 +112,7 @@ jobs:
       with:
         # Fetch the latest changes if version was bumped
         ref: main
+        fetch-depth: 0
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -133,6 +134,9 @@ jobs:
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        # Provide the PyPI API token stored in repository or environment secrets
+        password: ${{ secrets.PYPI_API_TOKEN }}
 
   build:
     runs-on: ubuntu-latest
