@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
@@ -31,7 +31,7 @@ class STACClient:
     ):
         """Initialize STAC client with default to Microsoft Planetary Computer."""
         self.catalog_url = catalog_url
-        self._client: Optional[Client] = None
+        self._client: Client | None = None
 
     @property
     def client(self) -> Client:
@@ -40,7 +40,7 @@ class STACClient:
             self._client = Client.open(self.catalog_url)
         return self._client
 
-    def search_collections(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def search_collections(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get list of available collections."""
         try:
             collections = []
@@ -68,7 +68,7 @@ class STACClient:
             logger.error(f"Error fetching collections: {e}")
             raise
 
-    def get_collection(self, collection_id: str) -> Dict[str, Any]:
+    def get_collection(self, collection_id: str) -> dict[str, Any]:
         """Get details for a specific collection."""
         try:
             collection = self.client.get_collection(collection_id)
@@ -98,12 +98,12 @@ class STACClient:
 
     def search_items(
         self,
-        collections: Optional[List[str]] = None,
-        bbox: Optional[List[float]] = None,
-        datetime: Optional[str] = None,
-        query: Optional[Dict[str, Any]] = None,
+        collections: list[str] | None = None,
+        bbox: list[float] | None = None,
+        datetime: str | None = None,
+        query: dict[str, Any] | None = None,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search for STAC items."""
         try:
             search = self.client.search(
@@ -137,7 +137,7 @@ class STACClient:
             logger.error(f"Error searching items: {e}")
             raise
 
-    def get_item(self, collection_id: str, item_id: str) -> Dict[str, Any]:
+    def get_item(self, collection_id: str, item_id: str) -> dict[str, Any]:
         """Get a specific STAC item."""
         try:
             item = self.client.get_collection(collection_id).get_item(item_id)
@@ -162,7 +162,7 @@ stac_client = STACClient()
 
 
 @server.list_tools()
-async def handle_list_tools() -> List[Tool]:
+async def handle_list_tools() -> list[Tool]:
     """List available STAC tools."""
     return [
         Tool(

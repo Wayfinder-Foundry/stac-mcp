@@ -13,6 +13,8 @@ jobs:
   version-bump:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write  # Required to push commits and tags
     outputs:
       new_version: ${{ steps.bump.outputs.new_version }}
       version_changed: ${{ steps.bump.outputs.version_changed }}
