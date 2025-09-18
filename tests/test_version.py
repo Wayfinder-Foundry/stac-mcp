@@ -1,20 +1,19 @@
 """Tests for version management script."""
 
+# Import the version script functions
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-# Import the version script functions
-import sys
-
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from version import (
-    parse_version,
     format_version,
     get_current_version,
     increment_version,
+    parse_version,
 )
 
 
