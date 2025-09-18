@@ -98,7 +98,7 @@ jobs:
   
   pypi-publish:
     runs-on: ubuntu-latest
-    needs: version-bump
+    needs: [version-bump]
     if: needs.version-bump.outputs.version_changed == 'true'
     environment:
       name: pypi
