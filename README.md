@@ -41,15 +41,24 @@ pip install -e .
 
 ### Container
 
-The STAC MCP server is available as a secure distroless container image:
+The STAC MCP server is available as a secure distroless container image with semantic versioning:
 
 ```bash
-# Pull the latest image
+# Pull the latest stable version
 docker pull ghcr.io/bnjam/stac-mcp:latest
+
+# Pull a specific version (recommended for production)
+docker pull ghcr.io/bnjam/stac-mcp:0.1.0
 
 # Run the container (uses stdio transport for MCP)
 docker run --rm -i ghcr.io/bnjam/stac-mcp:latest
 ```
+
+Container images are tagged with semantic versions:
+- `ghcr.io/bnjam/stac-mcp:1.2.3` (exact version)
+- `ghcr.io/bnjam/stac-mcp:1.2` (major.minor)
+- `ghcr.io/bnjam/stac-mcp:1` (major)
+- `ghcr.io/bnjam/stac-mcp:latest` (latest stable)
 
 #### Building the Container
 
@@ -197,6 +206,28 @@ pytest
 black stac_mcp/
 ruff check stac_mcp/
 ```
+
+### Version Management
+
+The project uses semantic versioning (SemVer) with centralized version management:
+
+```bash
+# Show current version
+python scripts/version.py current
+
+# Increment version based on change type
+python scripts/version.py patch    # Bug fixes (0.1.0 -> 0.1.1)
+python scripts/version.py minor    # New features (0.1.0 -> 0.2.0)  
+python scripts/version.py major    # Breaking changes (0.1.0 -> 1.0.0)
+
+# Set specific version
+python scripts/version.py set 1.2.3
+```
+
+The version script maintains consistency across:
+- `pyproject.toml` (project version)
+- `stac_mcp/__init__.py` (__version__)
+- `stac_mcp/server.py` (server_version in MCP initialization)
 
 ### Container Development
 

@@ -202,3 +202,44 @@ Configure MCP clients with:
 - **Asset Access**: Metadata only (no direct asset download)
 
 Always validate your changes with the complete workflow above before committing to ensure compatibility and prevent CI failures.
+
+## Semantic Versioning & Release Management
+
+### Version Management
+The project uses semantic versioning (SemVer) with centralized version management:
+
+```bash
+# Show current version
+python scripts/version.py current
+
+# Increment version based on change type
+python scripts/version.py patch    # Bug fixes (0.1.0 -> 0.1.1)
+python scripts/version.py minor    # New features (0.1.0 -> 0.2.0)  
+python scripts/version.py major    # Breaking changes (0.1.0 -> 1.0.0)
+
+# Set specific version
+python scripts/version.py set 1.2.3
+```
+
+### Version Guidelines for PRs
+For each PR merged into main, increment version based on content:
+- **Patch (0.1.0 -> 0.1.1)**: Bug fixes, documentation updates, minor improvements, security patches
+- **Minor (0.1.0 -> 0.2.0)**: New features, new tools, non-breaking API changes, performance improvements
+- **Major (0.1.0 -> 1.0.0)**: Breaking changes, major architecture changes, incompatible API changes
+
+### Container Release Process
+1. **Development**: PRs build containers but don't push to registry
+2. **Version Tag**: When ready to release, tag with semantic version: `git tag v1.2.3`
+3. **Container Build**: GitHub Actions automatically builds and pushes containers with semantic tags:
+   - `ghcr.io/bnjam/stac-mcp:1.2.3` (exact version)
+   - `ghcr.io/bnjam/stac-mcp:1.2` (major.minor)
+   - `ghcr.io/bnjam/stac-mcp:1` (major)
+   - `ghcr.io/bnjam/stac-mcp:latest` (for main branch)
+
+### Version Synchronization
+The version management script maintains consistency across:
+- `pyproject.toml` (project version)
+- `stac_mcp/__init__.py` (__version__)
+- `stac_mcp/server.py` (server_version in MCP initialization)
+
+Never manually edit versions in individual files - always use the script to ensure synchronization.

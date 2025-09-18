@@ -44,6 +44,20 @@ Commit & PR guidance
 - Run formatting and tests before pushing.
 - Keep PRs focused and small; include a brief description of changes and validation steps.
 
+Semantic versioning & releases
+- Follow semantic versioning (SemVer) for all releases: MAJOR.MINOR.PATCH
+- Use the version management script to maintain consistency across files:
+  - python scripts/version.py current  # Show current version
+  - python scripts/version.py patch    # Bug fixes (0.1.0 -> 0.1.1)
+  - python scripts/version.py minor    # New features (0.1.0 -> 0.2.0)
+  - python scripts/version.py major    # Breaking changes (0.1.0 -> 1.0.0)
+- For each PR merged into main, increment version based on content:
+  - Patch: Bug fixes, documentation updates, minor improvements
+  - Minor: New features, non-breaking API changes
+  - Major: Breaking changes, major architecture changes
+- Container images are automatically tagged with semantic versions on git tag push
+- Never push non-semantic tags like "cache" or "main" for production containers
+
 CI & pre-merge checks
 - Ensure Black and Ruff pass.
 - Ensure all tests pass locally and in the CI.
