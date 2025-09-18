@@ -25,3 +25,6 @@ Date: 2025-09-18
 
 ## Alternatives considered
 - Live network tests (rejected; flaky, slow).
+
+## Addendums
+- 2025-09-18: See ASR 1001 (Fast, Offline, Deterministic Validation and Tests) for enforced timing and offline constraints.

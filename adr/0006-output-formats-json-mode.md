@@ -20,3 +20,6 @@ Date: 2025-09-18
 
 ## Alternatives considered
 - New parallel tools with -json suffix (rejected; duplicates surface).
+
+## Addendums
+- 2025-09-18: See ASR 1003 (JSON Output Stability and Compatibility) for non-functional guarantees and compatibility policy.

@@ -28,3 +28,6 @@ Date: 2025-09-18
 
 ## Alternatives considered
 - Keep minimal search surface (rejected; limits serious use).
+
+## Addendums
+- 2025-09-18: See ASR 1005 (Performance Bounds for Search Operations) for default limits, pagination controls, and response metadata.

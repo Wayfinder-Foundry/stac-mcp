@@ -44,6 +44,71 @@ Commit & PR guidance
 - Run formatting and tests before pushing.
 - Keep PRs focused and small; include a brief description of changes and validation steps.
 
+## Architecture records (ADRs and ASRs)
+
+- Location: keep all Architecture Decision Records (ADRs) and Architecture Significant Requirements (ASRs) under the `adr/` directory.
+- Scope:
+  - ADRs document important architectural decisions and their rationale.
+  - ASRs capture significant requirements (often non-functional) that drive architectural choices (e.g., performance SLOs, availability, security, offline behavior).
+- Naming & format:
+  - Filename: zero-padded ordinal and a short kebab-case slug, e.g., `0009-support-aggregations.md`.
+  - Title: start with `# ADR <NNNN>: …` or `# ASR <NNNN>: …` to clearly distinguish the type.
+  - Status lifecycle: Proposed → Accepted → (optionally) Superseded.
+  - Recommended sections: Context, Decision (for ADR) or Requirement (for ASR), Consequences, Alternatives considered, and an Addendums section for incremental updates.
+- Process:
+  - When to write/update: new features, API or protocol changes, dependency/infra shifts, performance/security goals, behavior or contract changes visible to users/clients.
+  - How:
+    - Create a new file in `adr/` for new decisions/requirements and link it in your PR description.
+    - If changing an existing decision/requirement, either add a dated Addendum section in the same file, or create a new ADR that supersedes the previous one and cross-reference with `Supersedes`/`Superseded by` notes.
+    - Update the `Status` field upon merge.
+- Minimal templates:
+
+  ADR template
+  ```markdown
+  # ADR NNNN: Title
+  
+  Status: Proposed | Accepted | Superseded
+  Date: YYYY-MM-DD
+  
+  ## Context
+  ...
+  
+  ## Decision
+  ...
+  
+  ## Consequences
+  ...
+  
+  ## Alternatives considered
+  ...
+  
+  ## Addendums
+  - YYYY-MM-DD: ...
+  ```
+
+  ASR template
+  ```markdown
+  # ASR NNNN: Title
+  
+  Status: Proposed | Accepted | Superseded
+  Date: YYYY-MM-DD
+  
+  ## Context
+  ...
+  
+  ## Requirement
+  ... (measurable criteria if applicable)
+  
+  ## Implications
+  ... (impact on architecture, testing, ops)
+  
+  ## Alternatives considered
+  ...
+  
+  ## Addendums
+  - YYYY-MM-DD: ...
+  ```
+
 Branch naming conventions
 - Use branch prefixes to control automatic version increments:
   - **hotfix/** for bug fixes (triggers patch version increment: 0.1.0 -> 0.1.1)
@@ -82,6 +147,11 @@ Quick contributor checklist
    - pytest -v
 4. Smoke test example:
    - python examples/example_usage.py
+5. ADR/ASR hygiene:
+   - Before coding: review `adr/` for relevant ADRs/ASRs.
+   - If your change is architecture-significant, add a new ADR/ASR in `adr/`.
+   - If you modify a previous decision/requirement, add a dated Addendum or create a new ADR that supersedes the old one (and cross-reference both).
+   - Reference the ADR/ASR IDs in your PR description and update their Status upon merge.
 
 References
 - PEP 8 — Style Guide for Python Code: https://peps.python.org/pep-0008/

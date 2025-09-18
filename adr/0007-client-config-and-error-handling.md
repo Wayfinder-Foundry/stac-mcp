@@ -22,3 +22,6 @@ Date: 2025-09-18
 
 ## Alternatives considered
 - Global env-only configuration (rejected; less explicit, harder to test).
+
+## Addendums
+- 2025-09-18: See ASR 1004 (Graceful Network Error Handling) for non-functional error-handling guarantees and testing guidance.
