@@ -46,7 +46,7 @@ Commit & PR guidance
 
 ## Architecture records (ADRs and ASRs)
 
-- Location: keep all Architecture Decision Records (ADRs) and Architecture Significant Requirements (ASRs) under the `adr/` directory.
+- Location: keep all Architecture Decision Records (ADRs) and Architecture Significant Requirements (ASRs) under the `architecture/` directory.
 - Scope:
   - ADRs document important architectural decisions and their rationale.
   - ASRs capture significant requirements (often non-functional) that drive architectural choices (e.g., performance SLOs, availability, security, offline behavior).
@@ -58,7 +58,7 @@ Commit & PR guidance
 - Process:
   - When to write/update: new features, API or protocol changes, dependency/infra shifts, performance/security goals, behavior or contract changes visible to users/clients.
   - How:
-    - Create a new file in `adr/` for new decisions/requirements and link it in your PR description.
+    - Create a new file in `architecture/` for new decisions/requirements and link it in your PR description.
     - If changing an existing decision/requirement, either add a dated Addendum section in the same file, or create a new ADR that supersedes the previous one and cross-reference with `Supersedes`/`Superseded by` notes.
     - Update the `Status` field upon merge.
 - Minimal templates:
@@ -148,8 +148,8 @@ Quick contributor checklist
 4. Smoke test example:
    - python examples/example_usage.py
 5. ADR/ASR hygiene:
-   - Before coding: review `adr/` for relevant ADRs/ASRs.
-   - If your change is architecture-significant, add a new ADR/ASR in `adr/`.
+   - Before coding: review `architecture/` for relevant ADRs/ASRs.
+   - If your change is architecture-significant, add a new ADR/ASR in `architecture/`.
    - If you modify a previous decision/requirement, add a dated Addendum or create a new ADR that supersedes the old one (and cross-reference both).
    - Reference the ADR/ASR IDs in your PR description and update their Status upon merge.
 
