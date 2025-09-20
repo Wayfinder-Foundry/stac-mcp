@@ -24,6 +24,31 @@ This MCP server enables AI assistants and applications to interact with STAC cat
 - **`get_collection`**: Get detailed information about a specific collection
 - **`search_items`**: Search for STAC items with spatial, temporal, and attribute filters
 - **`get_item`**: Get detailed information about a specific STAC item
+- **`estimate_data_size`**: Estimate data size for STAC items using lazy loading (XArray + odc.stac)
+
+### Data Size Estimation
+
+The `estimate_data_size` tool provides accurate size estimates for geospatial datasets without downloading the actual data:
+
+- **Lazy Loading**: Uses odc.stac to load STAC items into xarray datasets without downloading
+- **AOI Clipping**: Automatically clips to the smallest area when both bbox and AOI GeoJSON are provided
+- **Fallback Estimation**: Provides size estimates even when odc.stac fails
+- **Detailed Metadata**: Returns information about data variables, spatial dimensions, and individual assets
+- **Batch Support**: Retains structured metadata for efficient batch processing
+
+Example usage:
+```json
+{
+  "collections": ["landsat-c2l2-sr"],
+  "bbox": [-122.5, 37.7, -122.3, 37.8],
+  "datetime": "2023-01-01/2023-01-31",
+  "aoi_geojson": {
+    "type": "Polygon",
+    "coordinates": [[...]]
+  },
+  "limit": 50
+}
+```
 
 ### Supported STAC Catalogs
 

@@ -31,10 +31,10 @@ coverage.xml
 htmlcov/
 
 # Documentation and metadata
-README.md
 AGENTS.md
-LICENSE
 *.md
+!README.md
+!LICENSE
 
 # IDE and editor files
 .vscode/

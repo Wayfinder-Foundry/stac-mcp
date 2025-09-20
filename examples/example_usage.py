@@ -88,12 +88,36 @@ async def demonstrate_stac_usage():
     }
     print(f"   Parameters: {json.dumps(item_params, indent=2)}")
 
+    # Show estimate_data_size interface
+    print("\n7. Example estimate_data_size call structure:")
+    data_size_params = {
+        "collections": ["landsat-c2l2-sr"],
+        "bbox": [-122.5, 37.7, -122.3, 37.8],  # San Francisco area
+        "datetime": "2023-01-01/2023-01-31",
+        "limit": 50,
+        "aoi_geojson": {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [-122.45, 37.75],
+                    [-122.35, 37.75],
+                    [-122.35, 37.77],
+                    [-122.45, 37.77],
+                    [-122.45, 37.75],
+                ],
+            ],
+        },
+    }
+    print(f"   Parameters: {json.dumps(data_size_params, indent=2)}")
+
     print("\n" + "=" * 50)
     print("🎯 Summary:")
     print("   The STAC MCP Server is working correctly!")
     print("   Network access to STAC APIs is required for actual data retrieval.")
     print("   In a real environment with network access, these calls would")
     print("   return actual geospatial data from STAC catalogs.")
+    print("   The new estimate_data_size tool provides lazy data size estimation")
+    print("   using xarray and odc.stac for efficient resource planning.")
 
 
 if __name__ == "__main__":

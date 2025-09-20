@@ -161,3 +161,12 @@ References
 Notes
 - This project already standardizes on Black, Ruff, and pytest — prefer those tools and the commands above.
 - Keep changes minimal, test-driven, and well-documented in PR descriptions.
+
+## GDAL/rasterio compatibility notes
+
+- Avoid depending directly on the `gdal` Python binding unless strictly necessary; it requires a matching system libgdal and often breaks in containers with version mismatches.
+- Prefer `rasterio` wheels for raster IO (pulled in by `odc-stac` indirectly); wheels bundle compatible GDAL and avoid system-level conflicts.
+- Container guidance:
+  - Use Debian/Ubuntu slim bases to benefit from manylinux wheels. Alpine (musl) often lacks compatible wheels for `rasterio`/`GDAL` and forces system GDAL installs.
+  - If you must use system GDAL, ensure `libgdal` and Python GDAL bindings are the same minor version (e.g., 3.11.x), and set `GDAL_DATA`/`PROJ_LIB` appropriately.
+  - Keep system packages minimal to reduce the risk of ABI mismatches.
