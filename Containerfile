@@ -4,7 +4,12 @@ FROM python:3.12-slim AS builder
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        build-essential \
+        gdal-bin \
+        libgdal-dev \
+        libproj-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy project files (include README and LICENSE for packaging metadata)
