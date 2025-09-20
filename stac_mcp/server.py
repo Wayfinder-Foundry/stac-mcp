@@ -13,6 +13,7 @@ from mcp.types import (
 )
 from pystac_client import Client
 from pystac_client.exceptions import APIError
+from shapely.geometry import shape
 
 try:
     import odc.stac
@@ -209,8 +210,6 @@ class STACClient:
 
             if aoi_geojson:
                 # Extract bbox from AOI geojson for clipping
-                from shapely.geometry import shape
-
                 geom = shape(aoi_geojson)
                 aoi_bounds = geom.bounds  # (minx, miny, maxx, maxy)
 
