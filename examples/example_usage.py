@@ -97,14 +97,16 @@ async def demonstrate_stac_usage():
         "limit": 50,
         "aoi_geojson": {
             "type": "Polygon",
-            "coordinates": [[
-                [-122.45, 37.75],
-                [-122.35, 37.75],
-                [-122.35, 37.77],
-                [-122.45, 37.77],
-                [-122.45, 37.75]
-            ]]
-        }
+            "coordinates": [
+                [
+                    [-122.45, 37.75],
+                    [-122.35, 37.75],
+                    [-122.35, 37.77],
+                    [-122.45, 37.77],
+                    [-122.45, 37.75],
+                ],
+            ],
+        },
     }
     print(f"   Parameters: {json.dumps(data_size_params, indent=2)}")
 

@@ -292,7 +292,11 @@ class STACClient:
                     f"odc.stac loading failed, using fallback estimation: {e}",
                 )
                 return self._fallback_size_estimation(
-                    items, effective_bbox, datetime, collections, clipped_to_aoi,
+                    items,
+                    effective_bbox,
+                    datetime,
+                    collections,
+                    clipped_to_aoi,
                 )
 
         except APIError as e:

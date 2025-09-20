@@ -80,12 +80,12 @@ class TestSTACClient:
     def test_estimate_data_size_no_odc_stac(self):
         """Test estimate_data_size when odc.stac is not available."""
         from unittest.mock import patch
-        
-        with patch('stac_mcp.server.ODC_STAC_AVAILABLE', False):
+
+        with patch("stac_mcp.server.ODC_STAC_AVAILABLE", False):
             client = STACClient()
-            
+
             try:
-                client.estimate_data_size(collections=['test'])
+                client.estimate_data_size(collections=["test"])
                 assert False, "Should have raised RuntimeError"
             except RuntimeError as e:
                 assert "odc.stac is not available" in str(e)

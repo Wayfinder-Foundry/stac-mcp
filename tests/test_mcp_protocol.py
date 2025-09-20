@@ -107,11 +107,14 @@ async def test_estimate_data_size_tool_call():
     """Test estimate_data_size tool call with mocked odc.stac unavailable."""
     with patch("stac_mcp.server.ODC_STAC_AVAILABLE", False):
         try:
-            await handle_call_tool("estimate_data_size", {
-                "collections": ["test-collection"],
-                "bbox": [-122.5, 37.7, -122.3, 37.8],
-                "limit": 10
-            })
+            await handle_call_tool(
+                "estimate_data_size",
+                {
+                    "collections": ["test-collection"],
+                    "bbox": [-122.5, 37.7, -122.3, 37.8],
+                    "limit": 10,
+                },
+            )
             assert False, "Should have raised RuntimeError"
         except RuntimeError as e:
             assert "odc.stac is not available" in str(e)
