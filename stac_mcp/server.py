@@ -14,6 +14,13 @@ from mcp.types import (
 from pystac_client import Client
 from pystac_client.exceptions import APIError
 
+try:
+    import odc.stac
+
+    ODC_STAC_AVAILABLE = True
+except ImportError:
+    ODC_STAC_AVAILABLE = False
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -156,6 +163,217 @@ class STACClient:
             )
             raise
 
+    def estimate_data_size(
+        self,
+        collections: list[str] | None = None,
+        bbox: list[float] | None = None,
+        datetime: str | None = None,
+        query: dict[str, Any] | None = None,
+        aoi_geojson: dict[str, Any] | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Estimate data size for a STAC query using odc.stac lazy loading."""
+        if not ODC_STAC_AVAILABLE:
+            raise RuntimeError(
+                "odc.stac is not available. Please install it to use data size estimation.",
+            )
+
+        try:
+            # Search for items first to get the actual STAC items
+            search = self.client.search(
+                collections=collections,
+                bbox=bbox,
+                datetime=datetime,
+                query=query,
+                limit=limit,
+            )
+
+            items = list(search.items())
+
+            if not items:
+                return {
+                    "item_count": 0,
+                    "estimated_size_bytes": 0,
+                    "estimated_size_mb": 0,
+                    "estimated_size_gb": 0,
+                    "bbox_used": bbox,
+                    "temporal_extent": datetime,
+                    "collections": collections or [],
+                    "clipped_to_aoi": False,
+                    "message": "No items found for the given query parameters",
+                }
+
+            # Determine the effective bounding box for clipping
+            effective_bbox = bbox
+            clipped_to_aoi = False
+
+            if aoi_geojson:
+                # Extract bbox from AOI geojson for clipping
+                from shapely.geometry import shape
+
+                geom = shape(aoi_geojson)
+                aoi_bounds = geom.bounds  # (minx, miny, maxx, maxy)
+
+                # If we have both bbox and AOI, use the intersection (smaller area)
+                if bbox:
+                    effective_bbox = [
+                        max(bbox[0], aoi_bounds[0]),  # west
+                        max(bbox[1], aoi_bounds[1]),  # south
+                        min(bbox[2], aoi_bounds[2]),  # east
+                        min(bbox[3], aoi_bounds[3]),  # north
+                    ]
+                else:
+                    effective_bbox = list(aoi_bounds)
+                clipped_to_aoi = True
+
+            # Use odc.stac to load the data lazily and estimate size
+            try:
+                # Load with odc.stac - this creates a lazy xarray dataset
+                ds = odc.stac.load(
+                    items,
+                    bbox=effective_bbox,
+                    chunks={},  # Enable dask chunking for lazy evaluation
+                )
+
+                # Calculate estimated size from the lazy dataset
+                estimated_bytes = 0
+                data_vars_info = []
+
+                for var_name, data_array in ds.data_vars.items():
+                    # Get size in bytes for each data variable
+                    var_nbytes = data_array.nbytes
+                    estimated_bytes += var_nbytes
+
+                    data_vars_info.append(
+                        {
+                            "variable": var_name,
+                            "shape": list(data_array.shape),
+                            "dtype": str(data_array.dtype),
+                            "size_bytes": var_nbytes,
+                            "size_mb": round(var_nbytes / (1024 * 1024), 2),
+                        },
+                    )
+
+                # Calculate different size units
+                estimated_mb = estimated_bytes / (1024 * 1024)
+                estimated_gb = estimated_bytes / (1024 * 1024 * 1024)
+
+                # Get temporal extent from the actual items
+                temporal_extent = None
+                if items:
+                    dates = [item.datetime for item in items if item.datetime]
+                    if dates:
+                        temporal_extent = (
+                            f"{min(dates).isoformat()} to {max(dates).isoformat()}"
+                        )
+
+                return {
+                    "item_count": len(items),
+                    "estimated_size_bytes": estimated_bytes,
+                    "estimated_size_mb": round(estimated_mb, 2),
+                    "estimated_size_gb": round(estimated_gb, 4),
+                    "bbox_used": effective_bbox,
+                    "temporal_extent": temporal_extent or datetime,
+                    "collections": collections
+                    or list(set(item.collection_id for item in items)),
+                    "clipped_to_aoi": clipped_to_aoi,
+                    "data_variables": data_vars_info,
+                    "spatial_dims": (
+                        {"x": ds.dims.get("x", 0), "y": ds.dims.get("y", 0)}
+                        if "x" in ds.dims and "y" in ds.dims
+                        else {}
+                    ),
+                    "message": f"Successfully estimated data size for {len(items)} items",
+                }
+
+            except Exception as e:
+                # If odc.stac fails, fall back to a rough estimation based on item metadata
+                logger.warning(
+                    f"odc.stac loading failed, using fallback estimation: {e}",
+                )
+                return self._fallback_size_estimation(
+                    items, effective_bbox, datetime, collections, clipped_to_aoi,
+                )
+
+        except APIError as e:
+            logger.error(f"Error in data size estimation: {e}")
+            raise
+
+    def _fallback_size_estimation(
+        self,
+        items: list,
+        effective_bbox: list[float] | None,
+        datetime: str | None,
+        collections: list[str] | None,
+        clipped_to_aoi: bool,
+    ) -> dict[str, Any]:
+        """Fallback method to estimate data size when odc.stac fails."""
+
+        # Rough estimation based on number of assets and typical file sizes
+        total_estimated_bytes = 0
+        assets_info = []
+
+        for item in items:
+            for asset_name, asset in item.assets.items():
+                # Try to get file size from asset metadata if available
+                asset_size = 0
+                if hasattr(asset, "extra_fields"):
+                    # Some STAC items include file size in extra fields
+                    asset_size = asset.extra_fields.get("file:size", 0)
+
+                if asset_size == 0:
+                    # Fallback: estimate based on asset type and bbox
+                    media_type = getattr(asset, "media_type", "") or ""
+                    if "tiff" in media_type.lower() or "geotiff" in media_type.lower():
+                        # Rough estimate for GeoTIFF based on bbox area
+                        if effective_bbox:
+                            bbox_area = (effective_bbox[2] - effective_bbox[0]) * (
+                                effective_bbox[3] - effective_bbox[1]
+                            )
+                            # Very rough estimate: ~10MB per square degree for typical satellite data
+                            asset_size = int(bbox_area * 10 * 1024 * 1024)
+                        else:
+                            asset_size = 50 * 1024 * 1024  # Default 50MB estimate
+                    else:
+                        asset_size = 5 * 1024 * 1024  # Default 5MB for other assets
+
+                total_estimated_bytes += asset_size
+                assets_info.append(
+                    {
+                        "asset": asset_name,
+                        "media_type": getattr(asset, "media_type", "unknown"),
+                        "estimated_size_bytes": asset_size,
+                        "estimated_size_mb": round(asset_size / (1024 * 1024), 2),
+                    },
+                )
+
+        # Get temporal extent
+        temporal_extent = None
+        if items:
+            dates = [item.datetime for item in items if item.datetime]
+            if dates:
+                temporal_extent = (
+                    f"{min(dates).isoformat()} to {max(dates).isoformat()}"
+                )
+
+        estimated_mb = total_estimated_bytes / (1024 * 1024)
+        estimated_gb = total_estimated_bytes / (1024 * 1024 * 1024)
+
+        return {
+            "item_count": len(items),
+            "estimated_size_bytes": total_estimated_bytes,
+            "estimated_size_mb": round(estimated_mb, 2),
+            "estimated_size_gb": round(estimated_gb, 4),
+            "bbox_used": effective_bbox,
+            "temporal_extent": temporal_extent or datetime,
+            "collections": collections
+            or list(set(item.collection_id for item in items)),
+            "clipped_to_aoi": clipped_to_aoi,
+            "assets_analyzed": assets_info,
+            "estimation_method": "fallback",
+            "message": f"Estimated data size for {len(items)} items using fallback method (odc.stac unavailable)",
+        }
+
 
 # Global STAC client instance
 stac_client = STACClient()
@@ -265,6 +483,50 @@ async def handle_list_tools() -> list[Tool]:
                 "required": ["collection_id", "item_id"],
             },
         ),
+        Tool(
+            name="estimate_data_size",
+            description="Estimate data size for STAC items using lazy loading with odc.stac",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "collections": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of collection IDs to search within",
+                    },
+                    "bbox": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 4,
+                        "maxItems": 4,
+                        "description": "Bounding box [west, south, east, north] in WGS84",
+                    },
+                    "datetime": {
+                        "type": "string",
+                        "description": "Date/time filter (ISO 8601 format, e.g., '2023-01-01/2023-12-31')",
+                    },
+                    "query": {
+                        "type": "object",
+                        "description": "Additional query parameters for filtering items",
+                    },
+                    "aoi_geojson": {
+                        "type": "object",
+                        "description": "Area of Interest as GeoJSON geometry for clipping (will use smallest bbox between this and bbox parameter)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of items to analyze for size estimation",
+                        "default": 100,
+                        "minimum": 1,
+                        "maximum": 500,
+                    },
+                    "catalog_url": {
+                        "type": "string",
+                        "description": "STAC catalog URL (optional, defaults to Microsoft Planetary Computer)",
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -371,6 +633,66 @@ async def handle_call_tool(tool_name: str, arguments: dict):
                 result_text += f"    Type: {asset.get('type', 'unknown')}\n"
                 if "href" in asset:
                     result_text += f"    URL: {asset['href']}\n"
+
+            return [TextContent(type="text", text=result_text)]
+
+        if tool_name == "estimate_data_size":
+            collections = arguments.get("collections")
+            bbox = arguments.get("bbox")
+            datetime = arguments.get("datetime")
+            query = arguments.get("query")
+            aoi_geojson = arguments.get("aoi_geojson")
+            limit = arguments.get("limit", 100)
+
+            # Perform data size estimation
+            size_estimate = client.estimate_data_size(
+                collections=collections,
+                bbox=bbox,
+                datetime=datetime,
+                query=query,
+                aoi_geojson=aoi_geojson,
+                limit=limit,
+            )
+
+            result_text = "**Data Size Estimation**\n\n"
+            result_text += f"Items analyzed: {size_estimate['item_count']}\n"
+            result_text += f"Estimated size: {size_estimate['estimated_size_mb']:.2f} MB ({size_estimate['estimated_size_gb']:.4f} GB)\n"
+            result_text += f"Raw bytes: {size_estimate['estimated_size_bytes']:,}\n\n"
+
+            result_text += "**Query Parameters:**\n"
+            result_text += f"Collections: {', '.join(size_estimate['collections']) if size_estimate['collections'] else 'All'}\n"
+            if size_estimate["bbox_used"]:
+                bbox = size_estimate["bbox_used"]
+                result_text += f"Bounding box: [{bbox[0]:.4f}, {bbox[1]:.4f}, {bbox[2]:.4f}, {bbox[3]:.4f}]\n"
+            if size_estimate["temporal_extent"]:
+                result_text += f"Time range: {size_estimate['temporal_extent']}\n"
+            if size_estimate["clipped_to_aoi"]:
+                result_text += "Clipped to AOI: Yes (minimized to smallest area)\n"
+
+            # Add data variable information if available
+            if "data_variables" in size_estimate:
+                result_text += "\n**Data Variables:**\n"
+                for var_info in size_estimate["data_variables"]:
+                    result_text += f"  - {var_info['variable']}: {var_info['size_mb']} MB, shape {var_info['shape']}, dtype {var_info['dtype']}\n"
+
+            # Add spatial dimensions if available
+            if size_estimate.get("spatial_dims"):
+                spatial = size_estimate["spatial_dims"]
+                result_text += "\n**Spatial Dimensions:**\n"
+                result_text += f"  X (longitude): {spatial.get('x', 0)} pixels\n"
+                result_text += f"  Y (latitude): {spatial.get('y', 0)} pixels\n"
+
+            # Add assets info for fallback method
+            if "assets_analyzed" in size_estimate:
+                result_text += "\n**Assets Analyzed (fallback estimation):**\n"
+                for asset_info in size_estimate["assets_analyzed"][
+                    :5
+                ]:  # Show first 5 assets
+                    result_text += f"  - {asset_info['asset']}: {asset_info['estimated_size_mb']} MB ({asset_info['media_type']})\n"
+                if len(size_estimate["assets_analyzed"]) > 5:
+                    result_text += f"  ... and {len(size_estimate['assets_analyzed']) - 5} more assets\n"
+
+            result_text += f"\n{size_estimate['message']}\n"
 
             return [TextContent(type="text", text=result_text)]
 

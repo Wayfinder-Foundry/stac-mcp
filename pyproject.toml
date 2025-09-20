@@ -26,6 +26,8 @@ dependencies = [
     "pystac-client>=0.7.0",
     "pystac>=1.8.0",
     "anyio>=3.7.0",
+    "xarray>=2023.1.0",
+    "odc-stac>=0.3.0",
 ]
 
 [project.optional-dependencies]
