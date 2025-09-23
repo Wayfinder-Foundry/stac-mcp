@@ -19,8 +19,7 @@ COPY LICENSE ./
 COPY stac_mcp ./stac_mcp
 
 # Install dependencies and build the package
-RUN pip install --upgrade pip setuptools wheel hatchling \
-    && pip install .
+RUN pip install .
 
 # Set the entry point for the application
 ENTRYPOINT ["python", "-m", "stac_mcp.server"]
