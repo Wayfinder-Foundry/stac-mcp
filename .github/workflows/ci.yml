@@ -75,7 +75,7 @@ jobs:
     - name: Run Safety vulnerability scan
       run: |
         pip install safety
-        safety check --json || true
+        safety scan --json || true
 
     - name: Upload security scan results
       if: always()
