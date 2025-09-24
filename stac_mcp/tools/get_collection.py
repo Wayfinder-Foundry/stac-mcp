@@ -1,4 +1,4 @@
-""" "Tool to get and describe a STAC collection by its ID."""
+"""Tool to get and describe a STAC collection by its ID."""
 
 from typing import Any
 from mcp.types import TextContent
