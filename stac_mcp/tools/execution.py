@@ -56,4 +56,8 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
         return handler(client, arguments)
     except Exception:  # pragma: no cover - error path
         logger.exception("Error in tool call %s", tool_name)
-        return [TextContent(f"An error occurred while executing tool '{tool_name}'. Please check the logs for details.")]
+        return [
+            TextContent(
+                f"An error occurred while executing tool '{tool_name}'. Please check the logs for details."
+            )
+        ]
