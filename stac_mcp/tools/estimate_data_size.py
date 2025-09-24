@@ -5,6 +5,13 @@ from mcp.types import TextContent
 from stac_mcp.tools.client import STACClient
 from stac_mcp.tools import MAX_ASSET_LIST
 
+try:  # pragma: no cover - import guard
+    import odc.stac  # type: ignore
+
+    ODC_STAC_AVAILABLE = True
+except ImportError:  # pragma: no cover - conditional path
+    ODC_STAC_AVAILABLE = False
+
 
 def handle_estimate_data_size(
     client: STACClient,

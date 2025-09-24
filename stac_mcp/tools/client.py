@@ -11,13 +11,6 @@ from shapely.geometry import shape
 
 logger = logging.getLogger(__name__)
 
-try:  # pragma: no cover - import guard
-    import odc.stac  # type: ignore
-
-    ODC_STAC_AVAILABLE = True
-except ImportError:  # pragma: no cover - conditional path
-    ODC_STAC_AVAILABLE = False
-
 
 class STACClient:
     """STAC Client wrapper for common operations."""
