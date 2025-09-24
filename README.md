@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/github/license/BnJam/stac-mcp?style=flat-square)](https://github.com/BnJam/stac-mcp/blob/main/LICENSE)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/stac-mcp?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/stac-mcp)
 
-An MCP (Model Context Protocol) Server that provides access to STAC (SpatioTemporal Asset Catalog) APIs for geospatial data discovery and access.
+An MCP (Model Context Protocol) Server that provides access to STAC (SpatioTemporal Asset Catalog) APIs for geospatial data discovery and access. Supports dual output modes (`text` and structured `json`) for all tools.
 
 ## Overview
 
@@ -20,6 +20,8 @@ This MCP server enables AI assistants and applications to interact with STAC cat
 ## Features
 
 ### Available Tools
+
+All tools accept an optional `output_format` parameter (`"text"` default, or `"json"`). JSON mode returns a single MCP `TextContent` whose `text` field is a compact JSON envelope: `{ "mode": "json", "data": { ... } }` (or `{ "mode": "text_fallback", "content": ["..."] }` if a handler lacks a JSON branch). This preserves backward compatibility while enabling structured consumption (see ADR 0006 and ASR 1003).
 
 - **`search_collections`**: List and search available STAC collections
 - **`get_collection`**: Get detailed information about a specific collection
@@ -73,24 +75,25 @@ pip install -e .
 
 ### Container
 
-The STAC MCP server is available as a secure distroless container image with semantic versioning:
+The STAC MCP server publishes multi-arch container images (linux/amd64, linux/arm64) via GitHub Actions workflow (`.github/workflows/container.yml`). The current build uses a Python 3.12 slim Debian base (not distroless) with GDAL-related libs for raster IO and odc-stac compatibility.
 
 ```bash
 # Pull the latest stable version
 docker pull ghcr.io/bnjam/stac-mcp:latest
 
 # Pull a specific version (recommended for production)
-docker pull ghcr.io/bnjam/stac-mcp:0.1.0
+docker pull ghcr.io/bnjam/stac-mcp:0.2.0
 
 # Run the container (uses stdio transport for MCP)
 docker run --rm -i ghcr.io/bnjam/stac-mcp:latest
 ```
 
-Container images are tagged with semantic versions:
-- `ghcr.io/bnjam/stac-mcp:1.2.3` (exact version)
-- `ghcr.io/bnjam/stac-mcp:1.2` (major.minor)
-- `ghcr.io/bnjam/stac-mcp:1` (major)
-- `ghcr.io/bnjam/stac-mcp:latest` (latest stable)
+Container images are tagged with semantic versions when version bumps occur on `main`:
+- `ghcr.io/bnjam/stac-mcp:X.Y.Z` (exact version)
+- `ghcr.io/bnjam/stac-mcp:X.Y` (major.minor convenience tag)
+- `ghcr.io/bnjam/stac-mcp:X` (major convenience tag)
+- `ghcr.io/bnjam/stac-mcp:latest` (points at current main version)
+Pull request builds (without version bump) also produce ephemeral PR/ref tags via the metadata action.
 
 #### Building the Container
 
@@ -104,11 +107,7 @@ docker build -f Containerfile -t stac-mcp .
 podman build -f Containerfile -t stac-mcp .
 ```
 
-The container uses a multi-stage build with:
-- **Builder stage**: Python 3.12 slim image for building dependencies
-- **Runtime stage**: Distroless Python image for security and minimal size
-- **Security**: Runs as non-root user, minimal attack surface
-- **Transport**: Uses stdio for MCP protocol communication
+The Containerfile currently performs a single-stage build based on `python:3.12-slim` (future optimization could reintroduce a distroless runtime stage). It installs system GDAL/PROJ dependencies and then installs the package.
 
 ## Usage
 
@@ -156,6 +155,7 @@ Or with Podman:
 }
 ```
 
+docker run --rm -i ghcr.io/bnjam/stac-mcp:latest
 ### Command Line
 
 #### Native Installation
@@ -163,6 +163,8 @@ Or with Podman:
 ```bash
 stac-mcp
 ```
+
+Each invocation starts an MCP stdio server; it waits for protocol messages (see `examples/example_usage.py`).
 
 #### Container Usage
 
@@ -176,45 +178,30 @@ podman run --rm -i ghcr.io/bnjam/stac-mcp:latest
 
 ### Examples
 
-#### Search Collections
-```python
-# Find all available collections
-search_collections(limit=20)
+#### Example: JSON Output Mode
+Below is an illustrative (client-side) pseudo-call showing `output_format` usage through an MCP client message:
 
-# Search collections from a different catalog
-search_collections(catalog_url="https://earth-search.aws.element84.com/v1", limit=10)
+```jsonc
+{
+  "method": "tools/call",
+  "params": {
+    "name": "search_items",
+    "arguments": {
+      "collections": ["landsat-c2l2-sr"],
+      "bbox": [-122.5, 37.7, -122.3, 37.8],
+      "datetime": "2023-01-01/2023-01-31",
+      "limit": 5,
+      "output_format": "json"
+    }
+  }
+}
 ```
 
-#### Search Items
-```python
-# Search for Landsat data over San Francisco
-search_items(
-    collections=["landsat-c2l2-sr"],
-    bbox=[-122.5, 37.7, -122.3, 37.8],
-    datetime="2023-01-01/2023-12-31",
-    limit=10
-)
-
-# Search with additional query parameters
-search_items(
-    collections=["sentinel-2-l2a"],
-    bbox=[-74.1, 40.6, -73.9, 40.8],  # New York area
-    query={"eo:cloud_cover": {"lt": 10}},
-    limit=5
-)
+The server responds with a single `TextContent` whose text is a JSON string like:
+```json
+{"mode":"json","data":{"type":"item_list","count":5,"items":[{"id":"..."}]}}
 ```
-
-#### Get Collection Details
-```python
-# Get information about a specific collection
-get_collection("landsat-c2l2-sr")
-```
-
-#### Get Item Details
-```python
-# Get detailed information about a specific item
-get_item("landsat-c2l2-sr", "LC08_L2SR_044034_20230815_02_T1")
-```
+This wrapping keeps the MCP content type stable while enabling machine-readable chaining.
 
 ## Development
 
@@ -229,7 +216,8 @@ pip install -e ".[dev]"
 ### Testing
 
 ```bash
-pytest
+pytest -v
+python examples/example_usage.py  # MCP stdio smoke test
 ```
 
 ### Linting
@@ -241,16 +229,16 @@ ruff check stac_mcp/
 
 ### Version Management
 
-The project uses semantic versioning (SemVer) with automated version management based on branch naming:
+The project uses semantic versioning (SemVer) with automated version management based on branch naming, implemented in `.github/workflows/container.yml`:
 
 #### Branch-Based Automatic Versioning
-When PRs are merged to main, versions are automatically incremented based on branch prefixes:
+When PRs are merged to `main`, the workflow inspects the merged branch name (via the PR head ref) and increments the version if it matches a prefix:
 - **hotfix/** branches → patch increment (0.1.0 → 0.1.1) for bug fixes
 - **feature/** branches → minor increment (0.1.0 → 0.2.0) for new features  
 - **release/** branches → major increment (0.1.0 → 1.0.0) for breaking changes
 
 #### Manual Version Management
-You can also manually manage versions using the version script:
+You can also manually manage versions using the version script (should normally not be needed unless doing a coordinated release):
 
 ```bash
 # Show current version
@@ -288,12 +276,12 @@ docker-compose up --build
 # docker run --rm -it --entrypoint=/bin/sh stac-mcp:dev
 ```
 
-The Containerfile uses a secure multi-stage build approach:
-- **Distroless base**: Minimal attack surface with no shell or package manager
-- **Non-root user**: Container runs as unprivileged user
-- **Minimal dependencies**: Only runtime dependencies included in final image
-- **Build optimization**: Dependencies built in separate stage and copied over
-- **Production ready**: Includes resource limits and security best practices
+Current Containerfile (single-stage) notes:
+- Based on `python:3.12-slim` for broad wheel compatibility (rasterio, shapely, etc.)
+- Installs GDAL/PROJ system libraries needed by rasterio/odc-stac
+- Installs the package with `pip install .`
+- Entrypoint: `python -m stac_mcp.server` (stdio MCP transport)
+- Multi-stage/distroless hardening can be reintroduced later (tracked by potential future ADR)
 
 ## STAC Resources
 

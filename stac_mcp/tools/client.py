@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from pystac_client.exceptions import APIError
 from shapely.geometry import shape
@@ -35,7 +35,7 @@ class STACClient:
         return self._client
 
     # ----------------------------- Collections ----------------------------- #
-    def search_collections(self, limit: int = 10) -> list[dict[str, Any]]:
+    def search_collections(self, limit: int = 10) -> List[Dict[str, Any]]:
         try:
             collections = []
             for collection in self.client.get_collections():
@@ -62,7 +62,7 @@ class STACClient:
             logger.error(f"Error fetching collections: {e}")
             raise
 
-    def get_collection(self, collection_id: str) -> dict[str, Any]:
+    def get_collection(self, collection_id: str) -> Dict[str, Any]:
         try:
             collection = self.client.get_collection(collection_id)
             return {
@@ -92,12 +92,12 @@ class STACClient:
     # ------------------------------- Items -------------------------------- #
     def search_items(
         self,
-        collections: list[str] | None = None,
-        bbox: list[float] | None = None,
-        datetime: str | None = None,
-        query: dict[str, Any] | None = None,
+        collections: Optional[List[str]] = None,
+        bbox: Optional[List[float]] = None,
+        datetime: Optional[str] = None,
+        query: Optional[Dict[str, Any]] = None,
         limit: int = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         try:
             search = self.client.search(
                 collections=collections,
@@ -128,7 +128,7 @@ class STACClient:
             logger.error(f"Error searching items: {e}")
             raise
 
-    def get_item(self, collection_id: str, item_id: str) -> dict[str, Any]:
+    def get_item(self, collection_id: str, item_id: str) -> Dict[str, Any]:
         try:
             item = self.client.get_collection(collection_id).get_item(item_id)
             return {
@@ -149,13 +149,13 @@ class STACClient:
     # ------------------------- Data Size Estimation ----------------------- #
     def estimate_data_size(
         self,
-        collections: list[str] | None = None,
-        bbox: list[float] | None = None,
-        datetime: str | None = None,
-        query: dict[str, Any] | None = None,
-        aoi_geojson: dict[str, Any] | None = None,
+        collections: Optional[List[str]] = None,
+        bbox: Optional[List[float]] = None,
+        datetime: Optional[str] = None,
+        query: Optional[Dict[str, Any]] = None,
+        aoi_geojson: Optional[Dict[str, Any]] = None,
         limit: int = 100,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         # Import inside method to honor patched value in tests (server.ODC_STAC_AVAILABLE)
         from stac_mcp import (
             server as _server,
@@ -258,12 +258,12 @@ class STACClient:
 
     def _fallback_size_estimation(
         self,
-        items: list,
-        effective_bbox: list[float] | None,
-        datetime: str | None,
-        collections: list[str] | None,
+        items: List,
+        effective_bbox: Optional[List[float]],
+        datetime: Optional[str],
+        collections: Optional[List[str]],
         clipped_to_aoi: bool,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         total_estimated_bytes = 0
         assets_info = []
         for item in items:

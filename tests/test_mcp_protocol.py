@@ -71,6 +71,58 @@ async def test_call_tool_search_collections(mock_stac_client):
 
 @pytest.mark.asyncio
 @patch("stac_mcp.server.stac_client")
+async def test_call_tool_search_collections_json(mock_stac_client):
+    """Test calling search_collections tool with JSON output."""
+    mock_stac_client.search_collections.return_value = [
+        {
+            "id": "test-collection",
+            "title": "Test Collection",
+            "description": "A test collection",
+            "license": "MIT",
+        },
+    ]
+    result = await handle_call_tool(
+        "search_collections",
+        {"limit": 1, "output_format": "json"},
+    )
+    assert isinstance(result, list)
+    assert result[0].type == "text"
+    # Ensure JSON envelope present
+    assert (
+        '"mode":"json"' in result[0].text or '"mode":"text_fallback"' in result[0].text
+    )
+    assert "test-collection" in result[0].text
+
+
+@pytest.mark.asyncio
+@patch("stac_mcp.server.stac_client")
+async def test_call_tool_get_item_json(mock_stac_client):
+    """Test calling get_item tool with JSON output."""
+    mock_stac_client.get_item.return_value = {
+        "id": "item-1",
+        "collection": "test-collection",
+        "geometry": None,
+        "bbox": None,
+        "datetime": None,
+        "properties": {"eo:cloud_cover": 10},
+        "assets": {},
+    }
+    result = await handle_call_tool(
+        "get_item",
+        {
+            "collection_id": "test-collection",
+            "item_id": "item-1",
+            "output_format": "json",
+        },
+    )
+    assert isinstance(result, list)
+    assert result[0].type == "text"
+    assert "item-1" in result[0].text
+    assert '"mode":"json"' in result[0].text
+
+
+@pytest.mark.asyncio
+@patch("stac_mcp.server.stac_client")
 async def test_call_tool_with_error(mock_stac_client):
     """Test calling a tool that raises an exception."""
     mock_stac_client.search_collections.side_effect = Exception("Network error")
