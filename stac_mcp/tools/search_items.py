@@ -1,7 +1,9 @@
 """Tool to search for items in a STAC catalog."""
 
 from typing import Any
+
 from mcp.types import TextContent
+
 from stac_mcp.tools.client import STACClient
 
 

@@ -16,13 +16,37 @@ from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool
 
-from stac_mcp.tools.client import STACClient
 from stac_mcp.tools import definitions, execution
+from stac_mcp.tools.client import STACClient, stac_client
+
+# Backwards compatibility exports expected by tests (monolithic server refactor)
+try:  # pragma: no cover - optional dependency
+    from pystac_client import Client  # type: ignore
+except Exception:  # pragma: no cover - fallback for environments without dependency
+    Client = None  # type: ignore
+
+# The odc.stac availability flag used by tests that patch server.ODC_STAC_AVAILABLE
+try:  # pragma: no cover - import guard
+    import odc.stac  # type: ignore  # noqa: F401
+
+    ODC_STAC_AVAILABLE = True
+except Exception:  # pragma: no cover - absence is acceptable
+    ODC_STAC_AVAILABLE = False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 server = Server("stac-mcp")
+
+# Re-export legacy attribute names so patch("stac_mcp.server.stac_client") works
+__all__ = [
+    "ODC_STAC_AVAILABLE",
+    "Client",
+    "STACClient",
+    "handle_call_tool",
+    "handle_list_tools",
+    "stac_client",
+]
 
 
 @server.list_tools()

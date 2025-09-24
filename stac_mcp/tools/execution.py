@@ -13,7 +13,7 @@ from typing import Any, NoReturn
 
 from mcp.types import TextContent
 
-from stac_mcp.tools.client import STACClient, stac_client
+from stac_mcp.tools.client import STACClient
 from stac_mcp.tools.estimate_data_size import handle_estimate_data_size
 from stac_mcp.tools.get_collection import handle_get_collection
 from stac_mcp.tools.get_item import handle_get_item
@@ -47,17 +47,12 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
         msg = f"Unknown tool: {name}. Available tools: {_tools}"
         raise ValueError(msg)
 
-    try:
-        catalog_url = arguments.get("catalog_url")
-        client = STACClient(catalog_url) if catalog_url else stac_client
-        handler = _TOOL_HANDLERS.get(tool_name)
-        if handler is None:
-            _raise_unknown_tool(tool_name)
-        return handler(client, arguments)
-    except Exception:  # pragma: no cover - error path
-        logger.exception("Error in tool call %s", tool_name)
-        return [
-            TextContent(
-                f"An error occurred while executing tool '{tool_name}'. Please check the logs for details."
-            )
-        ]
+    from stac_mcp import server as _server  # local import so test patching works
+
+    catalog_url = arguments.get("catalog_url")
+    client = STACClient(catalog_url) if catalog_url else _server.stac_client
+    handler = _TOOL_HANDLERS.get(tool_name)
+    if handler is None:
+        _raise_unknown_tool(tool_name)
+    # Let handler exceptions propagate so tests can assert on them
+    return handler(client, arguments)

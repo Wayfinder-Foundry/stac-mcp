@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from pystac_client import Client
 from pystac_client.exceptions import APIError
 from shapely.geometry import shape
 
@@ -20,12 +19,19 @@ class STACClient:
         catalog_url: str = "https://planetarycomputer.microsoft.com/api/stac/v1",
     ) -> None:
         self.catalog_url = catalog_url
-        self._client: Client | None = None
+        self._client: Any | None = None
 
     @property
-    def client(self) -> Client:
+    def client(self) -> Any:
         if self._client is None:
-            self._client = Client.open(self.catalog_url)
+            # Import Client through server module so tests patching stac_mcp.server.Client work
+            from stac_mcp import server as _server  # local import for patching
+
+            ClientRef = getattr(_server, "Client", None)
+            if ClientRef is None:  # Fallback if dependency missing at runtime
+                from pystac_client import Client as ClientRef  # type: ignore
+
+            self._client = ClientRef.open(self.catalog_url)  # type: ignore[attr-defined]
         return self._client
 
     # ----------------------------- Collections ----------------------------- #
@@ -150,7 +156,12 @@ class STACClient:
         aoi_geojson: dict[str, Any] | None = None,
         limit: int = 100,
     ) -> dict[str, Any]:
-        if not ODC_STAC_AVAILABLE:
+        # Import inside method to honor patched value in tests (server.ODC_STAC_AVAILABLE)
+        from stac_mcp import (
+            server as _server,
+        )  # local import to avoid circular at module load
+
+        if not getattr(_server, "ODC_STAC_AVAILABLE", False):
             raise RuntimeError(
                 "odc.stac is not available. Please install it to use data size estimation.",
             )
@@ -303,5 +314,5 @@ class STACClient:
         }
 
 
-# Global instance preserved for backward compatibility
+# Global instance preserved for backward compatibility (imported by server)
 stac_client = STACClient()

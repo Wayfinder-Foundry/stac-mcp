@@ -1,7 +1,9 @@
 """Tool to get a STAC Item by collection ID and item ID."""
 
 from typing import Any
+
 from mcp.types import TextContent
+
 from stac_mcp.tools.client import STACClient
 
 

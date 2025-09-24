@@ -3,8 +3,9 @@
 from typing import Any
 
 from mcp.types import TextContent
-from stac_mcp.tools.client import STACClient
+
 from stac_mcp.tools import MAX_DESC_PREVIEW
+from stac_mcp.tools.client import STACClient
 
 
 def handle_search_collections(

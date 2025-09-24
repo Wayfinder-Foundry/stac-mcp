@@ -1,9 +1,11 @@
 """Estimate data size for a STAC query."""
 
 from typing import Any
+
 from mcp.types import TextContent
-from stac_mcp.tools.client import STACClient
+
 from stac_mcp.tools import MAX_ASSET_LIST
+from stac_mcp.tools.client import STACClient
 
 try:  # pragma: no cover - import guard
     import odc.stac  # type: ignore
