@@ -7,9 +7,9 @@ can hook here centrally.
 
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import Callable
-from typing import Any, NoReturn
+from typing import Any, NoReturn, Callable, Dict, List, Union
 
 from mcp.types import TextContent
 
@@ -23,7 +23,9 @@ from stac_mcp.tools.search_items import handle_search_items
 logger = logging.getLogger(__name__)
 
 
-Handler = Callable[[STACClient, dict[str, Any]], list[TextContent]]
+Handler = Callable[
+    [STACClient, Dict[str, Any]], Union[List[TextContent], Dict[str, Any]]
+]
 
 
 _TOOL_HANDLERS: dict[str, Handler] = {
@@ -35,7 +37,7 @@ _TOOL_HANDLERS: dict[str, Handler] = {
 }
 
 
-async def execute_tool(tool_name: str, arguments: dict[str, Any]):
+async def execute_tool(tool_name: str, arguments: Dict[str, Any]):
     """Dispatch tool execution based on name using registered handlers.
 
     Maintains backward-compatible output format (list[TextContent]).
@@ -55,4 +57,25 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
     if handler is None:
         _raise_unknown_tool(tool_name)
     # Let handler exceptions propagate so tests can assert on them
-    return handler(client, arguments)
+    output_format = arguments.get("output_format", "text")
+    raw_result = handler(client, arguments)
+    # Backward compatibility: existing handlers return list[TextContent].
+    # New JSON mode: handlers may return dict when output_format == 'json'.
+    if output_format == "json":
+        if isinstance(raw_result, list):  # handler didn't implement JSON branch
+            # Wrap textual output in a JSON envelope for consistency
+            payload = {"mode": "text_fallback", "content": [c.text for c in raw_result]}
+        else:
+            payload = {"mode": "json", "data": raw_result}
+        return [
+            TextContent(type="text", text=json.dumps(payload, separators=(",", ":")))
+        ]
+    # Default text path: ensure list[TextContent]
+    if isinstance(raw_result, list):
+        return raw_result
+    # If a dict was returned but text requested, convert to pretty text summary
+    try:
+        summary = json.dumps(raw_result, indent=2)
+    except Exception:  # pragma: no cover - edge serialization
+        summary = str(raw_result)
+    return [TextContent(type="text", text=summary)]

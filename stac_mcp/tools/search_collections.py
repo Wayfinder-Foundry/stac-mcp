@@ -1,6 +1,6 @@
 """Tool to search for STAC collections in a STAC catalog."""
 
-from typing import Any
+from typing import Any, Dict, List, Union
 
 from mcp.types import TextContent
 
@@ -10,10 +10,16 @@ from stac_mcp.tools.client import STACClient
 
 def handle_search_collections(
     client: STACClient,
-    arguments: dict[str, Any],
-) -> list[TextContent]:
+    arguments: Dict[str, Any],
+) -> Union[List[TextContent], Dict[str, Any]]:
     limit = arguments.get("limit", 10)
     collections = client.search_collections(limit=limit)
+    if arguments.get("output_format") == "json":
+        return {
+            "type": "collection_list",
+            "count": len(collections),
+            "collections": collections,
+        }
     result_text = f"Found {len(collections)} collections:\n\n"
     for collection in collections:
         result_text += f"**{collection['title']}** (`{collection['id']}`)\n"

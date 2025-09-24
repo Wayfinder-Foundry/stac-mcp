@@ -18,6 +18,12 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "output_format": {
+                        "type": "string",
+                        "description": "Result output format: 'text' (default) or 'json'",
+                        "enum": ["text", "json"],
+                        "default": "text",
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Maximum number of collections to return",
@@ -38,6 +44,12 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "output_format": {
+                        "type": "string",
+                        "description": "Result output format: 'text' (default) or 'json'",
+                        "enum": ["text", "json"],
+                        "default": "text",
+                    },
                     "collection_id": {
                         "type": "string",
                         "description": "ID of the collection to retrieve",
@@ -56,6 +68,12 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "output_format": {
+                        "type": "string",
+                        "description": "Result output format: 'text' (default) or 'json'",
+                        "enum": ["text", "json"],
+                        "default": "text",
+                    },
                     "collections": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -96,6 +114,12 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "output_format": {
+                        "type": "string",
+                        "description": "Result output format: 'text' (default) or 'json'",
+                        "enum": ["text", "json"],
+                        "default": "text",
+                    },
                     "collection_id": {
                         "type": "string",
                         "description": "ID of the collection containing the item",
@@ -118,6 +142,12 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "output_format": {
+                        "type": "string",
+                        "description": "Result output format: 'text' (default) or 'json'",
+                        "enum": ["text", "json"],
+                        "default": "text",
+                    },
                     "collections": {
                         "type": "array",
                         "items": {"type": "string"},

@@ -8,6 +8,7 @@ Core principles
 - Follow PEP 8 for style and naming (use snake_case for functions/variables, PascalCase for classes, UPPER_SNAKE for constants).
 - Use PEP 257 docstrings for modules, classes, and public functions/methods.
 - Prefer type hints (PEP 484). Keep signatures explicit and avoid overly broad Any where a concrete type helps readability.
+- Always import generics from the `typing` module (List, Dict, Optional, Union, Tuple, Set, Iterable, Callable, etc.) instead of using builtin collection annotations like `list[str]` unless an ADR supersedes this rule. This maintains consistency across the codebase and clarifies intent for contributors and automated agents.
 - Keep functions small and single-responsibility. Favor composition over inheritance when appropriate.
 
 Formatting & linting

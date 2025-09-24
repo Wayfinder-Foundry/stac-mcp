@@ -1,7 +1,7 @@
 # ADR 0006: Output Formats — Add JSON Mode
 
-Status: Proposed
-Date: 2025-09-18
+Status: Accepted
+Date: 2025-09-24
 
 ## Context
 - MCP clients sometimes need machine-readable results for chaining actions.
@@ -23,3 +23,4 @@ Date: 2025-09-18
 
 ## Addendums
 - 2025-09-18: See ASR 1003 (JSON Output Stability and Compatibility) for non-functional guarantees and compatibility policy.
+ - 2025-09-24: Implemented in feature/json-output-format branch. Tools accept `output_format` param; JSON responses wrapped in single MCP TextContent payload containing compact JSON envelope `{"mode":"json","data":...}`.
