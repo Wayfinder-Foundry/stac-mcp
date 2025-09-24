@@ -16,6 +16,7 @@ from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool
 
+from stac_mcp.tools.client import STACClient
 from stac_mcp.tools import definitions, execution
 
 logging.basicConfig(level=logging.INFO)
