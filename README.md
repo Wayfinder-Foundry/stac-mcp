@@ -23,11 +23,24 @@ This MCP server enables AI assistants and applications to interact with STAC cat
 
 All tools accept an optional `output_format` parameter (`"text"` default, or `"json"`). JSON mode returns a single MCP `TextContent` whose `text` field is a compact JSON envelope: `{ "mode": "json", "data": { ... } }` (or `{ "mode": "text_fallback", "content": ["..."] }` if a handler lacks a JSON branch). This preserves backward compatibility while enabling structured consumption (see ADR 0006 and ASR 1003).
 
+- **`get_root`**: Fetch root document (id/title/description/links/conformance subset)
+- **`get_conformance`**: List all conformance classes; optionally verify specific URIs
+- **`get_queryables`**: Retrieve queryable fields (global or per collection) when supported
+- **`get_aggregations`**: Execute a search requesting aggregations (count/stats) if supported
 - **`search_collections`**: List and search available STAC collections
 - **`get_collection`**: Get detailed information about a specific collection
 - **`search_items`**: Search for STAC items with spatial, temporal, and attribute filters
 - **`get_item`**: Get detailed information about a specific STAC item
 - **`estimate_data_size`**: Estimate data size for STAC items using lazy loading (XArray + odc.stac)
+
+### Capability Discovery & Aggregations
+
+The new capability tools (ADR 0004) allow adaptive client behavior:
+
+- Graceful fallbacks: Missing `/conformance`, `/queryables`, or aggregation support returns structured JSON with `supported:false` instead of hard errors.
+- `get_conformance` falls back to the root document's `conformsTo` array when the dedicated endpoint is absent.
+- `get_queryables` returns an empty set with a message if the endpoint is not implemented by the catalog.
+- `get_aggregations` constructs a STAC Search request with an `aggregations` object; if unsupported (HTTP 400/404), it returns a descriptive message while preserving original search parameters.
 
 ### Data Size Estimation
 

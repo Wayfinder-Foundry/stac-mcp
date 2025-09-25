@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any, Dict, List, Optional
+import urllib.error
+import urllib.request
+from typing import Any
 
 from pystac_client.exceptions import APIError
 from shapely.geometry import shape
@@ -35,7 +38,7 @@ class STACClient:
         return self._client
 
     # ----------------------------- Collections ----------------------------- #
-    def search_collections(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def search_collections(self, limit: int = 10) -> list[dict[str, Any]]:
         try:
             collections = []
             for collection in self.client.get_collections():
@@ -62,7 +65,7 @@ class STACClient:
             logger.error(f"Error fetching collections: {e}")
             raise
 
-    def get_collection(self, collection_id: str) -> Dict[str, Any]:
+    def get_collection(self, collection_id: str) -> dict[str, Any]:
         try:
             collection = self.client.get_collection(collection_id)
             return {
@@ -92,12 +95,12 @@ class STACClient:
     # ------------------------------- Items -------------------------------- #
     def search_items(
         self,
-        collections: Optional[List[str]] = None,
-        bbox: Optional[List[float]] = None,
-        datetime: Optional[str] = None,
-        query: Optional[Dict[str, Any]] = None,
+        collections: list[str] | None = None,
+        bbox: list[float] | None = None,
+        datetime: str | None = None,
+        query: dict[str, Any] | None = None,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         try:
             search = self.client.search(
                 collections=collections,
@@ -128,7 +131,7 @@ class STACClient:
             logger.error(f"Error searching items: {e}")
             raise
 
-    def get_item(self, collection_id: str, item_id: str) -> Dict[str, Any]:
+    def get_item(self, collection_id: str, item_id: str) -> dict[str, Any]:
         try:
             item = self.client.get_collection(collection_id).get_item(item_id)
             return {
@@ -149,13 +152,13 @@ class STACClient:
     # ------------------------- Data Size Estimation ----------------------- #
     def estimate_data_size(
         self,
-        collections: Optional[List[str]] = None,
-        bbox: Optional[List[float]] = None,
-        datetime: Optional[str] = None,
-        query: Optional[Dict[str, Any]] = None,
-        aoi_geojson: Optional[Dict[str, Any]] = None,
+        collections: list[str] | None = None,
+        bbox: list[float] | None = None,
+        datetime: str | None = None,
+        query: dict[str, Any] | None = None,
+        aoi_geojson: dict[str, Any] | None = None,
         limit: int = 100,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         # Import inside method to honor patched value in tests (server.ODC_STAC_AVAILABLE)
         from stac_mcp import (
             server as _server,
@@ -258,12 +261,12 @@ class STACClient:
 
     def _fallback_size_estimation(
         self,
-        items: List,
-        effective_bbox: Optional[List[float]],
-        datetime: Optional[str],
-        collections: Optional[List[str]],
+        items: list[Any],
+        effective_bbox: list[float] | None,
+        datetime: str | None,
+        collections: list[str] | None,
         clipped_to_aoi: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         total_estimated_bytes = 0
         assets_info = []
         for item in items:
@@ -312,6 +315,157 @@ class STACClient:
             "estimation_method": "fallback",
             "message": f"Estimated data size for {len(items)} items using fallback method (odc.stac unavailable)",
         }
+
+    # ----------------------- Capabilities & Discovery -------------------- #
+    def _http_json(
+        self,
+        path: str,
+        method: str = "GET",
+        payload: dict | None = None,
+    ) -> dict | None:
+        """Lightweight HTTP helper using stdlib (avoids extra deps).
+
+        Returns parsed JSON dict or None on 404 for capability endpoints where
+        absence is acceptable.
+        """
+        url = self.catalog_url.rstrip("/") + path
+        data = None
+        headers = {"Accept": "application/json"}
+        if payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(req) as resp:  # type: ignore[urllib-direct-use]
+                raw = resp.read().decode("utf-8")
+                return json.loads(raw)
+        except urllib.error.HTTPError as e:  # pragma: no cover - network specific
+            if e.code == 404:
+                return None
+            raise
+        except urllib.error.URLError:
+            # Surface as runtime error for tests to mock if needed
+            raise
+
+    def get_root_document(self) -> dict[str, Any]:
+        root = self._http_json("")  # base endpoint already ends with /stac/v1
+        if not root:  # Unexpected but keep consistent shape
+            return {
+                "id": None,
+                "title": None,
+                "description": None,
+                "links": [],
+                "conformsTo": [],
+            }
+        # Normalize subset we care about
+        return {
+            "id": root.get("id"),
+            "title": root.get("title"),
+            "description": root.get("description"),
+            "links": root.get("links", []),
+            "conformsTo": root.get("conformsTo", root.get("conforms_to", [])),
+        }
+
+    def get_conformance(
+        self,
+        check: str | list[str] | None = None,
+    ) -> dict[str, Any]:
+        conf = self._http_json("/conformance")
+        if conf and "conformsTo" in conf:
+            conforms = conf["conformsTo"]
+        else:  # Fallback to root document
+            root = self.get_root_document()
+            conforms = root.get("conformsTo", []) or []
+        checks: dict[str, bool] | None = None
+        if check:
+            targets = [check] if isinstance(check, str) else list(check)
+            checks = {c: c in conforms for c in targets}
+        return {"conformsTo": conforms, "checks": checks}
+
+    def get_queryables(self, collection_id: str | None = None) -> dict[str, Any]:
+        path = (
+            f"/collections/{collection_id}/queryables"
+            if collection_id
+            else "/queryables"
+        )
+        q = self._http_json(path)
+        if not q:
+            return {
+                "queryables": {},
+                "collection_id": collection_id,
+                "message": "Queryables not available",
+            }
+        # STAC Queryables spec nests properties under 'properties' in newer versions
+        props = q.get("properties") or q.get("queryables") or {}
+        return {"queryables": props, "collection_id": collection_id}
+
+    def get_aggregations(
+        self,
+        collections: list[str] | None = None,
+        bbox: list[float] | None = None,
+        datetime: str | None = None,
+        query: dict[str, Any] | None = None,
+        fields: list[str] | None = None,
+        operations: list[str] | None = None,
+        limit: int = 0,
+    ) -> dict[str, Any]:
+        # Build STAC search body with aggregations extension
+        body: dict[str, Any] = {}
+        if collections:
+            body["collections"] = collections
+        if bbox:
+            body["bbox"] = bbox
+        if datetime:
+            body["datetime"] = datetime
+        if query:
+            body["query"] = query
+        if limit:
+            body["limit"] = limit
+        aggs: dict[str, Any] = {}
+        # Simple default: count of items
+        requested_ops = operations or ["count"]
+        target_fields = fields or []
+        for op in requested_ops:
+            if op == "count":
+                aggs["count"] = {"type": "count"}
+            else:
+                # Field operations require fields (e.g., stats/histogram)
+                for f in target_fields:
+                    aggs[f"{f}_{op}"] = {"type": op, "field": f}
+        if aggs:
+            body["aggregations"] = aggs
+        try:
+            res = self._http_json("/search", method="POST", payload=body)
+            if not res:
+                return {
+                    "supported": False,
+                    "aggregations": {},
+                    "message": "Search endpoint unavailable",
+                    "parameters": body,
+                }
+            aggs_result = res.get("aggregations") or {}
+            return {
+                "supported": bool(aggs_result),
+                "aggregations": aggs_result,
+                "message": "OK" if aggs_result else "No aggregations returned",
+                "parameters": body,
+            }
+        except urllib.error.HTTPError as e:  # pragma: no cover - network
+            if e.code in (400, 404):
+                return {
+                    "supported": False,
+                    "aggregations": {},
+                    "message": f"Aggregations unsupported ({e.code})",
+                    "parameters": body,
+                }
+            raise
+        except Exception as e:  # pragma: no cover - network
+            return {
+                "supported": False,
+                "aggregations": {},
+                "message": f"Aggregation request failed: {e}",
+                "parameters": body,
+            }
 
 
 # Global instance preserved for backward compatibility (imported by server)

@@ -1,6 +1,6 @@
 # ADR 0004: Service Capabilities (Root, Conformance, Queryables) and Aggregations
 
-Status: Proposed
+Status: Accepted
 Date: 2025-09-18
 
 ## Context

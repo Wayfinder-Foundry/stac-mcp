@@ -12,10 +12,14 @@ async def test_list_tools():
     """Test that list_tools returns proper MCP tool definitions."""
     tools = await handle_list_tools()
 
-    assert len(tools) == 5
+    assert len(tools) == 9
 
     tool_names = [tool.name for tool in tools]
     expected_tools = [
+        "get_root",
+        "get_conformance",
+        "get_queryables",
+        "get_aggregations",
         "search_collections",
         "get_collection",
         "search_items",
@@ -170,3 +174,69 @@ async def test_estimate_data_size_tool_call():
             assert False, "Should have raised RuntimeError"
         except RuntimeError as e:
             assert "odc.stac is not available" in str(e)
+
+
+# ---------------- New Capability Tool Tests ----------------- #
+
+
+@pytest.mark.asyncio
+@patch("stac_mcp.server.stac_client")
+async def test_call_tool_get_root_json(mock_stac_client):
+    mock_stac_client.get_root_document.return_value = {
+        "id": "test-root",
+        "title": "Test Root",
+        "description": "Root doc",
+        "links": [],
+        "conformsTo": ["core"],
+    }
+    result = await handle_call_tool("get_root", {"output_format": "json"})
+    assert result[0].type == "text"
+    assert "test-root" in result[0].text
+    assert '"mode":"json"' in result[0].text
+
+
+@pytest.mark.asyncio
+@patch("stac_mcp.server.stac_client")
+async def test_call_tool_get_conformance_check(mock_stac_client):
+    mock_stac_client.get_conformance.return_value = {
+        "conformsTo": ["a", "b"],
+        "checks": {"a": True, "c": False},
+    }
+    result = await handle_call_tool(
+        "get_conformance",
+        {"check": ["a", "c"], "output_format": "json"},
+    )
+    assert '"checks"' in result[0].text
+    assert '"c":false' in result[0].text or '"c": false' in result[0].text
+
+
+@pytest.mark.asyncio
+@patch("stac_mcp.server.stac_client")
+async def test_call_tool_get_queryables_text(mock_stac_client):
+    mock_stac_client.get_queryables.return_value = {
+        "queryables": {"eo:cloud_cover": {"type": "number"}},
+        "collection_id": None,
+    }
+    result = await handle_call_tool("get_queryables", {})
+    assert result[0].type == "text"
+    assert "Queryables" in result[0].text
+    assert "eo:cloud_cover" in result[0].text
+
+
+@pytest.mark.asyncio
+@patch("stac_mcp.server.stac_client")
+async def test_call_tool_get_aggregations_unsupported(mock_stac_client):
+    mock_stac_client.get_aggregations.return_value = {
+        "supported": False,
+        "aggregations": {},
+        "message": "Aggregations unsupported (404)",
+        "parameters": {"collections": ["c"]},
+    }
+    result = await handle_call_tool(
+        "get_aggregations",
+        {"collections": ["c"], "output_format": "json"},
+    )
+    assert (
+        '"supported":false' in result[0].text or '"supported": false' in result[0].text
+    )
+    assert "Aggregations unsupported" in result[0].text

@@ -1,6 +1,6 @@
 """Tool to search for items in a STAC catalog."""
 
-from typing import Any, Dict, List, Union
+from typing import Any
 
 from mcp.types import TextContent
 
@@ -9,8 +9,8 @@ from stac_mcp.tools.client import STACClient
 
 def handle_search_items(
     client: STACClient,
-    arguments: Dict[str, Any],
-) -> Union[List[TextContent], Dict[str, Any]]:
+    arguments: dict[str, Any],
+) -> list[TextContent] | dict[str, Any]:
     collections = arguments.get("collections")
     bbox = arguments.get("bbox")
     dt = arguments.get("datetime")
