@@ -136,10 +136,9 @@ jobs:
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
-      # Trusted publishing, so we do not need to provide the token
-      # with:
-      #   # Provide the PyPI API token stored in repository or environment secrets
-      #   password: ${{ secrets.PYPI_API_TOKEN }}
+      with:
+        # Provide the PyPI API token stored in repository or environment secrets
+        password: ${{ secrets.PYPI_API_TOKEN }}
 
   build:
     runs-on: ubuntu-latest
