@@ -1,6 +1,6 @@
 """Tool to get a STAC Item by collection ID and item ID."""
 
-from typing import Any, Dict, List, Union
+from typing import Any
 
 from mcp.types import TextContent
 
@@ -9,8 +9,8 @@ from stac_mcp.tools.client import STACClient
 
 def handle_get_item(
     client: STACClient,
-    arguments: Dict[str, Any],
-) -> Union[List[TextContent], Dict[str, Any]]:
+    arguments: dict[str, Any],
+) -> list[TextContent] | dict[str, Any]:
     collection_id = arguments["collection_id"]
     item_id = arguments["item_id"]
     item = client.get_item(collection_id, item_id)

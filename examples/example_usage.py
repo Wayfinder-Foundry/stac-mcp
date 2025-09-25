@@ -65,8 +65,58 @@ async def demonstrate_stac_usage():
     except Exception as e:
         print(f"   ❌ Exception (expected): {str(e)[:100]}...")
 
+    # Capability: root document (likely to fail offline gracefully)
+    print("\n4. Attempting get_root (capability discovery):")
+    try:
+        result = await call_tool("get_root", {})
+        if result.isError:
+            print(f"   ❌ Error (expected offline): {result.content[0].text[:100]}...")
+        else:
+            print(f"   ✅ Root summary: {result.content[0].text.splitlines()[0]}")
+    except Exception as e:
+        print(f"   ❌ Exception (expected offline): {str(e)[:100]}...")
+
+    # Capability: conformance
+    print("\n5. Attempting get_conformance (capability discovery):")
+    try:
+        result = await call_tool(
+            "get_conformance",
+            {"check": ["http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/core"]},
+        )
+        if result.isError:
+            print(f"   ❌ Error (expected offline): {result.content[0].text[:100]}...")
+        else:
+            print(
+                f"   ✅ Conformance summary: {result.content[0].text.splitlines()[0]}",
+            )
+    except Exception as e:
+        print(f"   ❌ Exception (expected offline): {str(e)[:100]}...")
+
+    # Capability: queryables (global)
+    print("\n6. Attempting get_queryables (global):")
+    try:
+        result = await call_tool("get_queryables", {})
+        if result.isError:
+            print(f"   ❌ Error (expected offline): {result.content[0].text[:80]}...")
+        else:
+            print(
+                f"   ✅ Queryables response: {result.content[0].text.splitlines()[0]}",
+            )
+    except Exception as e:
+        print(f"   ❌ Exception (expected offline): {str(e)[:100]}...")
+
+    # Capability: aggregations (count only mock demonstration)
+    print("\n7. Example get_aggregations call structure (not executed):")
+    agg_params = {
+        "collections": ["landsat-c2l2-sr"],
+        "bbox": [-122.5, 37.7, -122.3, 37.8],
+        "datetime": "2023-01-01/2023-12-31",
+        "operations": ["count"],
+    }
+    print(f"   Parameters: {json.dumps(agg_params, indent=2)}")
+
     # Show search_items interface
-    print("\n4. Example search_items call structure:")
+    print("\n8. Example search_items call structure:")
     search_params = {
         "collections": ["landsat-c2l2-sr"],
         "bbox": [-122.5, 37.7, -122.3, 37.8],  # San Francisco area
@@ -76,12 +126,12 @@ async def demonstrate_stac_usage():
     print(f"   Parameters: {json.dumps(search_params, indent=2)}")
 
     # Show get_collection interface
-    print("\n5. Example get_collection call structure:")
+    print("\n9. Example get_collection call structure:")
     collection_params = {"collection_id": "landsat-c2l2-sr"}
     print(f"   Parameters: {json.dumps(collection_params, indent=2)}")
 
     # Show get_item interface
-    print("\n6. Example get_item call structure:")
+    print("\n10. Example get_item call structure:")
     item_params = {
         "collection_id": "landsat-c2l2-sr",
         "item_id": "LC08_L2SR_044034_20230815_02_T1",
@@ -89,7 +139,7 @@ async def demonstrate_stac_usage():
     print(f"   Parameters: {json.dumps(item_params, indent=2)}")
 
     # Show estimate_data_size interface
-    print("\n7. Example estimate_data_size call structure:")
+    print("\n11. Example estimate_data_size call structure:")
     data_size_params = {
         "collections": ["landsat-c2l2-sr"],
         "bbox": [-122.5, 37.7, -122.3, 37.8],  # San Francisco area

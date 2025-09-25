@@ -1,6 +1,6 @@
 """Tool to get and describe a STAC collection by its ID."""
 
-from typing import Any, Dict, List, Union
+from typing import Any
 
 from mcp.types import TextContent
 
@@ -9,8 +9,8 @@ from stac_mcp.tools.client import STACClient
 
 def handle_get_collection(
     client: STACClient,
-    arguments: Dict[str, Any],
-) -> Union[List[TextContent], Dict[str, Any]]:
+    arguments: dict[str, Any],
+) -> list[TextContent] | dict[str, Any]:
     collection_id = arguments["collection_id"]
     collection = client.get_collection(collection_id)
     if arguments.get("output_format") == "json":

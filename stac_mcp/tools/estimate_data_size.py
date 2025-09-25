@@ -1,6 +1,6 @@
 """Estimate data size for a STAC query."""
 
-from typing import Any, Dict, List, Union
+from typing import Any
 
 from mcp.types import TextContent
 
@@ -17,8 +17,8 @@ except ImportError:  # pragma: no cover - conditional path
 
 def handle_estimate_data_size(
     client: STACClient,
-    arguments: Dict[str, Any],
-) -> Union[List[TextContent], Dict[str, Any]]:
+    arguments: dict[str, Any],
+) -> list[TextContent] | dict[str, Any]:
     collections = arguments.get("collections")
     bbox = arguments.get("bbox")
     dt = arguments.get("datetime")
