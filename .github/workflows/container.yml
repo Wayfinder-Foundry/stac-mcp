@@ -136,9 +136,10 @@ jobs:
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        # Provide the PyPI API token stored in repository or environment secrets
-        password: ${{ secrets.PYPI_API_TOKEN }}
+      # Trusted publishing, so we do not need to provide the token
+      # with:
+      #   # Provide the PyPI API token stored in repository or environment secrets
+      #   password: ${{ secrets.PYPI_API_TOKEN }}
 
   build:
     runs-on: ubuntu-latest
@@ -165,6 +166,20 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Compute version for tagging
+      id: ver
+      run: |
+        VERSION=""
+        if [ "${{ needs.version-bump.outputs.version_changed }}" = "true" ] && [ -n "${{ needs.version-bump.outputs.new_version }}" ]; then
+          VERSION="${{ needs.version-bump.outputs.new_version }}"
+        elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+        fi
+        echo "Resolved version: $VERSION"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
     - name: Extract metadata
       id: meta
       uses: docker/metadata-action@v5
@@ -172,9 +187,10 @@ jobs:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}
         tags: |
           type=ref,event=pr
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=semver,pattern={{major}}
+          # Use the resolved version (from version bump or tag) to always emit semver tags in this run
+          type=semver,pattern={{version}},value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version != '' }}
+          type=semver,pattern={{major}}.{{minor}},value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version != '' }}
+          type=semver,pattern={{major}},value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version != '' }}
           type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Set up QEMU (for cross-platform emulation)
