@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 
 
 Handler = Callable[
-    [STACClient, dict[str, Any]], list[TextContent] | dict[str, Any],
+    [STACClient, dict[str, Any]],
+    list[TextContent] | dict[str, Any],
 ]
 
 

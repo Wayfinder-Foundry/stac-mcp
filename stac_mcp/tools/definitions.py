@@ -6,7 +6,6 @@ definitions from ``server.py`` (pre-refactor) to preserve backwards
 compatibility for clients and tests.
 """
 
-
 from mcp.types import Tool
 
 
