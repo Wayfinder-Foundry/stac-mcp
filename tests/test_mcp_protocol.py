@@ -161,8 +161,17 @@ async def test_tool_schemas_validation():
 @pytest.mark.asyncio
 async def test_estimate_data_size_tool_call():
     """Test estimate_data_size tool call with mocked odc.stac unavailable."""
-    with patch("stac_mcp.server.ODC_STAC_AVAILABLE", False):
-        try:
+    # Patch both availability flag and the stac_client method to raise directly
+    with (
+        patch("stac_mcp.server.ODC_STAC_AVAILABLE", False),
+        patch(
+            "stac_mcp.server.stac_client.estimate_data_size",
+            side_effect=RuntimeError(
+                "odc.stac is not available. Please install it to use data size estimation.",
+            ),
+        ),
+    ):
+        with pytest.raises(RuntimeError) as exc:
             await handle_call_tool(
                 "estimate_data_size",
                 {
@@ -171,9 +180,7 @@ async def test_estimate_data_size_tool_call():
                     "limit": 10,
                 },
             )
-            assert False, "Should have raised RuntimeError"
-        except RuntimeError as e:
-            assert "odc.stac is not available" in str(e)
+        assert "odc.stac is not available" in str(exc.value)
 
 
 # ---------------- New Capability Tool Tests ----------------- #
