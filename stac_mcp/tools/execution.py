@@ -73,7 +73,11 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
     output_format = arguments.get("output_format", "text")
     # Instrument execution (synchronous handler functions today)
     instrumented = instrument_tool_execution(
-        tool_name, catalog_url, handler, client, arguments,
+        tool_name,
+        catalog_url,
+        handler,
+        client,
+        arguments,
     )
     raw_result = instrumented.value
     # Backward compatibility: existing handlers return list[TextContent].

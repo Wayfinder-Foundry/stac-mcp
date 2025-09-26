@@ -80,7 +80,8 @@ class JSONLogFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
         base = {
             "timestamp": time.strftime(
-                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(record.created),
+                "%Y-%m-%dT%H:%M:%SZ",
+                time.gmtime(record.created),
             ),
             "level": record.levelname,
             "logger": record.name,
@@ -220,7 +221,11 @@ class ToolExecutionResult:
 
 
 def instrument_tool_execution(
-    tool_name: str, catalog_url: str | None, func, *args, **kwargs,
+    tool_name: str,
+    catalog_url: str | None,
+    func,
+    *args,
+    **kwargs,
 ) -> ToolExecutionResult:
     """Execute a tool handler with logging, timing, metrics, and correlation id.
 

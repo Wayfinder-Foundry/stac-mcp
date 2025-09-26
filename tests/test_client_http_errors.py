@@ -6,6 +6,7 @@ These focus on branches previously un-covered:
  - _http_json propagates URLError
  - search_collections APIError path (logged then re-raised)
 """
+
 from __future__ import annotations
 
 import json
@@ -35,7 +36,9 @@ class _FakeResponse:
 
 
 def _mk_http_error(code: int) -> HTTPError:
-    return HTTPError(url="https://example.com", code=code, msg="err", hdrs=None, fp=BytesIO())
+    return HTTPError(
+        url="https://example.com", code=code, msg="err", hdrs=None, fp=BytesIO()
+    )
 
 
 @patch("stac_mcp.tools.client.urllib.request.urlopen")
@@ -74,6 +77,7 @@ def test_http_json_url_error(mock_urlopen):
 def test_search_collections_api_error(mock_api_error, monkeypatch):
     # Simulate underlying client raising APIError
     client = STACClient("https://example.com")
+
     # Inject fake underlying client
     class _FakeInner:
         def get_collections(self):  # noqa: D401
