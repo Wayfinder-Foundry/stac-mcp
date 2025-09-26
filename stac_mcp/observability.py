@@ -96,7 +96,7 @@ class JSONLogFormatter(logging.Formatter):
             "cache_hit",
             "catalog_url",
         ]:
-            if hasattr(record, attr):  # pragma: no branch - simple attribute checks
+            if hasattr(record, attr):
                 base[attr] = getattr(record, attr)
         return json.dumps(base, separators=(",", ":"))
 
