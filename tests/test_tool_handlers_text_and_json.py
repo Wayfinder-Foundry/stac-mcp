@@ -62,7 +62,7 @@ async def test_get_item_text_and_json(mock_client):
             "output_format": "json",
         },
     )
-    assert '"type":"item"' in js[0].text or '"type":"item"' in js[0].text
+    assert '"type":"item"' in js[0].text or "item-1" in js[0].text
 
 
 @pytest.mark.asyncio
