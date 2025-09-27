@@ -2,11 +2,11 @@
 
 from typing import Any
 
-PREVIEW_LIMIT = 25
-
 from mcp.types import TextContent
 
 from stac_mcp.tools.client import STACClient
+
+PREVIEW_LIMIT = 25
 
 
 def handle_get_queryables(

@@ -2,11 +2,11 @@
 
 from typing import Any
 
-PREVIEW_LIMIT = 20
-
 from mcp.types import TextContent
 
 from stac_mcp.tools.client import STACClient
+
+PREVIEW_LIMIT = 20
 
 
 def handle_get_conformance(

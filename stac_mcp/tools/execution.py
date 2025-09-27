@@ -62,9 +62,7 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
         msg = f"Unknown tool: {name}. Available tools: {_tools}"
         raise ValueError(msg)
 
-    from stac_mcp import (
-        server as _server,
-    )
+    from stac_mcp import server as _server  # noqa: PLC0415,I001 (intentional dynamic import to avoid early import side effects & kept local)
 
     catalog_url = arguments.get("catalog_url")
     client = STACClient(catalog_url) if catalog_url else _server.stac_client

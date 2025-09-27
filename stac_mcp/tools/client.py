@@ -379,7 +379,7 @@ class STACClient:
             if exc.code == HTTP_404:
                 return None
             raise
-        except urllib.error.URLError as exc:  # pragma: no cover - network
+        except urllib.error.URLError:  # pragma: no cover - network
             # Preserve original URLError behavior so callers/tests can handle explicitly
             raise
 

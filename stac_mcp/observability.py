@@ -20,11 +20,13 @@ import os
 import sys
 import time
 import uuid
-from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from threading import RLock
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pragma: no cover - type checking only
+    from collections.abc import Generator
 
 LOG_LEVEL_ENV = "STAC_MCP_LOG_LEVEL"
 LOG_FORMAT_ENV = "STAC_MCP_LOG_FORMAT"  # "text" | "json"
@@ -37,7 +39,7 @@ LATENCY_BUCKETS_ENV = (
 _logger_state = {"initialized": False}
 # Backward compatibility shim: tests (and possibly external code) reference
 # observability._logger_initialized. Maintain it as an alias to internal state.
-_logger_initialized = False  # noqa: N816 (historical name retained)
+_logger_initialized = False  # historical public alias retained (N816 accepted)
 _init_lock = RLock()
 
 
@@ -57,7 +59,8 @@ def init_logging() -> None:
     internal state dict says initialized.
     """
 
-    global _logger_initialized
+    # Allow re-init when external test code flips alias to False. Avoid using
+    # global assignment; we rely on shared mutable state and alias pointer.
     if _logger_state["initialized"] and _logger_initialized:  # pragma: no cover
         return
     with _init_lock:
@@ -78,7 +81,8 @@ def init_logging() -> None:
         logger.handlers = [handler]
         logger.propagate = False
     _logger_state["initialized"] = True
-    _logger_initialized = True
+    # Keep alias in sync (tests may introspect this value)
+    globals()["_logger_initialized"] = True
 
 
 class JSONLogFormatter(logging.Formatter):
