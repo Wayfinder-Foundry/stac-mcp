@@ -2,6 +2,8 @@
 
 from typing import Any
 
+PREVIEW_LIMIT = 25
+
 from mcp.types import TextContent
 
 from stac_mcp.tools.client import STACClient
@@ -22,9 +24,9 @@ def handle_get_queryables(
         return [TextContent(type="text", text=result_text)]
     result_text += f"Collection: {collection_id or 'GLOBAL'}\n"
     result_text += f"Count: {len(props)}\n\n"
-    for name, spec in list(props.items())[:25]:
+    for name, spec in list(props.items())[:PREVIEW_LIMIT]:
         typ = spec.get("type", "unknown") if isinstance(spec, dict) else "unknown"
         result_text += f"  - {name}: {typ}\n"
-    if len(props) > 25:
-        result_text += f"  ... and {len(props) - 25} more\n"
+    if len(props) > PREVIEW_LIMIT:
+        result_text += f"  ... and {len(props) - PREVIEW_LIMIT} more\n"
     return [TextContent(type="text", text=result_text)]

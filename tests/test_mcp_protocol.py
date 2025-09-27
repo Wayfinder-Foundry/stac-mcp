@@ -2,9 +2,13 @@
 
 from unittest.mock import patch
 
+import jsonschema
 import pytest
 
 from stac_mcp.server import handle_call_tool, handle_list_tools
+
+# Constants to satisfy lint (avoid magic numbers)
+EXPECTED_TOOL_COUNT = 9
 
 
 @pytest.mark.asyncio
@@ -12,7 +16,7 @@ async def test_list_tools():
     """Test that list_tools returns proper MCP tool definitions."""
     tools = await handle_list_tools()
 
-    assert len(tools) == 9
+    assert len(tools) == EXPECTED_TOOL_COUNT
 
     tool_names = [tool.name for tool in tools]
     expected_tools = [
@@ -43,11 +47,8 @@ async def test_list_tools():
 @pytest.mark.asyncio
 async def test_call_tool_unknown():
     """Test calling an unknown tool returns an error."""
-    try:
+    with pytest.raises(ValueError, match="Unknown tool:"):
         await handle_call_tool("unknown_tool", {})
-        assert False, "Expected ValueError for unknown tool"
-    except ValueError as e:
-        assert "Unknown tool: unknown_tool" in str(e)
 
 
 @pytest.mark.asyncio
@@ -130,18 +131,13 @@ async def test_call_tool_get_item_json(mock_stac_client):
 async def test_call_tool_with_error(mock_stac_client):
     """Test calling a tool that raises an exception."""
     mock_stac_client.search_collections.side_effect = Exception("Network error")
-
-    try:
+    with pytest.raises(Exception, match="Network error"):
         await handle_call_tool("search_collections", {"limit": 1})
-        assert False, "Expected exception to be raised"
-    except Exception as e:
-        assert "Network error" in str(e)
 
 
 @pytest.mark.asyncio
 async def test_tool_schemas_validation():
     """Test that all tool schemas are valid JSON Schema."""
-    import jsonschema
 
     tools = await handle_list_tools()
 
@@ -162,13 +158,14 @@ async def test_tool_schemas_validation():
 async def test_estimate_data_size_tool_call():
     """Test estimate_data_size tool call with mocked odc.stac unavailable."""
     # Patch both availability flag and the stac_client method to raise directly
+    err_msg = (
+        "odc.stac is not available. Please install it to use data size estimation."
+    )
     with (
         patch("stac_mcp.server.ODC_STAC_AVAILABLE", False),
         patch(
             "stac_mcp.server.stac_client.estimate_data_size",
-            side_effect=RuntimeError(
-                "odc.stac is not available. Please install it to use data size estimation.",
-            ),
+            side_effect=RuntimeError(err_msg),
         ),
     ):
         with pytest.raises(RuntimeError) as exc:

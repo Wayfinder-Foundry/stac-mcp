@@ -18,6 +18,7 @@ Formatting & linting
   - pip install -e ".[dev]"
   - black stac_mcp/ tests/ examples/
   - ruff check stac_mcp/ tests/ examples/ --fix
+ - After ANY code edit (even small), re-run Black and Ruff locally before committing to keep diffs clean and surface issues early.
 
 Testing & validation
 - Write tests for behavior, not implementation; prefer parametrized tests for similar cases.
@@ -144,6 +145,7 @@ Quick contributor checklist
 2. Format & lint:
    - black stac_mcp/ tests/ examples/
    - ruff check stac_mcp/ tests/ examples/ --fix
+  - (Repeat these two commands after every change before staging/committing.)
 3. Run tests:
    - pytest -v
 4. Smoke test example:

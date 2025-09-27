@@ -1,3 +1,10 @@
+"""Tool definitions and JSON Schemas.
+
+Long descriptive strings are intentionally kept on single lines for stability of
+user-facing help text. Line length lint (E501) is disabled for this file.
+"""
+
+# ruff: noqa: E501
 """Tool schema definitions separated from server runtime.
 
 This module returns the list of MCP Tool objects supported by the

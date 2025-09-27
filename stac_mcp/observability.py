@@ -34,7 +34,10 @@ LATENCY_BUCKETS_ENV = (
     "STAC_MCP_LATENCY_BUCKETS_MS"  # comma-separated e.g. "5,10,25,50,100,250,500,1000"
 )
 
-_logger_initialized = False
+_logger_state = {"initialized": False}
+# Backward compatibility shim: tests (and possibly external code) reference
+# observability._logger_initialized. Maintain it as an alias to internal state.
+_logger_initialized = False  # noqa: N816 (historical name retained)
 _init_lock = RLock()
 
 
@@ -46,16 +49,19 @@ def _get_bool(env: str, default: bool) -> bool:
 
 
 def init_logging() -> None:
-    """Idempotently configure the library logger.
+    """Configure the library logger (re-initializable for tests).
 
-    Logging always goes to stderr to avoid MCP protocol interference.
+    Tests historically flipped `_logger_initialized = False` to force a fresh
+    configuration within a stderr/stdout capture context. We preserve that
+    behavior by allowing re-init when the shim flag is False even if the
+    internal state dict says initialized.
     """
 
     global _logger_initialized
-    if _logger_initialized:  # pragma: no cover - guard path
+    if _logger_state["initialized"] and _logger_initialized:  # pragma: no cover
         return
     with _init_lock:
-        if _logger_initialized:  # pragma: no cover
+        if _logger_state["initialized"] and _logger_initialized:  # pragma: no cover
             return
         level_name = os.getenv(LOG_LEVEL_ENV, "WARNING").upper()
         level = getattr(logging, level_name, logging.WARNING)
@@ -71,7 +77,8 @@ def init_logging() -> None:
         logger.setLevel(level)
         logger.handlers = [handler]
         logger.propagate = False
-        _logger_initialized = True
+    _logger_state["initialized"] = True
+    _logger_initialized = True
 
 
 class JSONLogFormatter(logging.Formatter):
@@ -124,8 +131,11 @@ class MetricsRegistry:
                     {float(x.strip()) for x in raw.split(",") if x.strip()},
                 )
                 return [b for b in buckets if b > 0]
-            except Exception:  # pragma: no cover - fallback path
-                pass
+            except (ValueError, TypeError) as exc:  # pragma: no cover - fallback path
+                logging.getLogger("stac_mcp").debug(
+                    "Invalid STAC_MCP_LATENCY_BUCKETS_MS value: %s",
+                    exc,
+                )
         # Sensible default spanning sub-ms to multi-second
         return [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2000, 5000]
 
@@ -179,7 +189,7 @@ def _metric_name(*parts: str) -> str:
 
 
 @contextmanager
-def trace_span(name: str, **attrs: Any) -> Generator[None, None, None]:
+def trace_span(name: str, **_attrs: Any) -> Generator[None, None, None]:
     """No-op span context manager placeholder.
 
     If tracing is enabled (`STAC_MCP_ENABLE_TRACE`), we could log span start/end.

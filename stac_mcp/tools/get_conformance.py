@@ -2,6 +2,8 @@
 
 from typing import Any
 
+PREVIEW_LIMIT = 20
+
 from mcp.types import TextContent
 
 from stac_mcp.tools.client import STACClient
@@ -17,10 +19,10 @@ def handle_get_conformance(
         return {"type": "conformance", **data}
     conforms = data["conformsTo"]
     result_text = f"**Conformance Classes ({len(conforms)})**\n\n"
-    for c in conforms[:20]:  # limit static preview
+    for c in conforms[:PREVIEW_LIMIT]:  # limit static preview
         result_text += f"  - {c}\n"
-    if len(conforms) > 20:
-        result_text += f"  ... and {len(conforms) - 20} more\n"
+    if len(conforms) > PREVIEW_LIMIT:
+        result_text += f"  ... and {len(conforms) - PREVIEW_LIMIT} more\n"
     if data.get("checks"):
         result_text += "\n**Checks:**\n"
         for uri, ok in data["checks"].items():

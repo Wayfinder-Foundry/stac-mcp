@@ -62,7 +62,9 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
         msg = f"Unknown tool: {name}. Available tools: {_tools}"
         raise ValueError(msg)
 
-    from stac_mcp import server as _server  # local import so test patching works
+    from stac_mcp import (
+        server as _server,
+    )
 
     catalog_url = arguments.get("catalog_url")
     client = STACClient(catalog_url) if catalog_url else _server.stac_client
@@ -97,6 +99,6 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
     # If a dict was returned but text requested, convert to pretty text summary
     try:
         summary = json.dumps(raw_result, indent=2)
-    except Exception:  # pragma: no cover - edge serialization
+    except TypeError:  # pragma: no cover - edge serialization
         summary = str(raw_result)
     return [TextContent(type="text", text=summary)]
