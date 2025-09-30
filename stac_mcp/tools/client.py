@@ -68,9 +68,7 @@ class STACClient:
         except APIError:  # pragma: no cover - network dependent
             logger.exception("Error fetching collections")
             raise
-        else:
-            return collections
-
+        return collections
     def get_collection(self, collection_id: str) -> dict[str, Any]:
         try:
             collection = self.client.get_collection(collection_id)
