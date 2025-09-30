@@ -63,7 +63,7 @@ class STACClient:
                         ),
                     },
                 )
-                if limit and limit > 0 and len(collections) >= limit:
+                if limit > 0 and len(collections) >= limit:
                     break
         except APIError:  # pragma: no cover - network dependent
             logger.exception("Error fetching collections")
