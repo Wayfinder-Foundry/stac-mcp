@@ -14,12 +14,8 @@ from typing import Any, NoReturn
 
 from mcp.types import TextContent
 
-from stac_mcp import (
-    server as _server,
-)
-from stac_mcp.observability import (
-    instrument_tool_execution,
-)
+from stac_mcp import server as _server
+from stac_mcp.observability import instrument_tool_execution
 from stac_mcp.tools.client import STACClient
 from stac_mcp.tools.estimate_data_size import handle_estimate_data_size
 from stac_mcp.tools.get_aggregations import handle_get_aggregations
