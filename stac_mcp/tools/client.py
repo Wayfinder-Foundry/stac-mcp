@@ -34,12 +34,19 @@ class STACClient:
             # Dynamic import avoids circular import; server may set Client.
             from stac_mcp import server as _server  # noqa: PLC0415
 
-            client_ref = getattr(_server, "Client", None)
-            if client_ref is None:  # Fallback if dependency missing
-                # Import inside branch so tests can simulate missing dependency.
-                from pystac_client import Client as client_ref  # type: ignore[attr-defined]  # noqa: PLC0415,N813,I001
+            # Local import of pystac_client to avoid top-level dependency issues
+            # and to ensure we can create a fresh StacApiIO instance.
+            from pystac_client import Client as PystacClient  # noqa: PLC0415
+            from pystac_client.stac_api_io import StacApiIO  # noqa: PLC0415
 
-            self._client = client_ref.open(self.catalog_url)  # type: ignore[attr-defined]
+            client_ref = getattr(_server, "Client", PystacClient)
+
+            # Each STACClient instance gets its own dedicated StacApiIO.
+            # This is critical to prevent state leakage between instances, especially
+            # when one instance is created with a bad URL (as in the example script),
+            # which would otherwise poison the shared/global pystac_client IO state.
+            stac_io = StacApiIO()
+            self._client = client_ref.open(self.catalog_url, stac_io=stac_io)
         return self._client
 
     # ----------------------------- Collections ----------------------------- #

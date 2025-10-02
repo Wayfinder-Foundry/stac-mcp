@@ -1,6 +1,6 @@
 """Test STAC MCP Server functionality."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from stac_mcp.server import STACClient
 
@@ -29,7 +29,7 @@ class TestSTACClient:
         # First access should create client
         client = self.client.client
         assert client == mock_client
-        mock_client_cls.open.assert_called_once_with(self.client.catalog_url)
+        mock_client_cls.open.assert_called_once_with(self.client.catalog_url, stac_io=ANY)
 
         # Second access should return cached client
         client2 = self.client.client
@@ -75,7 +75,7 @@ class TestSTACClient:
 
         # Access client property to trigger creation
         _ = client.client
-        mock_client_cls.open.assert_called_once_with(custom_url)
+        mock_client_cls.open.assert_called_once_with(custom_url, stac_io=ANY)
 
     def test_estimate_data_size_no_odc_stac(self):
         """Test estimate_data_size when odc.stac is not available."""
