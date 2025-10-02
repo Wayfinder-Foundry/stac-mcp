@@ -13,6 +13,8 @@ from stac_mcp.observability import (
     metrics_snapshot,
 )
 
+MIN_DEFAULT_BUCKETS = 5
+
 
 def noop_tool(_c, _a):
     return {"ok": True}
@@ -23,7 +25,7 @@ def test_text_log_format(monkeypatch):
     monkeypatch.setenv("STAC_MCP_LOG_FORMAT", "text")
     stderr = io.StringIO()
     with redirect_stderr(stderr):
-        observability._logger_initialized = False  # type: ignore[attr-defined]
+        observability._logger_initialized = False  # noqa: SLF001
         observability.init_logging()
         instrument_tool_execution("text_tool", None, noop_tool, None, {})
     out = stderr.getvalue()
@@ -36,13 +38,13 @@ def test_metrics_disabled(monkeypatch):
     monkeypatch.setenv("STAC_MCP_LOG_FORMAT", "json")
     stderr = io.StringIO()
     with redirect_stderr(stderr):
-        observability._logger_initialized = False  # type: ignore[attr-defined]
+        observability._logger_initialized = False  # noqa: SLF001
         observability.init_logging()
         instrument_tool_execution("no_metrics_tool", None, noop_tool, None, {})
     snap = metrics_snapshot()
     # Ensure counter not incremented
     assert not any(
-        k.startswith("tool_invocations_total.no_metrics_tool") for k in snap.keys()
+        k.startswith("tool_invocations_total.no_metrics_tool") for k in snap
     )
 
 
@@ -52,11 +54,11 @@ def test_trace_enabled(monkeypatch):
     monkeypatch.setenv("STAC_MCP_LOG_FORMAT", "json")
     stderr = io.StringIO()
     with redirect_stderr(stderr):
-        observability._logger_initialized = False  # type: ignore[attr-defined]
+        observability._logger_initialized = False  # noqa: SLF001
         observability.init_logging()
         instrument_tool_execution("trace_tool", None, noop_tool, None, {})
-    lines = [l for l in stderr.getvalue().splitlines() if l.strip()]
-    parsed = [json.loads(l) for l in lines]
+    lines = [line for line in stderr.getvalue().splitlines() if line.strip()]
+    parsed = [json.loads(line) for line in lines]
     assert any(p.get("event") == "trace_span" for p in parsed)
 
 
@@ -65,10 +67,10 @@ def test_malformed_latency_buckets_fallback(monkeypatch):
     monkeypatch.setenv("STAC_MCP_LOG_FORMAT", "json")
     stderr = io.StringIO()
     with redirect_stderr(stderr):
-        observability._logger_initialized = False  # type: ignore[attr-defined]
+        observability._logger_initialized = False  # noqa: SLF001
         observability.init_logging()
         instrument_tool_execution("bucket_tool", None, noop_tool, None, {})
     lat = metrics_latency_snapshot()
     # Ensure default buckets were used (> 5 buckets expected)
-    key = [k for k in lat.keys() if k.startswith("tool_latency_ms.bucket_tool")][0]
-    assert len(lat[key].keys()) > 5
+    key = next(k for k in lat if k.startswith("tool_latency_ms.bucket_tool"))
+    assert len(lat[key]) > MIN_DEFAULT_BUCKETS
