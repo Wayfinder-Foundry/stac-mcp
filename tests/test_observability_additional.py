@@ -43,9 +43,7 @@ def test_metrics_disabled(monkeypatch):
         instrument_tool_execution("no_metrics_tool", None, noop_tool, None, {})
     snap = metrics_snapshot()
     # Ensure counter not incremented
-    assert not any(
-        k.startswith("tool_invocations_total.no_metrics_tool") for k in snap
-    )
+    assert not any(k.startswith("tool_invocations_total.no_metrics_tool") for k in snap)
 
 
 def test_trace_enabled(monkeypatch):

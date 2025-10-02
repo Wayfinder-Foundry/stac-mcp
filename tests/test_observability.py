@@ -86,9 +86,7 @@ def test_instrument_tool_error(monkeypatch):
     # Latency histogram should record the failing invocation exactly once
     lat = metrics_latency_snapshot()
     # Find tool_latency histogram key
-    key_filter = (
-        k for k in lat if k.startswith("tool_latency_ms.timeout_tool")
-    )
+    key_filter = (k for k in lat if k.startswith("tool_latency_ms.timeout_tool"))
     matching_key = next(key_filter, None)
     assert matching_key, "Expected latency histogram entry for failing tool"
     counts = lat[matching_key]
