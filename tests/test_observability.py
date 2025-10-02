@@ -4,6 +4,8 @@ import io
 import json
 from contextlib import redirect_stderr, redirect_stdout
 
+import pytest
+
 from stac_mcp import observability
 from stac_mcp.observability import (
     instrument_tool_execution,
@@ -17,9 +19,12 @@ def dummy_tool(_client, _args):  # pragma: no cover - trivial
     return {"ok": True}
 
 
+NUM_IDS = 20
+
+
 def test_correlation_id_uniqueness():
-    ids = {new_correlation_id() for _ in range(20)}
-    assert len(ids) == 20
+    ids = {new_correlation_id() for _ in range(NUM_IDS)}
+    assert len(ids) == NUM_IDS
 
 
 def test_instrument_tool_success_logs_and_metrics(monkeypatch):
@@ -29,7 +34,7 @@ def test_instrument_tool_success_logs_and_metrics(monkeypatch):
     stdout = io.StringIO()
     with redirect_stdout(stdout), redirect_stderr(stderr):
         # Force re-init inside capture context
-        observability._logger_initialized = False  # type: ignore[attr-defined]
+        observability._logger_initialized = False  # noqa: SLF001
         observability.init_logging()
         result = instrument_tool_execution("test_tool", None, dummy_tool, None, {})
     # Ensure result value returned
@@ -57,20 +62,19 @@ def test_instrument_tool_error(monkeypatch):
     monkeypatch.setenv("STAC_MCP_LOG_FORMAT", "json")
 
     def failing_tool(_client, _args):  # pragma: no cover - simple failure
-        raise TimeoutError("Simulated timeout")
+        msg = "Simulated timeout"
+        raise TimeoutError(msg)
 
     stderr = io.StringIO()
     with redirect_stderr(stderr):
-        observability._logger_initialized = False  # type: ignore[attr-defined]
+        # Force re-init inside capture context
+        observability._logger_initialized = False  # noqa: SLF001
         observability.init_logging()
-        try:
+        with pytest.raises(TimeoutError):
             instrument_tool_execution("timeout_tool", None, failing_tool, None, {})
-            assert False, "Expected exception"
-        except TimeoutError:
-            pass
-    lines = [l for l in stderr.getvalue().splitlines() if l.strip()]
+
+    lines = [line for line in stderr.getvalue().splitlines() if line.strip()]
     assert lines
-    parsed = json.loads(lines[-1])
     # Either tool_error or previous line may be tool_error; search all
     found = False
     for line in lines:
@@ -82,9 +86,12 @@ def test_instrument_tool_error(monkeypatch):
     # Latency histogram should record the failing invocation exactly once
     lat = metrics_latency_snapshot()
     # Find tool_latency histogram key
-    matching = [k for k in lat.keys() if k.startswith("tool_latency_ms.timeout_tool")]
-    assert matching, "Expected latency histogram entry for failing tool"
-    counts = lat[matching[0]]
+    key_filter = (
+        k for k in lat if k.startswith("tool_latency_ms.timeout_tool")
+    )
+    matching_key = next(key_filter, None)
+    assert matching_key, "Expected latency histogram entry for failing tool"
+    counts = lat[matching_key]
     total = sum(counts.values())
     assert (
         total == 1
