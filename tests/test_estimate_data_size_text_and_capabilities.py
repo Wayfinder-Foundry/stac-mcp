@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -42,7 +42,7 @@ class _FakeItem:
     def __init__(self, year=2024, collection="c1"):
         self.id = f"item-{year}"
         self.collection_id = collection
-        self.datetime = datetime(year, 1, 1, tzinfo=UTC)
+        self.datetime = datetime(year, 1, 1, tzinfo=timezone.utc)
         self.assets = {"A": _FakeAsset(), "B": _FakeAsset("text/plain")}
 
 

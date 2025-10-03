@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -52,8 +52,8 @@ async def test_estimate_data_size_success(monkeypatch):
         # Patch odc.stac availability and loader
         monkeypatch.setattr("stac_mcp.server.ODC_STAC_AVAILABLE", True)
         dts = [
-            datetime(2024, 1, 1, tzinfo=UTC),
-            datetime(2024, 1, 2, tzinfo=UTC),
+            datetime(2024, 1, 1, tzinfo=timezone.utc),
+            datetime(2024, 1, 2, tzinfo=timezone.utc),
         ]
         items = [FakeItem(dt) for dt in dts]
 
@@ -88,7 +88,7 @@ async def test_estimate_data_size_success(monkeypatch):
 async def test_estimate_data_size_fallback(monkeypatch):
     with patch("stac_mcp.server.stac_client"):
         monkeypatch.setattr("stac_mcp.server.ODC_STAC_AVAILABLE", True)
-        items = [FakeItem(datetime(2024, 1, 1, tzinfo=UTC))]
+        items = [FakeItem(datetime(2024, 1, 1, tzinfo=timezone.utc))]
         search_mock = SimpleNamespace(items=lambda: items)
         mock_client_internal = SimpleNamespace(search=lambda **_: search_mock)
 
