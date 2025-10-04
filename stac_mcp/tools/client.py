@@ -32,12 +32,12 @@ class STACClient:
     def client(self) -> Any:
         if self._client is None:
             # Dynamic import avoids circular import; server may set Client.
-            from stac_mcp import server as _server  # noqa: PLC0415
-
             # Local import of pystac_client to avoid top-level dependency issues
             # and to ensure we can create a fresh StacApiIO instance.
             from pystac_client import Client as PystacClient  # noqa: PLC0415
             from pystac_client.stac_api_io import StacApiIO  # noqa: PLC0415
+
+            from stac_mcp import server as _server  # noqa: PLC0415
 
             client_ref = getattr(_server, "Client", PystacClient)
 
@@ -76,6 +76,7 @@ class STACClient:
             logger.exception("Error fetching collections")
             raise
         return collections
+
     def get_collection(self, collection_id: str) -> dict[str, Any]:
         try:
             collection = self.client.get_collection(collection_id)

@@ -6,13 +6,16 @@ and the private `_http_json` helper.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
 from stac_mcp.tools.client import STACClient
+
+NUM_ITEMS = 2
+AGG_COUNT = 10
 
 
 @pytest.fixture
@@ -39,7 +42,7 @@ def _mk_item(id_: str, collection_id: str):
     itm.collection_id = collection_id
     itm.geometry = None
     itm.bbox = [0, 0, 1, 1]
-    itm.datetime = datetime(2024, 1, 1, 12, 0, 0)
+    itm.datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
     itm.properties = {"eo:cloud_cover": 10}
     itm.assets = {
         "B01": SimpleNamespace(to_dict=lambda: {"href": "u", "type": "image/tiff"}),
@@ -75,7 +78,7 @@ def test_search_items(stac_client, monkeypatch):
     mock_client.search.return_value = search_mock
     monkeypatch.setattr(stac_client, "_client", mock_client)
     res = stac_client.search_items(collections=["c1"], limit=5)
-    assert len(res) == 2
+    assert len(res) == NUM_ITEMS
     assert res[0]["id"] == "i1"
 
 
@@ -97,7 +100,7 @@ def test_get_root_document_success(stac_client, monkeypatch):
     monkeypatch.setattr(
         stac_client,
         "_http_json",
-        lambda path: {"id": "root1", "title": "R", "links": [], "conformsTo": ["core"]},
+        lambda _: {"id": "root1", "title": "R", "links": [], "conformsTo": ["core"]},
     )
     root = stac_client.get_root_document()
     assert root["id"] == "root1"
@@ -105,7 +108,7 @@ def test_get_root_document_success(stac_client, monkeypatch):
 
 
 def test_get_root_document_empty(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_http_json", lambda path: None)
+    monkeypatch.setattr(stac_client, "_http_json", lambda _: None)
     root = stac_client.get_root_document()
     assert root["id"] is None
     assert root["conformsTo"] == []
@@ -133,7 +136,7 @@ def test_get_conformance_fallback(stac_client, monkeypatch):
 
 
 def test_get_queryables_missing(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_http_json", lambda path: None)
+    monkeypatch.setattr(stac_client, "_http_json", lambda _: None)
     res = stac_client.get_queryables()
     assert res["queryables"] == {}
     assert "message" in res
@@ -143,29 +146,29 @@ def test_get_queryables_present(stac_client, monkeypatch):
     monkeypatch.setattr(
         stac_client,
         "_http_json",
-        lambda path: {"properties": {"eo:cloud_cover": {"type": "number"}}},
+        lambda _: {"properties": {"eo:cloud_cover": {"type": "number"}}},
     )
     res = stac_client.get_queryables(collection_id="c1")
     assert "eo:cloud_cover" in res["queryables"]
 
 
 def test_get_aggregations_supported(stac_client, monkeypatch):
-    def _http(path, method="GET", payload=None):
+    def _http(path, *_, **__):
         if path == "/search":
-            return {"aggregations": {"count": {"value": 10}}}
+            return {"aggregations": {"count": {"value": AGG_COUNT}}}
         return None
 
     monkeypatch.setattr(stac_client, "_http_json", _http)
     res = stac_client.get_aggregations(collections=["c1"], limit=0)
     assert res["supported"] is True
-    assert res["aggregations"]["count"]["value"] == 10
+    assert res["aggregations"]["count"]["value"] == AGG_COUNT
 
 
 def test_get_aggregations_unsupported(stac_client, monkeypatch):
     monkeypatch.setattr(
         stac_client,
         "_http_json",
-        lambda *a, **k: {"aggregations": {}} if a[0] == "/search" else None,
+        lambda *a, **_: {"aggregations": {}} if a[0] == "/search" else None,
     )
     res = stac_client.get_aggregations(collections=["c1"], limit=0)
     assert res["supported"] is False

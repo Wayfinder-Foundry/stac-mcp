@@ -5,7 +5,7 @@ These focus on optional field inclusion and loop sections to raise coverage.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -31,7 +31,7 @@ async def test_get_item_text_and_json(mock_client):
         collection_id="col-1",
         geometry=None,
         bbox=[0, 0, 10, 5],
-        datetime=datetime(2024, 1, 1, 12, 0, 0),
+        datetime=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
         properties={"eo:cloud_cover": 12, "ignore_dict": {"a": 1}},
         assets={
             "B01": {"title": "Blue", "type": "image/tiff", "href": "http://x"},
@@ -131,7 +131,7 @@ async def test_search_items_text_and_json(mock_client):
             "collection": "col-1",
             "geometry": None,
             "bbox": [0, 0, 1, 1],
-            "datetime": datetime(2024, 1, 1).isoformat(),
+            "datetime": datetime(2024, 1, 1, tzinfo=UTC).isoformat(),
             "properties": {},
             "assets": {},
         },
@@ -171,7 +171,8 @@ async def test_get_conformance_text_and_json(mock_client):
         "checks": {"c1": True, "cX": False},
     }
     txt = await handle_call_tool("get_conformance", {"check": ["c1", "cX"]})
-    assert "c1" in txt[0].text and "cX" in txt[0].text
+    assert "c1" in txt[0].text
+    assert "cX" in txt[0].text
     js = await handle_call_tool(
         "get_conformance",
         {"check": ["c1"], "output_format": "json"},

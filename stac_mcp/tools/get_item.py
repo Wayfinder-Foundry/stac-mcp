@@ -25,7 +25,7 @@ def handle_get_item(
         result_text += f"BBox: [{b[0]:.2f}, {b[1]:.2f}, {b[2]:.2f}, {b[3]:.2f}]\n"
     result_text += "\n**Properties:**\n"
     for key, value in item["properties"].items():
-        if isinstance(value, (str, int, float, bool)):
+        if isinstance(value, str | int | float | bool):
             result_text += f"  {key}: {value}\n"
     result_text += f"\n**Assets ({len(item['assets'])}):**\n"
     for asset_key, asset in item["assets"].items():

@@ -2,6 +2,8 @@
 
 from unittest.mock import ANY, Mock, patch
 
+import pytest
+
 from stac_mcp.server import STACClient
 
 
@@ -18,7 +20,7 @@ class TestSTACClient:
             self.client.catalog_url
             == "https://planetarycomputer.microsoft.com/api/stac/v1"
         )
-        assert self.client._client is None
+        assert self.client._client is None  # noqa: SLF001
 
     @patch("stac_mcp.server.Client")
     def test_client_property(self, mock_client_cls):
@@ -29,7 +31,9 @@ class TestSTACClient:
         # First access should create client
         client = self.client.client
         assert client == mock_client
-        mock_client_cls.open.assert_called_once_with(self.client.catalog_url, stac_io=ANY)
+        mock_client_cls.open.assert_called_once_with(
+            self.client.catalog_url, stac_io=ANY,
+        )
 
         # Second access should return cached client
         client2 = self.client.client
@@ -79,13 +83,10 @@ class TestSTACClient:
 
     def test_estimate_data_size_no_odc_stac(self):
         """Test estimate_data_size when odc.stac is not available."""
-        from unittest.mock import patch
-
         with patch("stac_mcp.server.ODC_STAC_AVAILABLE", False):
             client = STACClient()
-
-            try:
+            with pytest.raises(
+                RuntimeError,
+                match=r"odc\.stac is not available",
+            ):
                 client.estimate_data_size(collections=["test"])
-                assert False, "Should have raised RuntimeError"
-            except RuntimeError as e:
-                assert "odc.stac is not available" in str(e)
