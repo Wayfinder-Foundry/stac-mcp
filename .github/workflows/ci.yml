@@ -49,6 +49,7 @@ jobs:
           path: |
             coverage.xml
             coverage-badge.svg
+          overwrite: true
       - name: Commit badge (main only)
         if: github.ref == 'refs/heads/main'
         run: |
