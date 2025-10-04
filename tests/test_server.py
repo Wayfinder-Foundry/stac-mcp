@@ -31,9 +31,7 @@ class TestSTACClient:
         # First access should create client
         client = self.client.client
         assert client == mock_client
-        mock_client_cls.open.assert_called_once_with(
-            self.client.catalog_url, stac_io=ANY,
-        )
+        mock_client_cls.open.assert_called_once_with(self.client.catalog_url, stac_io=ANY)
 
         # Second access should return cached client
         client2 = self.client.client
