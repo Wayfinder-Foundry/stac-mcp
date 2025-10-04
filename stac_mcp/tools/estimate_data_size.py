@@ -1,5 +1,6 @@
 """Estimate data size for a STAC query."""
 
+import importlib.util
 from typing import Any
 
 from mcp.types import TextContent
@@ -7,12 +8,9 @@ from mcp.types import TextContent
 from stac_mcp.tools import MAX_ASSET_LIST
 from stac_mcp.tools.client import STACClient
 
-try:  # pragma: no cover - import guard
-    import odc.stac  # type: ignore
-
-    ODC_STAC_AVAILABLE = True
-except ImportError:  # pragma: no cover - conditional path
-    ODC_STAC_AVAILABLE = False
+ODC_STAC_AVAILABLE = (
+    importlib.util.find_spec("odc.stac") is not None
+)  # pragma: no cover
 
 
 def handle_estimate_data_size(
@@ -53,7 +51,7 @@ def handle_estimate_data_size(
     if size_estimate["bbox_used"]:
         b = size_estimate["bbox_used"]
         result_text += (
-            "Bounding box: " f"[{b[0]:.4f}, {b[1]:.4f}, {b[2]:.4f}, {b[3]:.4f}]\n"
+            f"Bounding box: [{b[0]:.4f}, {b[1]:.4f}, {b[2]:.4f}, {b[3]:.4f}]\n"
         )
     if size_estimate["temporal_extent"]:
         result_text += f"Time range: {size_estimate['temporal_extent']}\n"

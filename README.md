@@ -2,12 +2,16 @@
 
 [![PyPI Version](https://img.shields.io/pypi/v/stac-mcp?style=flat-square&logo=pypi)](https://pypi.org/project/stac-mcp/)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/BnJam/stac-mcp/container.yml?branch=main&style=flat-square&logo=github)](https://github.com/BnJam/stac-mcp/actions/workflows/container.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/BnJam/stac-mcp/ci.yml?branch=main&label=ci&style=flat-square)](https://github.com/BnJam/stac-mcp/actions/workflows/ci.yml)
+[![Coverage](./coverage-badge.svg)](#test-coverage)
 [![Container](https://img.shields.io/badge/container-ghcr.io-blue?style=flat-square&logo=docker)](https://github.com/BnJam/stac-mcp/pkgs/container/stac-mcp)
 [![Python](https://img.shields.io/pypi/pyversions/stac-mcp?style=flat-square&logo=python)](https://pypi.org/project/stac-mcp/)
 [![License](https://img.shields.io/github/license/BnJam/stac-mcp?style=flat-square)](https://github.com/BnJam/stac-mcp/blob/main/LICENSE)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/stac-mcp?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/stac-mcp)
 
 An MCP (Model Context Protocol) Server that provides access to STAC (SpatioTemporal Asset Catalog) APIs for geospatial data discovery and access. Supports dual output modes (`text` and structured `json`) for all tools.
+
+> The coverage badge is updated automatically on pushes to `main` by the CI workflow.
 
 ## Overview
 
@@ -233,6 +237,41 @@ pytest -v
 python examples/example_usage.py  # MCP stdio smoke test
 ```
 
+#### Test Coverage
+The project uses `coverage.py` (already a dependency was added) for measuring statement and branch coverage.
+
+Quick run (terminal):
+```bash
+coverage run -m pytest -q
+coverage report -m
+```
+Example output (illustrative):
+```
+Name                                Stmts   Miss Branch BrMiss  Cover
+---------------------------------------------------------------------
+stac_mcp/observability.py             185      4     42      3    96%
+stac_mcp/tools/execution.py            68      2     18      1    94%
+... (others) ...
+---------------------------------------------------------------------
+TOTAL                                 620     20    140      9    96%
+```
+
+Generate an HTML report (optional):
+```bash
+coverage html
+open htmlcov/index.html  # macOS
+```
+
+Configuration: `.coveragerc` enforces `branch = True` and omits `tests/*` and `scripts/version.py`. Update omit patterns only when necessary to keep metrics honest.
+
+Recommended workflow before opening a PR:
+1. `black stac_mcp/ tests/ examples/`
+2. `ruff check stac_mcp/ tests/ examples/ --fix`
+3. `coverage run -m pytest -q`
+4. `coverage report -m` (ensure no unexpected drops)
+
+Planned future enhancements (pending ADRs): add retry/federation logic and corresponding tests; coverage thresholds may be introduced once feature set stabilizes.
+
 ### Linting
 
 ```bash
@@ -306,3 +345,81 @@ Current Containerfile (single-stage) notes:
 ## License
 
 Apache 2.0 - see [LICENSE](LICENSE) file for details.
+
+## Architecture Overview
+
+The project maintains Architecture Decision Records (ADRs) and Architecture Significant Requirements (ASRs) under `architecture/`.
+Core recent decisions:
+
+- Observability & Telemetry (ADR 0012): structured logging (stderr only), metrics counters, correlation IDs, future-ready tracing hooks.
+- Multi-Catalog Federation (ADR 0013): optional parallel search across multiple STAC endpoints with deterministic merging and provenance.
+- Pluggable Tool Extension Model (ADR 0014): entry point / directory-based plugin registration with collision protection.
+- Response Meta Stability (ADR 0015): introduces `meta` object with stable vs experimental field tiering.
+- Security & Credential Isolation (ADR 0016): alias-scoped credentials, redaction and least-privilege injection.
+
+Notable earlier foundations:
+- Output format & JSON envelope (ADR 0006) and JSON stability (ASR 1003)
+- Capability & aggregation support (ADR 0004)
+- Data size estimation tool (ADR 0009) with nodata efficiency requirement (ASR 1006)
+- Caching layer (ADR 0011)
+- Offline deterministic validation (ASR 1001)
+- Graceful network error handling (ASR 1004)
+- Performance bounds for search (ASR 1005)
+- Reliability & Retry Policy (ASR 1008)
+
+See individual ADR/ASR markdown files for full context, rationale, and evolution notes.
+
+## Service Level Objectives (SLO) & Requirements Summary
+
+The following summarizes measurable targets defined in ASRs (and related ADR enforcement points). These are engineering **goals**; enforcement is via tests, benchmarks, and observability counters.
+
+| Area | Reference | Objective |
+|------|-----------|-----------|
+| Offline Dev & Tests | ASR 1001 | Install <=120s, tests <=30s, example script ~0.6s, no live network |
+| JSON Output Stability | ASR 1003 | Backwards-compatible JSON schemas within major version; golden tests guard |
+| Network Error Handling | ASR 1004 | All network faults mapped to structured errors; server never crashes |
+| Search Performance Bounds | ASR 1005 | Conservative default limit (10); pagination controls; no unbounded iteration |
+| NoData & Memory Efficiency | ASR 1006 | Optional adjusted size reporting with `adjust_for_nodata`; always provide raw & adjusted bytes |
+| Reliability & Retries | ASR 1008 | >=95% success under 20% transient fault injection; p95 retry overhead <= +35%; max invocation 15s; ≤2 retries (3 attempts total) |
+| Meta Stability | ADR 0015 | Stable vs `_exp_` field tiering; no breaking removal of stable fields within major version |
+| Observability | ADR 0012 | Structured JSON logs (opt-in), correlation IDs per request, metrics counters (latency, errors, cache, retries) |
+| Federation | ADR 0013 | Partial catalog failures produce warnings not total failure when at least one succeeds |
+| Plugin Safety | ADR 0014 | Tool name collision prevention; load failures isolated; optional strict mode |
+| Credential Isolation | ADR 0016 | Per-alias credential scoping; automatic redaction; plugin access opt-in |
+
+### Experimental Meta Fields (Subject to Change)
+Defined in ADR 0015; current experimental keys returned (when features enabled):
+
+- `_exp_federation_warnings`: array of partial-failure or truncation notices
+- `_exp_cache_hit`: boolean indicating cache usage
+- `_exp_retry_attempts`: integer number of retry attempts performed
+
+Promotion of experimental fields to stable requires an ADR update and minor version release; consumers should treat `_exp_*` names as best-effort hints.
+
+### Operational Notes
+- Logging never uses stdout to avoid MCP protocol interference (ADR 0012).
+- Federation item merging adds provenance via a namespaced property (`stac_mcp:source_catalog`) (ADR 0013).
+- Retry logic applies only to idempotent read tools; future write-type tools must opt in explicitly (ASR 1008).
+- Nodata adjustment is off by default to preserve raw size semantics (ASR 1006).
+
+### Roadmap Candidates (Future ADRs)
+- Metrics exposure tool or external exporter integration
+- Circuit breaker & adaptive backoff extensions to reliability policy
+- Plugin capability introspection tool
+- OAuth / token refresh flows for credential layer
+
+For contributions impacting architecture, add or update an ADR/ASR following `AGENTS.md` guidelines.
+
+## Observability Configuration (ADR 0012)
+
+Environment variables controlling telemetry:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STAC_MCP_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, etc.) |
+| `STAC_MCP_LOG_FORMAT` | `text` | Set to `json` for structured single-line JSON logs |
+| `STAC_MCP_ENABLE_METRICS` | `true` | Disable (`false`) to skip counter increments |
+| `STAC_MCP_ENABLE_TRACE` | `false` | Enable lightweight span timing debug logs |
+
+All logs are emitted to stderr only; stdout is reserved strictly for MCP protocol traffic. JSON logs include fields: `timestamp`, `level`, `message`, plus optional `event`, `tool_name`, `duration_ms`, `error_type`, `correlation_id`, `cache_hit`, `catalog_url`.
+

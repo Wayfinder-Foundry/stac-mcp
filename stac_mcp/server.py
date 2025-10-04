@@ -21,16 +21,16 @@ from stac_mcp.tools.client import STACClient, stac_client
 
 # Backwards compatibility exports expected by tests (monolithic server refactor)
 try:  # pragma: no cover - optional dependency
-    from pystac_client import Client  # type: ignore
-except Exception:  # pragma: no cover - fallback for environments without dependency
-    Client = None  # type: ignore
+    from pystac_client import Client  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - fallback if dependency missing
+    Client = None  # type: ignore[assignment]
 
 # The odc.stac availability flag used by tests that patch server.ODC_STAC_AVAILABLE
 try:  # pragma: no cover - import guard
-    import odc.stac  # type: ignore  # noqa: F401
+    import odc.stac  # type: ignore[import-not-found]  # noqa: F401
 
     ODC_STAC_AVAILABLE = True
-except Exception:  # pragma: no cover - absence is acceptable
+except ImportError:  # pragma: no cover - absence is acceptable
     ODC_STAC_AVAILABLE = False
 
 logging.basicConfig(level=logging.INFO)

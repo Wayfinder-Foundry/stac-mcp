@@ -1,0 +1,15 @@
+[run]
+source = stac_mcp
+omit = 
+    tests/*
+    scripts/version.py
+branch = True
+
+[report]
+show_missing = True
+skip_empty = True
+precision = 1
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.: 
+    pass

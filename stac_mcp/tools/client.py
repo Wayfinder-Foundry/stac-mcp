@@ -11,6 +11,10 @@ from typing import Any
 from pystac_client.exceptions import APIError
 from shapely.geometry import shape
 
+# HTTP status code constants (avoid magic numbers - PLR2004)
+HTTP_400 = 400
+HTTP_404 = 404
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,14 +31,15 @@ class STACClient:
     @property
     def client(self) -> Any:
         if self._client is None:
-            # Import Client through server module so tests patching stac_mcp.server.Client work
-            from stac_mcp import server as _server  # local import for patching
+            # Dynamic import avoids circular import; server may set Client.
+            from stac_mcp import server as _server  # noqa: PLC0415
 
-            ClientRef = getattr(_server, "Client", None)
-            if ClientRef is None:  # Fallback if dependency missing at runtime
-                from pystac_client import Client as ClientRef  # type: ignore
+            client_ref = getattr(_server, "Client", None)
+            if client_ref is None:  # Fallback if dependency missing
+                # Import inside branch so tests can simulate missing dependency.
+                from pystac_client import Client as client_ref  # type: ignore[attr-defined]  # noqa: PLC0415,N813,I001
 
-            self._client = ClientRef.open(self.catalog_url)  # type: ignore[attr-defined]
+            self._client = client_ref.open(self.catalog_url)  # type: ignore[attr-defined]
         return self._client
 
     # ----------------------------- Collections ----------------------------- #
@@ -58,16 +63,20 @@ class STACClient:
                         ),
                     },
                 )
-                if len(collections) >= limit:
+                if limit > 0 and len(collections) >= limit:
                     break
-            return collections
-        except APIError as e:  # pragma: no cover - network dependent
-            logger.error(f"Error fetching collections: {e}")
+        except APIError:  # pragma: no cover - network dependent
+            logger.exception("Error fetching collections")
             raise
+        return collections
 
     def get_collection(self, collection_id: str) -> dict[str, Any]:
         try:
             collection = self.client.get_collection(collection_id)
+        except APIError:  # pragma: no cover - network dependent
+            logger.exception("Error fetching collection %s", collection_id)
+            raise
+        else:
             return {
                 "id": collection.id,
                 "title": collection.title or collection.id,
@@ -88,9 +97,6 @@ class STACClient:
                     else {}
                 ),
             }
-        except APIError as e:  # pragma: no cover - network dependent
-            logger.error(f"Error fetching collection {collection_id}: {e}")
-            raise
 
     # ------------------------------- Items -------------------------------- #
     def search_items(
@@ -124,16 +130,25 @@ class STACClient:
                         "assets": {k: v.to_dict() for k, v in item.assets.items()},
                     },
                 )
-                if len(items) >= limit:
+                if limit and limit > 0 and len(items) >= limit:
                     break
-            return items
-        except APIError as e:  # pragma: no cover - network dependent
-            logger.error(f"Error searching items: {e}")
+        except APIError:  # pragma: no cover - network dependent
+            logger.exception("Error searching items")
             raise
+        else:
+            return items
 
     def get_item(self, collection_id: str, item_id: str) -> dict[str, Any]:
         try:
             item = self.client.get_collection(collection_id).get_item(item_id)
+        except APIError:  # pragma: no cover - network dependent
+            logger.exception(
+                "Error fetching item %s from collection %s",
+                item_id,
+                collection_id,
+            )
+            raise
+        else:
             return {
                 "id": item.id,
                 "collection": item.collection_id,
@@ -143,11 +158,6 @@ class STACClient:
                 "properties": item.properties,
                 "assets": {k: v.to_dict() for k, v in item.assets.items()},
             }
-        except APIError as e:  # pragma: no cover - network dependent
-            logger.error(
-                f"Error fetching item {item_id} from collection {collection_id}: {e}",
-            )
-            raise
 
     # ------------------------- Data Size Estimation ----------------------- #
     def estimate_data_size(
@@ -159,16 +169,16 @@ class STACClient:
         aoi_geojson: dict[str, Any] | None = None,
         limit: int = 100,
     ) -> dict[str, Any]:
-        # Import inside method to honor patched value in tests (server.ODC_STAC_AVAILABLE)
-        from stac_mcp import (
-            server as _server,
-        )  # local import to avoid circular at module load
+        # Local import (intentional) lets tests patch server.ODC_STAC_AVAILABLE.
+        from stac_mcp import server as _server  # noqa: PLC0415
 
         if not getattr(_server, "ODC_STAC_AVAILABLE", False):
-            raise RuntimeError(
-                "odc.stac is not available. Please install it to use data size estimation.",
+            msg = (
+                "odc.stac is not available. Please install it to use data size "
+                "estimation."
             )
-        from odc import stac as odc_stac  # local import for clarity (already guarded)
+            raise RuntimeError(msg)
+        from odc import stac as odc_stac  # noqa: PLC0415 local import (guarded)
 
         search = self.client.search(
             collections=collections,
@@ -239,7 +249,7 @@ class STACClient:
                 "bbox_used": effective_bbox,
                 "temporal_extent": temporal_extent or datetime,
                 "collections": collections
-                or list(set(item.collection_id for item in items)),
+                or list({item.collection_id for item in items}),
                 "clipped_to_aoi": clipped_to_aoi,
                 "data_variables": data_vars_info,
                 "spatial_dims": (
@@ -249,8 +259,17 @@ class STACClient:
                 ),
                 "message": f"Successfully estimated data size for {len(items)} items",
             }
-        except Exception as e:  # pragma: no cover - fallback path
-            logger.warning(f"odc.stac loading failed, using fallback estimation: {e}")
+        except (
+            RuntimeError,
+            ValueError,
+            AttributeError,
+            KeyError,
+            TypeError,
+        ) as exc:  # pragma: no cover - fallback path
+            logger.warning(
+                "odc.stac loading failed, using fallback estimation: %s",
+                exc,
+            )
             return self._fallback_size_estimation(
                 items,
                 effective_bbox,
@@ -308,12 +327,14 @@ class STACClient:
             "estimated_size_gb": round(estimated_gb, 4),
             "bbox_used": effective_bbox,
             "temporal_extent": temporal_extent or datetime,
-            "collections": collections
-            or list(set(item.collection_id for item in items)),
+            "collections": collections or list({item.collection_id for item in items}),
             "clipped_to_aoi": clipped_to_aoi,
             "assets_analyzed": assets_info,
             "estimation_method": "fallback",
-            "message": f"Estimated data size for {len(items)} items using fallback method (odc.stac unavailable)",
+            "message": (
+                "Estimated data size for "
+                f"{len(items)} items using fallback method (odc.stac unavailable)"
+            ),
         }
 
     # ----------------------- Capabilities & Discovery -------------------- #
@@ -334,17 +355,31 @@ class STACClient:
         if payload is not None:
             data = json.dumps(payload).encode("utf-8")
             headers["Content-Type"] = "application/json"
-        req = urllib.request.Request(url, data=data, headers=headers, method=method)
+        if not url.startswith(("http://", "https://")):
+            msg = f"Unsupported URL scheme in {url}"
+            raise ValueError(msg)
+        # Request object creation is safe: url already validated to http/https only.
+        req = urllib.request.Request(  # noqa: S310 safe: url already validated to http/https
+            url,
+            data=data,
+            headers=headers,
+            method=method,
+        )
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:  # type: ignore[urllib-direct-use]
+            # S310: urlopen restricted to http/https (validated) and only performs
+            # metadata retrieval (no dynamic user-controlled scheme or path parts).
+            with urllib.request.urlopen(  # type: ignore[urllib-direct-use]  # noqa: S310
+                req,
+                timeout=30,
+            ) as resp:
                 raw = resp.read().decode("utf-8")
                 return json.loads(raw)
-        except urllib.error.HTTPError as e:  # pragma: no cover - network specific
-            if e.code == 404:
+        except urllib.error.HTTPError as exc:  # pragma: no cover - network specific
+            if exc.code == HTTP_404:
                 return None
             raise
-        except urllib.error.URLError:
-            # Surface as runtime error for tests to mock if needed
+        except urllib.error.URLError:  # pragma: no cover - network
+            # Preserve original URLError behavior so callers/tests can handle explicitly
             raise
 
     def get_root_document(self) -> dict[str, Any]:
@@ -450,20 +485,25 @@ class STACClient:
                 "message": "OK" if aggs_result else "No aggregations returned",
                 "parameters": body,
             }
-        except urllib.error.HTTPError as e:  # pragma: no cover - network
-            if e.code in (400, 404):
+        except urllib.error.HTTPError as exc:  # pragma: no cover - network
+            if exc.code in (HTTP_400, HTTP_404):
                 return {
                     "supported": False,
                     "aggregations": {},
-                    "message": f"Aggregations unsupported ({e.code})",
+                    "message": f"Aggregations unsupported ({exc.code})",
                     "parameters": body,
                 }
             raise
-        except Exception as e:  # pragma: no cover - network
+        except (
+            RuntimeError,
+            ValueError,
+            KeyError,
+            TypeError,
+        ) as exc:  # pragma: no cover - network
             return {
                 "supported": False,
                 "aggregations": {},
-                "message": f"Aggregation request failed: {e}",
+                "message": f"Aggregation request failed: {exc}",
                 "parameters": body,
             }
 

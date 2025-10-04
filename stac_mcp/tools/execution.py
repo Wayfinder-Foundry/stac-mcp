@@ -14,6 +14,8 @@ from typing import Any, NoReturn
 
 from mcp.types import TextContent
 
+from stac_mcp import server as _server
+from stac_mcp.observability import instrument_tool_execution
 from stac_mcp.tools.client import STACClient
 from stac_mcp.tools.estimate_data_size import handle_estimate_data_size
 from stac_mcp.tools.get_aggregations import handle_get_aggregations
@@ -59,8 +61,6 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
         msg = f"Unknown tool: {name}. Available tools: {_tools}"
         raise ValueError(msg)
 
-    from stac_mcp import server as _server  # local import so test patching works
-
     catalog_url = arguments.get("catalog_url")
     client = STACClient(catalog_url) if catalog_url else _server.stac_client
     handler = _TOOL_HANDLERS.get(tool_name)
@@ -68,7 +68,15 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
         _raise_unknown_tool(tool_name)
     # Let handler exceptions propagate so tests can assert on them
     output_format = arguments.get("output_format", "text")
-    raw_result = handler(client, arguments)
+    # Instrument execution (synchronous handler functions today)
+    instrumented = instrument_tool_execution(
+        tool_name,
+        catalog_url,
+        handler,
+        client,
+        arguments,
+    )
+    raw_result = instrumented.value
     # Backward compatibility: existing handlers return list[TextContent].
     # New JSON mode: handlers may return dict when output_format == 'json'.
     if output_format == "json":
@@ -86,6 +94,6 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
     # If a dict was returned but text requested, convert to pretty text summary
     try:
         summary = json.dumps(raw_result, indent=2)
-    except Exception:  # pragma: no cover - edge serialization
+    except TypeError:  # pragma: no cover - edge serialization
         summary = str(raw_result)
     return [TextContent(type="text", text=summary)]

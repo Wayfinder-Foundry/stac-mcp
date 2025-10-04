@@ -1,10 +1,15 @@
-"""Tool schema definitions separated from server runtime.
+"""Tool definitions and JSON Schemas.
 
-This module returns the list of MCP Tool objects supported by the
-current server implementation. It mirrors the previous inline
-definitions from ``server.py`` (pre-refactor) to preserve backwards
-compatibility for clients and tests.
+Long descriptive strings are intentionally kept on single lines for stability of
+user-facing help text. Line length lint (E501) is disabled for this file.
+
+This module returns the list of MCP Tool objects supported by the current
+server implementation. It mirrors the previous inline definitions from
+``server.py`` (pre-refactor) to preserve backwards compatibility for clients
+and tests.
 """
+
+# ruff: noqa: E501
 
 from mcp.types import Tool
 
