@@ -6,7 +6,7 @@ and the private `_http_json` helper.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -42,7 +42,7 @@ def _mk_item(id_: str, collection_id: str):
     itm.collection_id = collection_id
     itm.geometry = None
     itm.bbox = [0, 0, 1, 1]
-    itm.datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    itm.datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
     itm.properties = {"eo:cloud_cover": 10}
     itm.assets = {
         "B01": SimpleNamespace(to_dict=lambda: {"href": "u", "type": "image/tiff"}),
