@@ -45,11 +45,10 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-artifacts
+          name: coverage-artifacts-${{ matrix.python-version }}
           path: |
             coverage.xml
             coverage-badge.svg
-          overwrite: true
       - name: Commit badge (main only)
         if: github.ref == 'refs/heads/main'
         run: |
