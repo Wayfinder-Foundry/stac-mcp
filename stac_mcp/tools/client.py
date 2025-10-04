@@ -222,13 +222,30 @@ class STACClient:
             estimated_bytes = 0
             data_vars_info: list[dict[str, Any]] = []
             for var_name, data_array in ds.data_vars.items():
-                var_nbytes = data_array.nbytes
+                # Use original dtype from encoding if available (before nodata
+                # conversion). This prevents overestimation when nodata values
+                # cause dtype upcast to float64
+                original_dtype = (
+                    data_array.encoding.get("dtype")
+                    if hasattr(data_array, "encoding")
+                    else None
+                )
+                effective_dtype = (
+                    original_dtype if original_dtype is not None else data_array.dtype
+                )
+
+                # Calculate bytes using original dtype to avoid overestimation
+                import numpy as np  # noqa: PLC0415
+
+                dtype_obj = np.dtype(effective_dtype)
+                var_nbytes = dtype_obj.itemsize * data_array.size
+
                 estimated_bytes += var_nbytes
                 data_vars_info.append(
                     {
                         "variable": var_name,
                         "shape": list(data_array.shape),
-                        "dtype": str(data_array.dtype),
+                        "dtype": str(effective_dtype),
                         "size_bytes": var_nbytes,
                         "size_mb": round(var_nbytes / (1024 * 1024), 2),
                     },

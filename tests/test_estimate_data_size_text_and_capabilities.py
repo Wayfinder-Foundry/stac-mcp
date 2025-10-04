@@ -19,6 +19,11 @@ class _FakeDataArray:
         self.nbytes = nbytes
         self.shape = shape
         self.dtype = dtype
+        self.encoding = {}
+        # Calculate size from shape
+        self.size = 1
+        for dim in shape:
+            self.size *= dim
 
 
 class _FakeDataset:
