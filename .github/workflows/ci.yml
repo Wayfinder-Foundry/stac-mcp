@@ -2,7 +2,11 @@ name: CI
 
 on:
   push:
+<<<<<<< HEAD
     branches: [main, hotfix/**, release/**]
+=======
+    branches: [main, hotfix/**, release/**, jules/**, copilot/**]
+>>>>>>> origin/main
   pull_request:
     branches: [main]
 
@@ -17,7 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
+<<<<<<< HEAD
         python-version: ["3.10", "3.11", "3.12"]
+=======
+        python-version: ["3.11", "3.12"]
+>>>>>>> origin/main
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
@@ -45,7 +53,11 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
+<<<<<<< HEAD
           name: coverage-artifacts
+=======
+          name: coverage-artifacts-${{ matrix.python-version }}
+>>>>>>> origin/main
           path: |
             coverage.xml
             coverage-badge.svg

@@ -42,13 +42,12 @@ async def demonstrate_stac_usage():
     try:
         result = await call_tool("search_collections", {"limit": 5})
         if result.isError:
-            print(
-                f"   ❌ Error (expected in this environment): {result.content[0].text[:100]}...",
-            )
+            err_text = result.content[0].text
+            print(f"   ❌ Error (expected in this environment): {err_text[:100]}...")
         else:
             print("   ✅ Success:")
             print(f"   {result.content[0].text[:200]}...")
-    except Exception as e:
+    except RuntimeError as e:
         print(f"   ❌ Exception (expected in this environment): {str(e)[:100]}...")
 
     # Show what a successful search would look like with a custom catalog
@@ -62,7 +61,7 @@ async def demonstrate_stac_usage():
             print(f"   ❌ Error (expected): {result.content[0].text[:100]}...")
         else:
             print("   ✅ Success (unexpected in this environment)")
-    except Exception as e:
+    except RuntimeError as e:
         print(f"   ❌ Exception (expected): {str(e)[:100]}...")
 
     # Capability: root document (likely to fail offline gracefully)
@@ -73,10 +72,9 @@ async def demonstrate_stac_usage():
             print(f"   ❌ Error (expected offline): {result.content[0].text[:100]}...")
         else:
             print(f"   ✅ Root summary: {result.content[0].text.splitlines()[0]}")
-    except Exception as e:
+    except RuntimeError as e:
         print(f"   ❌ Exception (expected offline): {str(e)[:100]}...")
 
-    # Capability: conformance
     print("\n5. Attempting get_conformance (capability discovery):")
     try:
         result = await call_tool(
@@ -89,7 +87,7 @@ async def demonstrate_stac_usage():
             print(
                 f"   ✅ Conformance summary: {result.content[0].text.splitlines()[0]}",
             )
-    except Exception as e:
+    except RuntimeError as e:
         print(f"   ❌ Exception (expected offline): {str(e)[:100]}...")
 
     # Capability: queryables (global)
@@ -102,7 +100,7 @@ async def demonstrate_stac_usage():
             print(
                 f"   ✅ Queryables response: {result.content[0].text.splitlines()[0]}",
             )
-    except Exception as e:
+    except RuntimeError as e:
         print(f"   ❌ Exception (expected offline): {str(e)[:100]}...")
 
     # Capability: aggregations (count only mock demonstration)

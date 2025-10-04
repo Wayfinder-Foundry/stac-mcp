@@ -7,6 +7,7 @@ import json
 import pytest
 from mcp.types import TextContent
 
+from stac_mcp import server as _server
 from stac_mcp.tools import execution
 
 
@@ -22,8 +23,11 @@ async def test_json_fallback_mode(monkeypatch):
             TextContent(type="text", text="Line2"),
         ]
 
-    monkeypatch.setitem(execution._TOOL_HANDLERS, "dummy_tool", handler)
-    from stac_mcp import server as _server
+    monkeypatch.setitem(
+        execution._TOOL_HANDLERS,  # noqa: SLF001
+        "dummy_tool",
+        handler,
+    )
 
     monkeypatch.setattr(_server, "stac_client", DummyClient())
     result = await execution.execute_tool("dummy_tool", {"output_format": "json"})
@@ -38,8 +42,11 @@ async def test_dict_to_text_conversion(monkeypatch):
     def handler(_client, _args):
         return {"a": 1, "b": 2}
 
-    monkeypatch.setitem(execution._TOOL_HANDLERS, "dict_tool", handler)
-    from stac_mcp import server as _server
+    monkeypatch.setitem(
+        execution._TOOL_HANDLERS,  # noqa: SLF001
+        "dict_tool",
+        handler,
+    )
 
     monkeypatch.setattr(_server, "stac_client", DummyClient())
     result = await execution.execute_tool("dict_tool", {"output_format": "text"})

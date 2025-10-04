@@ -15,6 +15,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
 import pytest
+from pystac_client.exceptions import APIError
 
 from stac_mcp.tools.client import STACClient
 
@@ -48,24 +49,24 @@ def _mk_http_error(code: int) -> HTTPError:
 def test_http_json_404_returns_none(mock_urlopen):
     client = STACClient("https://example.com")
 
-    def raise_404(req, timeout=30):
+    def raise_404(*_, **__):
         raise _mk_http_error(404)
 
     mock_urlopen.side_effect = raise_404
     # 404 should yield None
-    assert client._http_json("/missing") is None  # type: ignore[attr-defined]
+    assert client._http_json("/missing") is None  # noqa: SLF001
 
 
 @patch("stac_mcp.tools.client.urllib.request.urlopen")
 def test_http_json_500_raises(mock_urlopen):
     client = STACClient("https://example.com")
 
-    def raise_500(req, timeout=30):
+    def raise_500(*_, **__):
         raise _mk_http_error(500)
 
     mock_urlopen.side_effect = raise_500
     with pytest.raises(HTTPError):
-        client._http_json("/boom")  # type: ignore[attr-defined]
+        client._http_json("/boom")  # noqa: SLF001
 
 
 @patch("stac_mcp.tools.client.urllib.request.urlopen")
@@ -73,20 +74,19 @@ def test_http_json_url_error(mock_urlopen):
     client = STACClient("https://example.com")
     mock_urlopen.side_effect = URLError("down")
     with pytest.raises(URLError):
-        client._http_json("/boom")  # type: ignore[attr-defined]
+        client._http_json("/boom")  # noqa: SLF001
 
 
-@patch("stac_mcp.tools.client.APIError")
-def test_search_collections_api_error(mock_api_error, monkeypatch):
+def test_search_collections_api_error(monkeypatch):
     # Simulate underlying client raising APIError
     client = STACClient("https://example.com")
 
     # Inject fake underlying client
     class _FakeInner:
         def get_collections(self):
-            raise mock_api_error  # instance behaves as exception
+            msg = "api failure"
+            raise APIError(msg)
 
     monkeypatch.setattr(client, "_client", _FakeInner())
-    mock_api_error.__str__.return_value = "api failure"
-    with pytest.raises(Exception):
+    with pytest.raises(APIError, match="api failure"):
         client.search_collections(limit=1)

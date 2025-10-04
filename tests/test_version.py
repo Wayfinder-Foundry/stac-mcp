@@ -106,7 +106,7 @@ description = "Test project"
         pyproject_path.unlink()
         with patch("version.Path") as mock_path:
             mock_path.return_value = pyproject_path
-            with pytest.raises(FileNotFoundError, match="pyproject.toml not found"):
+            with pytest.raises(FileNotFoundError, match=r"pyproject\.toml not found"):
                 get_current_version()
 
         # Test with missing version

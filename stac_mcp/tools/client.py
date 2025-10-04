@@ -76,6 +76,7 @@ class STACClient:
             logger.exception("Error fetching collections")
             raise
         return collections
+
     def get_collection(self, collection_id: str) -> dict[str, Any]:
         try:
             collection = self.client.get_collection(collection_id)
