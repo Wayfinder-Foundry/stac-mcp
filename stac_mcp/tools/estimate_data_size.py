@@ -8,9 +8,12 @@ from mcp.types import TextContent
 from stac_mcp.tools import MAX_ASSET_LIST
 from stac_mcp.tools.client import STACClient
 
-ODC_STAC_AVAILABLE = (
-    importlib.util.find_spec("odc.stac") is not None
-)  # pragma: no cover
+try:
+    ODC_STAC_AVAILABLE = (
+        importlib.util.find_spec("odc.stac") is not None
+    )  # pragma: no cover
+except ModuleNotFoundError:  # pragma: no cover
+    ODC_STAC_AVAILABLE = False
 
 
 def handle_estimate_data_size(

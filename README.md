@@ -285,7 +285,7 @@ The project uses semantic versioning (SemVer) with automated version management 
 
 #### Branch-Based Automatic Versioning
 When PRs are merged to `main`, the workflow inspects the merged branch name (via the PR head ref) and increments the version if it matches a prefix:
-- **hotfix/** branches → patch increment (0.1.0 → 0.1.1) for bug fixes
+- **hotfix/** or **copilot/fix-** branches → patch increment (0.1.0 → 0.1.1) for bug fixes
 - **feature/** branches → minor increment (0.1.0 → 0.2.0) for new features  
 - **release/** branches → major increment (0.1.0 → 1.0.0) for breaking changes
 

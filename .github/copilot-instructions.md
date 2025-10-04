@@ -223,7 +223,7 @@ python scripts/version.py set 1.2.3
 
 ### Version Guidelines for PRs
 Use branch prefixes to control automatic version increments when PRs are merged into main:
-- **hotfix/** branches: Trigger patch version increments (0.1.0 -> 0.1.1)
+- **hotfix/** or **copilot/fix-** branches: Trigger patch version increments (0.1.0 -> 0.1.1)
   - Bug fixes, security patches, documentation updates, minor improvements
 - **feature/** branches: Trigger minor version increments (0.1.0 -> 0.2.0)  
   - New features, new tools, non-breaking API changes, performance improvements
@@ -233,6 +233,7 @@ Use branch prefixes to control automatic version increments when PRs are merged 
 
 Examples:
 - `hotfix/fix-authentication-bug`
+- `copilot/fix-nodata-dtype-handling`
 - `feature/add-stac-search-tool`
 - `release/v2-breaking-api-changes`
 
