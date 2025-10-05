@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - hotfix/**
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # fetch all history so we can check for existing tags
+          fetch-depth: 0
+
+      - name: Get project version
+        id: version
+        run: |
+          VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
+          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          if git rev-parse ${{ steps.version.outputs.tag }} >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        if: steps.check_tag.outputs.exists == 'false'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.version.outputs.tag }}
+          name: "Release v${{ steps.version.outputs.version }}"
+          body: "New release: v${{ steps.version.outputs.version }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
