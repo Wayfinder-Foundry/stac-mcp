@@ -218,3 +218,18 @@ jobs:
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
+
+  github-release:
+    runs-on: ubuntu-latest
+    needs: [version-bump]
+    permissions:
+      contents: write
+    if: needs.version-bump.outputs.version_changed == 'true'
+    steps:
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ needs.version-bump.outputs.new_version }}
+          name: "Release v${{ needs.version-bump.outputs.new_version }}"
+          body: "New release: v${{ needs.version-bump.outputs.new_version }}"
+          token: ${{ secrets.GITHUB_TOKEN }}
