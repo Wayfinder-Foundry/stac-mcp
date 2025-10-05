@@ -52,7 +52,7 @@ jobs:
             coverage.xml
             coverage-badge.svg
       - name: Commit badge (main only)
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && matrix.python-version == '3.12'
         run: |
           if git diff --quiet coverage-badge.svg 2>/dev/null; then
             echo 'No badge changes'
