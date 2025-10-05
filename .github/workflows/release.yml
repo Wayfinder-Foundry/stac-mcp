@@ -26,7 +26,7 @@ jobs:
       - name: Get project version
         id: version
         run: |
-          VERSION=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
+          VERSION=$(python scripts/version.py current)
           echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 

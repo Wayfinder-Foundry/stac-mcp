@@ -57,14 +57,14 @@ jobs:
         echo "Branch name: $BRANCH_NAME"
         
         # Determine version increment based on branch prefix
-        if [[ "$BRANCH_NAME" == hotfix/* ]] || [[ "$BRANCH_NAME" == copilot/fix-* ]]; then
+        if [[ "$BRANCH_NAME" == hotfix/* ]] || [[ "$BRANCH_NAME" == copilot/fix-* ]] || [[ "$BRANCH_NAME" == fix/* ]]; then
           INCREMENT_TYPE="patch"
         elif [[ "$BRANCH_NAME" == feature/* ]]; then
           INCREMENT_TYPE="minor"
         elif [[ "$BRANCH_NAME" == release/* ]]; then
           INCREMENT_TYPE="major"
         else
-          echo "Branch does not match hotfix/*, copilot/fix-*, feature/*, or release/* pattern, skipping version bump"
+          echo "Branch does not match fix/*, hotfix/*, copilot/fix-*, feature/*, or release/* pattern, skipping version bump"
           echo "version_changed=false" >> $GITHUB_OUTPUT
           exit 0
         fi
