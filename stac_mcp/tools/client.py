@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import ssl
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 from pystac_client.exceptions import APIError
@@ -44,6 +47,17 @@ class ConformanceError(NotImplementedError):
     """Raised when a STAC API does not support a required capability."""
 
 
+class SSLVerificationError(ConnectionError):
+    """Raised when SSL certificate verification fails for a STAC request.
+
+    This wraps an underlying ``ssl.SSLCertVerificationError`` (if available)
+    to provide a clearer, library-specific failure mode and actionable
+    guidance for callers. Handlers may choose to surface remediation steps
+    (e.g., setting a custom CA bundle) without needing to parse low-level
+    urllib exceptions.
+    """
+
+
 class STACClient:
     """STAC Client wrapper for common operations."""
 
@@ -56,6 +70,9 @@ class STACClient:
         self.headers = headers or {}
         self._client: Any | None = None
         self._conformance: list[str] | None = None
+        # Internal meta flags (used by execution layer for experimental meta)
+        self._last_retry_attempts = 0  # number of retry attempts performed (int)
+        self._last_insecure_ssl = False  # whether unsafe SSL was used (bool)
 
     @property
     def client(self) -> Any:
@@ -222,7 +239,9 @@ class STACClient:
 
     # --------------------------- Transactions --------------------------- #
     def create_item(
-        self, collection_id: str, item: dict[str, Any],
+        self,
+        collection_id: str,
+        item: dict[str, Any],
     ) -> dict[str, Any] | None:
         """Creates a new STAC Item in a collection."""
         self._check_conformance(CONFORMANCE_TRANSACTION)
@@ -490,22 +509,118 @@ class STACClient:
             headers=request_headers,
             method=method,
         )
-        try:
-            # S310: urlopen restricted to http/https (validated) and only performs
-            # metadata retrieval (no dynamic user-controlled scheme or path parts).
-            with urllib.request.urlopen(  # type: ignore[urllib-direct-use]  # noqa: S310
-                req,
-                timeout=30,
-            ) as resp:
-                raw = resp.read().decode("utf-8")
-                return json.loads(raw)
-        except urllib.error.HTTPError as exc:  # pragma: no cover - network specific
-            if exc.code == HTTP_404:
-                return None
-            raise
-        except urllib.error.URLError:  # pragma: no cover - network
-            # Preserve original URLError behavior so callers/tests can handle explicitly
-            raise
+        # ---------------- SSL Context Handling ---------------- #
+        context: ssl.SSLContext | None = None
+        disable_ssl = os.getenv("STAC_MCP_UNSAFE_DISABLE_SSL") == "1"
+        # New: opportunistic fallback when encountering a certificate validation
+        # failure for read-only endpoints (GET) if explicitly allowed.
+        insecure_fallback_enabled = os.getenv("STAC_MCP_SSL_INSECURE_FALLBACK") == "1"
+        insecure_retry_performed = False
+        ca_bundle = os.getenv("STAC_MCP_CA_BUNDLE")
+        if disable_ssl:
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE  # type: ignore[assignment]
+            logger.warning(
+                "SSL verification DISABLED via STAC_MCP_UNSAFE_DISABLE_SSL=1. "
+                "Not for production use.",
+            )
+            self._last_insecure_ssl = True
+        elif ca_bundle and Path(ca_bundle).is_file():
+            try:
+                context = ssl.create_default_context(cafile=ca_bundle)
+            except OSError as ctx_exc:  # pragma: no cover - unlikely
+                logger.warning(
+                    "Failed to load custom CA bundle '%s': %s",
+                    ca_bundle,
+                    ctx_exc,
+                )
+
+        # ---------------- Retry / Backoff Logic ---------------- #
+        max_attempts = 3
+        base_delay = 0.2
+        self._last_retry_attempts = 0
+        for attempt in range(1, max_attempts + 1):
+            try:
+                with urllib.request.urlopen(  # type: ignore[urllib-direct-use]  # noqa: S310
+                    req,
+                    timeout=30,
+                    context=context,
+                ) as resp:
+                    raw = resp.read().decode("utf-8")
+                    return json.loads(raw) if raw else {}
+            except urllib.error.HTTPError as exc:  # pragma: no cover - network specific
+                if exc.code == HTTP_404:
+                    return None
+                # Non-404 HTTP errors are not retried (server responded definitively)
+                raise
+            except urllib.error.URLError as exc:  # pragma: no cover - network
+                reason = getattr(exc, "reason", None)
+                if isinstance(reason, ssl.SSLCertVerificationError):
+                    # Attempt a one-time insecure fallback if explicitly enabled
+                    # and criteria met (GET + read-only path) and not already tried.
+                    read_only = method == "GET"
+                    safe_path = path in ("/conformance", "") or path.endswith(
+                        "/conformance",
+                    )
+                    if (
+                        insecure_fallback_enabled
+                        and not insecure_retry_performed
+                        and read_only
+                        and safe_path
+                        and not disable_ssl
+                    ):
+                        logger.warning(
+                            (
+                                "SSL verification failed for %s: %s. Retrying once "
+                                "INSECURE (fallback env enabled)."
+                            ),
+                            url,
+                            reason,
+                        )
+                        insecure_retry_performed = True
+                        # Build insecure context and retry immediately (no backoff)
+                        insecure_ctx = ssl.create_default_context()
+                        insecure_ctx.check_hostname = False
+                        insecure_ctx.verify_mode = ssl.CERT_NONE  # type: ignore[assignment]
+                        try:
+                            with urllib.request.urlopen(  # type: ignore[urllib-direct-use]  # noqa: S310
+                                req,
+                                timeout=30,
+                                context=insecure_ctx,
+                            ) as resp:
+                                raw = resp.read().decode("utf-8")
+                                self._last_insecure_ssl = True
+                                return json.loads(raw) if raw else {}
+                        except (
+                            urllib.error.URLError,
+                            ssl.SSLError,
+                            ssl.SSLCertVerificationError,
+                            OSError,
+                            ValueError,
+                        ):  # pragma: no cover - network
+                            logger.exception(
+                                "Insecure fallback attempt also failed",
+                            )
+                            # Fall through to raise canonical error below
+                    msg = (
+                        f"SSL certificate verification failed for {url}: {reason}. "
+                        "Set STAC_MCP_CA_BUNDLE to a custom CA bundle, use "
+                        "STAC_MCP_SSL_INSECURE_FALLBACK=1 for a one-time read-only "
+                        "retry, or (unsafe) STAC_MCP_UNSAFE_DISABLE_SSL=1 to fully "
+                        "bypass verification for all requests (diagnostics only)."
+                    )
+                    raise SSLVerificationError(msg) from exc
+                # Retry only on the first (max_attempts-1) attempts
+                if attempt < max_attempts:
+                    self._last_retry_attempts = attempt
+                    delay = base_delay * (2 ** (attempt - 1))
+                    import time  # noqa: PLC0415
+
+                    time.sleep(delay)
+                    continue
+                raise
+        return None  # Should not reach here; loop either returns or raises
 
     def get_root_document(self) -> dict[str, Any]:
         root = self._http_json("")  # base endpoint already ends with /stac/v1

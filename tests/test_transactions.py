@@ -104,7 +104,8 @@ def test_delete_collection_success(mock_urlopen, client):
 def test_update_item_missing_id_raises_error(client):
     """Test that updating an item with a missing ID raises a ValueError."""
     with pytest.raises(
-        ValueError, match=r"Item must have 'collection' and 'id' fields for update.",
+        ValueError,
+        match=r"Item must have 'collection' and 'id' fields for update.",
     ):
         client.update_item({"collection": "test-collection"})
 
@@ -112,6 +113,7 @@ def test_update_item_missing_id_raises_error(client):
 def test_update_item_missing_collection_raises_error(client):
     """Test that updating an item with a missing collection raises a ValueError."""
     with pytest.raises(
-        ValueError, match=r"Item must have 'collection' and 'id' fields for update.",
+        ValueError,
+        match=r"Item must have 'collection' and 'id' fields for update.",
     ):
         client.update_item({"id": "test-item"})

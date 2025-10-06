@@ -7,6 +7,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl \
         build-essential \
+        ca-certificates \
         gdal-bin \
         libgdal-dev \
         libproj-dev \
@@ -18,8 +19,16 @@ COPY README.md ./
 COPY LICENSE ./
 COPY stac_mcp ./stac_mcp
 
+# Install uv (Astral) for ASGI server
+RUN \
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
 # Install dependencies and build the package
-RUN pip install .
+# RUN pip install .
+RUN uv sync
+RUN uv build
+RUN pip install dist/stac_mcp-*.whl
 
 # Set the entry point for the application
 ENTRYPOINT ["python", "-m", "stac_mcp.server"]
