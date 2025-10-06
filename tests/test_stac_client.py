@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -16,8 +16,8 @@ from stac_mcp.tools.client import (
     CONFORMANCE_AGGREGATION,
     CONFORMANCE_QUERY,
     CONFORMANCE_QUERYABLES,
-    STACClient,
     ConformanceError,
+    STACClient,
 )
 
 NUM_ITEMS = 2
@@ -239,4 +239,4 @@ def test_get_aggregations_raises_if_unsupported(stac_client, monkeypatch):
 def test_check_conformance_raises_error_if_missing(stac_client, monkeypatch):
     monkeypatch.setattr(stac_client, "_conformance", ["core"])
     with pytest.raises(ConformanceError, match="does not support"):
-        stac_client._check_conformance("non-existent-capability")
+        stac_client._check_conformance("non-existent-capability")  # noqa: SLF001
