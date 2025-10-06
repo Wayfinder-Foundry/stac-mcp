@@ -8,11 +8,17 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 import pytest
 
-from stac_mcp.tools.client import STACClient
+from stac_mcp.tools.client import (
+    CONFORMANCE_AGGREGATION,
+    CONFORMANCE_QUERY,
+    CONFORMANCE_QUERYABLES,
+    STACClient,
+    ConformanceError,
+)
 
 NUM_ITEMS = 2
 AGG_COUNT = 10
@@ -136,6 +142,7 @@ def test_get_conformance_fallback(stac_client, monkeypatch):
 
 
 def test_get_queryables_missing(stac_client, monkeypatch):
+    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_QUERYABLES])
     monkeypatch.setattr(stac_client, "_http_json", lambda _: None)
     res = stac_client.get_queryables()
     assert res["queryables"] == {}
@@ -143,6 +150,7 @@ def test_get_queryables_missing(stac_client, monkeypatch):
 
 
 def test_get_queryables_present(stac_client, monkeypatch):
+    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_QUERYABLES])
     monkeypatch.setattr(
         stac_client,
         "_http_json",
@@ -153,6 +161,8 @@ def test_get_queryables_present(stac_client, monkeypatch):
 
 
 def test_get_aggregations_supported(stac_client, monkeypatch):
+    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_AGGREGATION])
+
     def _http(path, *_, **__):
         if path == "/search":
             return {"aggregations": {"count": {"value": AGG_COUNT}}}
@@ -165,6 +175,7 @@ def test_get_aggregations_supported(stac_client, monkeypatch):
 
 
 def test_get_aggregations_unsupported(stac_client, monkeypatch):
+    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_AGGREGATION])
     monkeypatch.setattr(
         stac_client,
         "_http_json",
@@ -174,3 +185,58 @@ def test_get_aggregations_unsupported(stac_client, monkeypatch):
     assert res["supported"] is False
     assert res["aggregations"] == {}
     assert "parameters" in res
+
+
+# ---------------- Conformance-aware method tests ---------------- #
+
+
+def test_conformance_property_lazy_loads_and_caches(stac_client, monkeypatch):
+    """Check that conformance is fetched once and cached."""
+    http_mock = MagicMock(
+        return_value={"conformsTo": ["core", CONFORMANCE_QUERYABLES]},
+    )
+    monkeypatch.setattr(stac_client, "_http_json", http_mock)
+
+    # Access multiple times
+    assert CONFORMANCE_QUERYABLES in stac_client.conformance
+    assert "core" in stac_client.conformance
+
+    # Should only be called once for /conformance
+    http_mock.assert_called_once_with("/conformance")
+
+
+def test_search_items_with_query_checks_conformance(stac_client, monkeypatch):
+    # Mock underlying search and conformance check
+    search_mock = MagicMock()
+    search_mock.items.return_value = []
+    mock_client = MagicMock()
+    mock_client.search.return_value = search_mock
+    monkeypatch.setattr(stac_client, "_client", mock_client)
+    # Set supported conformance
+    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_QUERY])
+
+    # Should not raise
+    stac_client.search_items(query={"proj:epsg": {"eq": 4326}})
+
+    # Check that it fails without the right conformance
+    monkeypatch.setattr(stac_client, "_conformance", ["core"])
+    with pytest.raises(ConformanceError):
+        stac_client.search_items(query={"proj:epsg": {"eq": 4326}})
+
+
+def test_get_queryables_raises_if_unsupported(stac_client, monkeypatch):
+    monkeypatch.setattr(stac_client, "_conformance", ["core"])
+    with pytest.raises(ConformanceError):
+        stac_client.get_queryables()
+
+
+def test_get_aggregations_raises_if_unsupported(stac_client, monkeypatch):
+    monkeypatch.setattr(stac_client, "_conformance", ["core"])
+    with pytest.raises(ConformanceError):
+        stac_client.get_aggregations()
+
+
+def test_check_conformance_raises_error_if_missing(stac_client, monkeypatch):
+    monkeypatch.setattr(stac_client, "_conformance", ["core"])
+    with pytest.raises(ConformanceError, match="does not support"):
+        stac_client._check_conformance("non-existent-capability")

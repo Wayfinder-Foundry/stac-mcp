@@ -15,7 +15,19 @@ from shapely.geometry import shape
 HTTP_400 = 400
 HTTP_404 = 404
 
+# Conformance URIs from STAC API specifications
+CONFORMANCE_AGGREGATION = (
+    "https://api.stacspec.org/v1.0.0/ogc-api-features-p3/conf/aggregation"
+)
+CONFORMANCE_QUERY = "https://api.stacspec.org/v1.0.0-beta.2/item-search#query"
+CONFORMANCE_QUERYABLES = "https://api.stacspec.org/v1.0.0-rc.1/item-search#queryables"
+
+
 logger = logging.getLogger(__name__)
+
+
+class ConformanceError(NotImplementedError):
+    """Raised when a STAC API does not support a required capability."""
 
 
 class STACClient:
@@ -25,8 +37,9 @@ class STACClient:
         self,
         catalog_url: str = "https://planetarycomputer.microsoft.com/api/stac/v1",
     ) -> None:
-        self.catalog_url = catalog_url
+        self.catalog_url = catalog_url.rstrip("/")
         self._client: Any | None = None
+        self._conformance: list[str] | None = None
 
     @property
     def client(self) -> Any:
@@ -41,6 +54,24 @@ class STACClient:
 
             self._client = client_ref.open(self.catalog_url)  # type: ignore[attr-defined]
         return self._client
+
+    @property
+    def conformance(self) -> list[str]:
+        """Lazy-loads and caches STAC API conformance classes."""
+        if self._conformance is None:
+            conf = self._http_json("/conformance")
+            if conf and "conformsTo" in conf:
+                self._conformance = conf["conformsTo"]
+            else:  # Fallback to root document
+                root = self.get_root_document()
+                self._conformance = root.get("conformsTo", []) or []
+        return self._conformance
+
+    def _check_conformance(self, capability_uri: str) -> None:
+        """Raises ConformanceError if API lacks a given capability."""
+        if capability_uri not in self.conformance:
+            msg = f"API at {self.catalog_url} does not support '{capability_uri}'"
+            raise ConformanceError(msg)
 
     # ----------------------------- Collections ----------------------------- #
     def search_collections(self, limit: int = 10) -> list[dict[str, Any]]:
@@ -107,6 +138,8 @@ class STACClient:
         query: dict[str, Any] | None = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
+        if query:
+            self._check_conformance(CONFORMANCE_QUERY)
         try:
             search = self.client.search(
                 collections=collections,
@@ -422,12 +455,7 @@ class STACClient:
         self,
         check: str | list[str] | None = None,
     ) -> dict[str, Any]:
-        conf = self._http_json("/conformance")
-        if conf and "conformsTo" in conf:
-            conforms = conf["conformsTo"]
-        else:  # Fallback to root document
-            root = self.get_root_document()
-            conforms = root.get("conformsTo", []) or []
+        conforms = self.conformance
         checks: dict[str, bool] | None = None
         if check:
             targets = [check] if isinstance(check, str) else list(check)
@@ -435,6 +463,7 @@ class STACClient:
         return {"conformsTo": conforms, "checks": checks}
 
     def get_queryables(self, collection_id: str | None = None) -> dict[str, Any]:
+        self._check_conformance(CONFORMANCE_QUERYABLES)
         path = (
             f"/collections/{collection_id}/queryables"
             if collection_id
@@ -461,6 +490,7 @@ class STACClient:
         operations: list[str] | None = None,
         limit: int = 0,
     ) -> dict[str, Any]:
+        self._check_conformance(CONFORMANCE_AGGREGATION)
         # Build STAC search body with aggregations extension
         body: dict[str, Any] = {}
         if collections:

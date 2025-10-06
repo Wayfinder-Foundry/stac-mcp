@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from stac_mcp.server import handle_call_tool
-from stac_mcp.tools.client import STACClient
+from stac_mcp.tools.client import CONFORMANCE_QUERYABLES, STACClient
 
 
 class _FakeDataArray:
@@ -195,8 +195,9 @@ def test_client_get_conformance_fallback_to_root():
     assert conf["checks"] == {"a": True, "x": False}
 
 
-def test_client_get_queryables_not_available():
+def test_client_get_queryables_not_available(monkeypatch):
     client = STACClient("https://example.com/stac/v1")
+    monkeypatch.setattr(client, "_conformance", [CONFORMANCE_QUERYABLES])
     client._http_json = lambda *_, **__: None  # noqa: SLF001
     q = client.get_queryables()
     assert q["queryables"] == {}
