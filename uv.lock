@@ -1345,7 +1345,7 @@ wheels = [
 
 [[package]]
 name = "stac-mcp"
-version = "0.5.5"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

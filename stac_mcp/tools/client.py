@@ -31,6 +31,10 @@ CONFORMANCE_QUERYABLES = [
 CONFORMANCE_SORT = [
     "https://api.stacspec.org/v1.0.0/item-search#sort",
 ]
+CONFORMANCE_TRANSACTION = [
+    "https://api.stacspec.org/v1.0.0/collections#transaction",
+    "http://stacspec.org/spec/v1.0.0/collections#transaction",
+]
 
 
 logger = logging.getLogger(__name__)
@@ -46,8 +50,10 @@ class STACClient:
     def __init__(
         self,
         catalog_url: str = "https://planetarycomputer.microsoft.com/api/stac/v1",
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.catalog_url = catalog_url.rstrip("/")
+        self.headers = headers or {}
         self._client: Any | None = None
         self._conformance: list[str] | None = None
 
@@ -213,6 +219,48 @@ class STACClient:
                 "properties": item.properties,
                 "assets": {k: v.to_dict() for k, v in item.assets.items()},
             }
+
+    # --------------------------- Transactions --------------------------- #
+    def create_item(
+        self, collection_id: str, item: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Creates a new STAC Item in a collection."""
+        self._check_conformance(CONFORMANCE_TRANSACTION)
+        path = f"/collections/{collection_id}/items"
+        return self._http_json(path, method="POST", payload=item)
+
+    def update_item(self, item: dict[str, Any]) -> dict[str, Any] | None:
+        """Updates an existing STAC Item."""
+        self._check_conformance(CONFORMANCE_TRANSACTION)
+        collection_id = item.get("collection")
+        item_id = item.get("id")
+        if not collection_id or not item_id:
+            raise ValueError("Item must have 'collection' and 'id' fields for update.")
+        path = f"/collections/{collection_id}/items/{item_id}"
+        return self._http_json(path, method="PUT", payload=item)
+
+    def delete_item(self, collection_id: str, item_id: str) -> dict[str, Any] | None:
+        """Deletes a STAC Item."""
+        self._check_conformance(CONFORMANCE_TRANSACTION)
+        path = f"/collections/{collection_id}/items/{item_id}"
+        return self._http_json(path, method="DELETE")
+
+    def create_collection(self, collection: dict[str, Any]) -> dict[str, Any] | None:
+        """Creates a new STAC Collection."""
+        self._check_conformance(CONFORMANCE_TRANSACTION)
+        return self._http_json("/collections", method="POST", payload=collection)
+
+    def update_collection(self, collection: dict[str, Any]) -> dict[str, Any] | None:
+        """Updates an existing STAC Collection."""
+        self._check_conformance(CONFORMANCE_TRANSACTION)
+        # Per spec, PUT is to /collections, not /collections/{id}
+        return self._http_json("/collections", method="PUT", payload=collection)
+
+    def delete_collection(self, collection_id: str) -> dict[str, Any] | None:
+        """Deletes a STAC Collection."""
+        self._check_conformance(CONFORMANCE_TRANSACTION)
+        path = f"/collections/{collection_id}"
+        return self._http_json(path, method="DELETE")
 
     # ------------------------- Data Size Estimation ----------------------- #
     def estimate_data_size(
@@ -415,6 +463,7 @@ class STACClient:
         path: str,
         method: str = "GET",
         payload: dict | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict | None:
         """Lightweight HTTP helper using stdlib (avoids extra deps).
 
@@ -423,10 +472,13 @@ class STACClient:
         """
         url = self.catalog_url.rstrip("/") + path
         data = None
-        headers = {"Accept": "application/json"}
+        request_headers = self.headers.copy()
+        request_headers.update(headers or {})
+        request_headers["Accept"] = "application/json"
+
         if payload is not None:
             data = json.dumps(payload).encode("utf-8")
-            headers["Content-Type"] = "application/json"
+            request_headers["Content-Type"] = "application/json"
         if not url.startswith(("http://", "https://")):
             msg = f"Unsupported URL scheme in {url}"
             raise ValueError(msg)
@@ -434,7 +486,7 @@ class STACClient:
         req = urllib.request.Request(  # noqa: S310 safe: url already validated to http/https
             url,
             data=data,
-            headers=headers,
+            headers=request_headers,
             method=method,
         )
         try:

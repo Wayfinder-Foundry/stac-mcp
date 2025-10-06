@@ -8,7 +8,7 @@ import pytest
 from stac_mcp.server import handle_call_tool, handle_list_tools
 
 # Constants to satisfy lint (avoid magic numbers)
-EXPECTED_TOOL_COUNT = 9
+EXPECTED_TOOL_COUNT = 15
 
 
 @pytest.mark.asyncio
@@ -29,6 +29,12 @@ async def test_list_tools():
         "search_items",
         "get_item",
         "estimate_data_size",
+        "create_item",
+        "update_item",
+        "delete_item",
+        "create_collection",
+        "update_collection",
+        "delete_collection",
     ]
 
     for expected_tool in expected_tools:

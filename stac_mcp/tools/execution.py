@@ -26,6 +26,14 @@ from stac_mcp.tools.get_queryables import handle_get_queryables
 from stac_mcp.tools.get_root import handle_get_root
 from stac_mcp.tools.search_collections import handle_search_collections
 from stac_mcp.tools.search_items import handle_search_items
+from stac_mcp.tools.transactions import (
+    handle_create_collection,
+    handle_create_item,
+    handle_delete_collection,
+    handle_delete_item,
+    handle_update_collection,
+    handle_update_item,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +54,12 @@ _TOOL_HANDLERS: dict[str, Handler] = {
     "get_conformance": handle_get_conformance,
     "get_queryables": handle_get_queryables,
     "get_aggregations": handle_get_aggregations,
+    "create_item": handle_create_item,
+    "update_item": handle_update_item,
+    "delete_item": handle_delete_item,
+    "create_collection": handle_create_collection,
+    "update_collection": handle_update_collection,
+    "delete_collection": handle_delete_collection,
 }
 
 
