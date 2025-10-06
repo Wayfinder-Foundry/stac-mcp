@@ -1,6 +1,6 @@
 """Tool for creating a STAC Item."""
 
-from __future__ in annotations
+from __future__ import annotations
 
 from typing import Any
 

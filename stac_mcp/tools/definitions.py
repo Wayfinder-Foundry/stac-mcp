@@ -321,7 +321,10 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "collection_id": {"type": "string", "description": "ID of the collection"},
+                    "collection_id": {
+                        "type": "string",
+                        "description": "ID of the collection",
+                    },
                     "item": {"type": "object", "description": "STAC item JSON"},
                 },
                 "required": ["collection_id", "item"],
@@ -332,7 +335,12 @@ def get_tool_definitions() -> list[Tool]:
             description="Update an existing STAC item",
             inputSchema={
                 "type": "object",
-                "properties": {"item": {"type": "object", "description": "STAC item JSON to update"}},
+                "properties": {
+                    "item": {
+                        "type": "object",
+                        "description": "STAC item JSON to update",
+                    },
+                },
                 "required": ["item"],
             },
         ),
@@ -342,8 +350,14 @@ def get_tool_definitions() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "collection_id": {"type": "string", "description": "ID of the collection"},
-                    "item_id": {"type": "string", "description": "ID of the item to delete"},
+                    "collection_id": {
+                        "type": "string",
+                        "description": "ID of the collection",
+                    },
+                    "item_id": {
+                        "type": "string",
+                        "description": "ID of the item to delete",
+                    },
                 },
                 "required": ["collection_id", "item_id"],
             },
@@ -353,7 +367,12 @@ def get_tool_definitions() -> list[Tool]:
             description="Create a new STAC collection",
             inputSchema={
                 "type": "object",
-                "properties": {"collection": {"type": "object", "description": "STAC collection JSON"}},
+                "properties": {
+                    "collection": {
+                        "type": "object",
+                        "description": "STAC collection JSON",
+                    },
+                },
                 "required": ["collection"],
             },
         ),
@@ -362,7 +381,12 @@ def get_tool_definitions() -> list[Tool]:
             description="Update an existing STAC collection",
             inputSchema={
                 "type": "object",
-                "properties": {"collection": {"type": "object", "description": "STAC collection JSON to update"}},
+                "properties": {
+                    "collection": {
+                        "type": "object",
+                        "description": "STAC collection JSON to update",
+                    },
+                },
                 "required": ["collection"],
             },
         ),
@@ -371,7 +395,12 @@ def get_tool_definitions() -> list[Tool]:
             description="Delete a STAC collection",
             inputSchema={
                 "type": "object",
-                "properties": {"collection_id": {"type": "string", "description": "ID of the collection to delete"}},
+                "properties": {
+                    "collection_id": {
+                        "type": "string",
+                        "description": "ID of the collection to delete",
+                    },
+                },
                 "required": ["collection_id"],
             },
         ),

@@ -222,7 +222,7 @@ class STACClient:
 
     # --------------------------- Transactions --------------------------- #
     def create_item(
-        self, collection_id: str, item: dict[str, Any]
+        self, collection_id: str, item: dict[str, Any],
     ) -> dict[str, Any] | None:
         """Creates a new STAC Item in a collection."""
         self._check_conformance(CONFORMANCE_TRANSACTION)
@@ -235,7 +235,8 @@ class STACClient:
         collection_id = item.get("collection")
         item_id = item.get("id")
         if not collection_id or not item_id:
-            raise ValueError("Item must have 'collection' and 'id' fields for update.")
+            msg = "Item must have 'collection' and 'id' fields for update."
+            raise ValueError(msg)
         path = f"/collections/{collection_id}/items/{item_id}"
         return self._http_json(path, method="PUT", payload=item)
 

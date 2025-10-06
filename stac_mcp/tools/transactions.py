@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from stac_mcp.tools.client import STACClient
+if TYPE_CHECKING:
+    from stac_mcp.tools.client import STACClient
 
 
 def handle_create_item(
-    client: STACClient, arguments: dict[str, Any]
+    client: STACClient, arguments: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Handle creating a STAC Item."""
     collection_id = arguments["collection_id"]
@@ -17,7 +18,7 @@ def handle_create_item(
 
 
 def handle_update_item(
-    client: STACClient, arguments: dict[str, Any]
+    client: STACClient, arguments: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Handle updating a STAC Item."""
     item = arguments["item"]
@@ -25,7 +26,7 @@ def handle_update_item(
 
 
 def handle_delete_item(
-    client: STACClient, arguments: dict[str, Any]
+    client: STACClient, arguments: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Handle deleting a STAC Item."""
     collection_id = arguments["collection_id"]
@@ -34,7 +35,7 @@ def handle_delete_item(
 
 
 def handle_create_collection(
-    client: STACClient, arguments: dict[str, Any]
+    client: STACClient, arguments: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Handle creating a STAC Collection."""
     collection = arguments["collection"]
@@ -42,7 +43,7 @@ def handle_create_collection(
 
 
 def handle_update_collection(
-    client: STACClient, arguments: dict[str, Any]
+    client: STACClient, arguments: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Handle updating a STAC Collection."""
     collection = arguments["collection"]
@@ -50,7 +51,7 @@ def handle_update_collection(
 
 
 def handle_delete_collection(
-    client: STACClient, arguments: dict[str, Any]
+    client: STACClient, arguments: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Handle deleting a STAC Collection."""
     collection_id = arguments["collection_id"]
