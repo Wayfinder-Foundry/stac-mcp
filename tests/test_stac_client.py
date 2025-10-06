@@ -143,7 +143,7 @@ def test_get_conformance_fallback(stac_client, monkeypatch):
 
 
 def test_get_queryables_missing(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_QUERYABLES])
+    monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_QUERYABLES)
     monkeypatch.setattr(stac_client, "_http_json", lambda _: None)
     res = stac_client.get_queryables()
     assert res["queryables"] == {}
@@ -151,7 +151,7 @@ def test_get_queryables_missing(stac_client, monkeypatch):
 
 
 def test_get_queryables_present(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_QUERYABLES])
+    monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_QUERYABLES)
     monkeypatch.setattr(
         stac_client,
         "_http_json",
@@ -162,7 +162,7 @@ def test_get_queryables_present(stac_client, monkeypatch):
 
 
 def test_get_aggregations_supported(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_AGGREGATION])
+    monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_AGGREGATION)
 
     def _http(path, *_, **__):
         if path == "/search":
@@ -176,7 +176,7 @@ def test_get_aggregations_supported(stac_client, monkeypatch):
 
 
 def test_get_aggregations_unsupported(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_AGGREGATION])
+    monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_AGGREGATION)
     monkeypatch.setattr(
         stac_client,
         "_http_json",
@@ -194,12 +194,12 @@ def test_get_aggregations_unsupported(stac_client, monkeypatch):
 def test_conformance_property_lazy_loads_and_caches(stac_client, monkeypatch):
     """Check that conformance is fetched once and cached."""
     http_mock = MagicMock(
-        return_value={"conformsTo": ["core", CONFORMANCE_QUERYABLES]},
+        return_value={"conformsTo": ["core", CONFORMANCE_QUERYABLES[0]]},
     )
     monkeypatch.setattr(stac_client, "_http_json", http_mock)
 
     # Access multiple times
-    assert CONFORMANCE_QUERYABLES in stac_client.conformance
+    assert CONFORMANCE_QUERYABLES[0] in stac_client.conformance
     assert "core" in stac_client.conformance
 
     # Should only be called once for /conformance
@@ -214,7 +214,7 @@ def test_search_items_with_query_checks_conformance(stac_client, monkeypatch):
     mock_client.search.return_value = search_mock
     monkeypatch.setattr(stac_client, "_client", mock_client)
     # Set supported conformance
-    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_QUERY])
+    monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_QUERY)
 
     # Should not raise
     stac_client.search_items(query={"proj:epsg": {"eq": 4326}})
@@ -233,7 +233,7 @@ def test_search_items_with_sortby_checks_conformance(stac_client, monkeypatch):
     mock_client.search.return_value = search_mock
     monkeypatch.setattr(stac_client, "_client", mock_client)
     # Set supported conformance
-    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_SORT])
+    monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_SORT)
 
     # Should not raise
     sort_spec = [("properties.datetime", "desc")]
@@ -268,4 +268,25 @@ def test_get_aggregations_raises_if_unsupported(stac_client, monkeypatch):
 def test_check_conformance_raises_error_if_missing(stac_client, monkeypatch):
     monkeypatch.setattr(stac_client, "_conformance", ["core"])
     with pytest.raises(ConformanceError, match="does not support"):
-        stac_client._check_conformance("non-existent-capability")  # noqa: SLF001
+        stac_client._check_conformance(  # noqa: SLF001
+            ["non-existent-capability"],
+        )
+
+
+def test_check_conformance_handles_older_uri_versions(stac_client, monkeypatch):
+    """Verify that an older but compatible conformance URI is accepted."""
+    # Server advertises an older RC version of the Queryables spec
+    monkeypatch.setattr(
+        stac_client,
+        "_conformance",
+        ["core", "https://api.stacspec.org/v1.0.0-rc.1/item-search#queryables"],
+    )
+
+    # Client should not raise an error because the older URI is in its list
+    # of acceptable URIs for Queryables.
+    try:
+        stac_client._check_conformance(CONFORMANCE_QUERYABLES)  # noqa: SLF001
+    except ConformanceError:
+        pytest.fail(
+            "Conformance check failed for a valid (older) URI",
+        )

@@ -197,7 +197,7 @@ def test_client_get_conformance_fallback_to_root():
 
 def test_client_get_queryables_not_available(monkeypatch):
     client = STACClient("https://example.com/stac/v1")
-    monkeypatch.setattr(client, "_conformance", [CONFORMANCE_QUERYABLES])
+    monkeypatch.setattr(client, "_conformance", CONFORMANCE_QUERYABLES)
     client._http_json = lambda *_, **__: None  # noqa: SLF001
     q = client.get_queryables()
     assert q["queryables"] == {}

@@ -15,13 +15,22 @@ from shapely.geometry import shape
 HTTP_400 = 400
 HTTP_404 = 404
 
-# Conformance URIs from STAC API specifications
-CONFORMANCE_AGGREGATION = (
-    "https://api.stacspec.org/v1.0.0/ogc-api-features-p3/conf/aggregation"
-)
-CONFORMANCE_QUERY = "https://api.stacspec.org/v1.0.0-beta.2/item-search#query"
-CONFORMANCE_QUERYABLES = "https://api.stacspec.org/v1.0.0-rc.1/item-search#queryables"
-CONFORMANCE_SORT = "https://api.stacspec.org/v1.0.0/item-search#sort"
+# Conformance URIs from STAC API specifications. Lists include multiple versions
+# to support older APIs.
+CONFORMANCE_AGGREGATION = [
+    "https://api.stacspec.org/v1.0.0/ogc-api-features-p3/conf/aggregation",
+]
+CONFORMANCE_QUERY = [
+    "https://api.stacspec.org/v1.0.0/item-search#query",
+    "https://api.stacspec.org/v1.0.0-beta.2/item-search#query",
+]
+CONFORMANCE_QUERYABLES = [
+    "https://api.stacspec.org/v1.0.0/item-search#queryables",
+    "https://api.stacspec.org/v1.0.0-rc.1/item-search#queryables",
+]
+CONFORMANCE_SORT = [
+    "https://api.stacspec.org/v1.0.0/item-search#sort",
+]
 
 
 logger = logging.getLogger(__name__)
@@ -68,10 +77,18 @@ class STACClient:
                 self._conformance = root.get("conformsTo", []) or []
         return self._conformance
 
-    def _check_conformance(self, capability_uri: str) -> None:
-        """Raises ConformanceError if API lacks a given capability."""
-        if capability_uri not in self.conformance:
-            msg = f"API at {self.catalog_url} does not support '{capability_uri}'"
+    def _check_conformance(self, capability_uris: list[str]) -> None:
+        """Raises ConformanceError if API lacks a given capability.
+
+        Checks if any of the provided URIs are in the server's conformance list.
+        """
+        if not any(uri in self.conformance for uri in capability_uris):
+            # For a cleaner error message, report the first (preferred) URI.
+            capability_name = capability_uris[0]
+            msg = (
+                f"API at {self.catalog_url} does not support '{capability_name}' "
+                "(or a compatible version)"
+            )
             raise ConformanceError(msg)
 
     # ----------------------------- Collections ----------------------------- #
