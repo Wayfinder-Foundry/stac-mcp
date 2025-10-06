@@ -18,6 +18,11 @@ The `stac-mcp` client's search methods MUST be updated to support the STAC API S
 ## Implications
 
 - **Client API**: The `search` method in the `STACClient` will need to be updated to accept a new parameter, e.g., `sortby`. The type of this parameter should be designed to be intuitive for the user, for example, a list of tuples like `[("properties.datetime", "desc")]`.
+  - The allowed direction values MUST be `'asc'` (ascending) or `'desc'` (descending), case-sensitive.
+  - When multiple fields are provided, sorting MUST be applied in the order given (left to right).
+  - The client MUST validate the direction value for each field and reject any unknown direction values with an appropriate error.
+  - The client MAY validate field names if a known set is available, and SHOULD reject unknown or malformed field names.
+  - For request serialization, the client MUST internally convert the `sortby` parameter to the object-based form as defined in the STAC API Sort Extension, e.g., `[{'field': 'properties.datetime', 'direction': 'desc'}]`.
 - **Request Formation**: The client will need to be able to construct the correct JSON request body to send to the STAC API, including the `sortby` field as defined in the Sort extension.
 - **Testing**: New tests will be needed to verify that the client correctly constructs sort parameters and can correctly parse the (unchanged) response. Tests should also cover the case where the API does not support sorting.
 
