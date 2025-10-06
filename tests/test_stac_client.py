@@ -16,6 +16,7 @@ from stac_mcp.tools.client import (
     CONFORMANCE_AGGREGATION,
     CONFORMANCE_QUERY,
     CONFORMANCE_QUERYABLES,
+    CONFORMANCE_SORT,
     ConformanceError,
     STACClient,
 )
@@ -222,6 +223,34 @@ def test_search_items_with_query_checks_conformance(stac_client, monkeypatch):
     monkeypatch.setattr(stac_client, "_conformance", ["core"])
     with pytest.raises(ConformanceError):
         stac_client.search_items(query={"proj:epsg": {"eq": 4326}})
+
+
+def test_search_items_with_sortby_checks_conformance(stac_client, monkeypatch):
+    # Mock underlying search and conformance check
+    search_mock = MagicMock()
+    search_mock.items.return_value = []
+    mock_client = MagicMock()
+    mock_client.search.return_value = search_mock
+    monkeypatch.setattr(stac_client, "_client", mock_client)
+    # Set supported conformance
+    monkeypatch.setattr(stac_client, "_conformance", [CONFORMANCE_SORT])
+
+    # Should not raise
+    sort_spec = [("properties.datetime", "desc")]
+    stac_client.search_items(sortby=sort_spec)
+    mock_client.search.assert_called_with(
+        collections=None,
+        bbox=None,
+        datetime=None,
+        query=None,
+        sortby=sort_spec,
+        limit=10,
+    )
+
+    # Check that it fails without the right conformance
+    monkeypatch.setattr(stac_client, "_conformance", ["core"])
+    with pytest.raises(ConformanceError):
+        stac_client.search_items(sortby=sort_spec)
 
 
 def test_get_queryables_raises_if_unsupported(stac_client, monkeypatch):

@@ -21,6 +21,7 @@ CONFORMANCE_AGGREGATION = (
 )
 CONFORMANCE_QUERY = "https://api.stacspec.org/v1.0.0-beta.2/item-search#query"
 CONFORMANCE_QUERYABLES = "https://api.stacspec.org/v1.0.0-rc.1/item-search#queryables"
+CONFORMANCE_SORT = "https://api.stacspec.org/v1.0.0/item-search#sort"
 
 
 logger = logging.getLogger(__name__)
@@ -136,16 +137,20 @@ class STACClient:
         bbox: list[float] | None = None,
         datetime: str | None = None,
         query: dict[str, Any] | None = None,
+        sortby: list[tuple[str, str]] | None = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
         if query:
             self._check_conformance(CONFORMANCE_QUERY)
+        if sortby:
+            self._check_conformance(CONFORMANCE_SORT)
         try:
             search = self.client.search(
                 collections=collections,
                 bbox=bbox,
                 datetime=datetime,
                 query=query,
+                sortby=sortby,
                 limit=limit,
             )
             items = []
