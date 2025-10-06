@@ -270,6 +270,52 @@ Recommended workflow before opening a PR:
 3. `coverage run -m pytest -q`
 4. `coverage report -m` (ensure no unexpected drops)
 
+### SSL / TLS Troubleshooting
+
+If you encounter an SSL certificate verification error (e.g., `SSLCertVerificationError` or a message about a *self-signed certificate in certificate chain*) when the server accesses a STAC endpoint:
+
+1. Confirm the endpoint is reachable with a standard tool (e.g., `curl https://.../stac/v1/conformance`).
+2. Ensure your system trust store is up to date (on macOS, some Python installs provide an `Install Certificates.command`).
+3. Behind a corporate proxy / MITM device: export a custom CA bundle.
+
+The client now supports two environment variables (see ADR notes / security guidance):
+
+| Variable | Purpose | Security Impact |
+|----------|---------|-----------------|
+| `STAC_MCP_CA_BUNDLE` | Path to a PEM file with additional / custom root CAs. If present and readable it will be used to build the SSL context. | Low (extends trust roots intentionally). |
+| `STAC_MCP_UNSAFE_DISABLE_SSL` | If set to `1`, disables certificate verification entirely (hostname + chain). For diagnostics only. | High (vulnerable to MITM). Never use in production. |
+
+Example (custom CA):
+```bash
+export STAC_MCP_CA_BUNDLE=/etc/ssl/certs/internal-proxy.pem
+stac-mcp
+```
+
+Temporary diagnostic bypass (NOT recommended):
+```bash
+export STAC_MCP_UNSAFE_DISABLE_SSL=1
+stac-mcp
+```
+
+When an SSL failure occurs you will receive a structured `SSLVerificationError` message with remediation guidance instead of a low-level `urllib.error.URLError`.
+
+#### Container vs Local/Virtual Environment (Why `get_conformance` May Differ)
+
+The published Docker/Podman images generally succeed with `get_conformance` against public STAC APIs even when a locally installed Python environment fails. Reasons:
+
+- The container base image (`python:3.12-slim`) ships with a current CA trust store.  
+- Some local macOS / Homebrew / pyenv environments have an out-of-date or un-initialized certificate bundle until you run the platform's certificate installation script.  
+- Corporate proxies can inject custom CAs that exist in system Keychain but are not automatically propagated to the Python cert store.
+
+Typical symptom: Local invocation of the `get_conformance` tool returns a structured `SSLVerificationError`, while running the same command via the container (e.g. `docker run --rm -i ghcr.io/bnjam/stac-mcp:latest`) succeeds.
+
+Mitigations (ordered):
+1. Update local certificates (macOS framework Python: run the `Install Certificates.command` script found in the Python application folder).  
+2. Export a custom CA bundle path: `export STAC_MCP_CA_BUNDLE=/path/to/ca.pem`.  
+3. (Last resort, diagnostics only) Temporarily disable verification with `STAC_MCP_UNSAFE_DISABLE_SSL=1` and immediately revert once the root cause is identified.  
+
+If the container also fails, the remote endpoint may genuinely present an invalid or mismatched certificate—collect the structured error details (they include hostname and failing reason) and investigate network or proxy layers.
+
 Planned future enhancements (pending ADRs): add retry/federation logic and corresponding tests; coverage thresholds may be introduced once feature set stabilizes.
 
 ### Linting

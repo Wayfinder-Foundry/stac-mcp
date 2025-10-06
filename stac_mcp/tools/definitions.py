@@ -315,4 +315,93 @@ def get_tool_definitions() -> list[Tool]:
                 },
             },
         ),
+        Tool(
+            name="create_item",
+            description="Create a new STAC item in a collection",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "collection_id": {
+                        "type": "string",
+                        "description": "ID of the collection",
+                    },
+                    "item": {"type": "object", "description": "STAC item JSON"},
+                },
+                "required": ["collection_id", "item"],
+            },
+        ),
+        Tool(
+            name="update_item",
+            description="Update an existing STAC item",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "item": {
+                        "type": "object",
+                        "description": "STAC item JSON to update",
+                    },
+                },
+                "required": ["item"],
+            },
+        ),
+        Tool(
+            name="delete_item",
+            description="Delete a STAC item",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "collection_id": {
+                        "type": "string",
+                        "description": "ID of the collection",
+                    },
+                    "item_id": {
+                        "type": "string",
+                        "description": "ID of the item to delete",
+                    },
+                },
+                "required": ["collection_id", "item_id"],
+            },
+        ),
+        Tool(
+            name="create_collection",
+            description="Create a new STAC collection",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "collection": {
+                        "type": "object",
+                        "description": "STAC collection JSON",
+                    },
+                },
+                "required": ["collection"],
+            },
+        ),
+        Tool(
+            name="update_collection",
+            description="Update an existing STAC collection",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "collection": {
+                        "type": "object",
+                        "description": "STAC collection JSON to update",
+                    },
+                },
+                "required": ["collection"],
+            },
+        ),
+        Tool(
+            name="delete_collection",
+            description="Delete a STAC collection",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "collection_id": {
+                        "type": "string",
+                        "description": "ID of the collection to delete",
+                    },
+                },
+                "required": ["collection_id"],
+            },
+        ),
     ]

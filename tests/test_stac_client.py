@@ -6,6 +6,8 @@ and the private `_http_json` helper.
 
 from __future__ import annotations
 
+import ssl as _ssl
+import urllib.error as _ue
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -18,6 +20,7 @@ from stac_mcp.tools.client import (
     CONFORMANCE_QUERYABLES,
     CONFORMANCE_SORT,
     ConformanceError,
+    SSLVerificationError,
     STACClient,
 )
 
@@ -290,3 +293,100 @@ def test_check_conformance_handles_older_uri_versions(stac_client, monkeypatch):
         pytest.fail(
             "Conformance check failed for a valid (older) URI",
         )
+
+
+def test__http_json_ssl_verification_error(monkeypatch):
+    """Simulate an SSL verification error and ensure custom exception raised."""
+    client = STACClient("https://example.com/stac/v1")
+
+    class FakeResp:  # minimal context manager
+        def __enter__(self):  # pragma: no cover - not expected to be used
+            return self
+
+        def __exit__(self, *args):  # pragma: no cover
+            return False
+
+    def fake_urlopen(*_, **__):
+        raise _ue.URLError(_ssl.SSLCertVerificationError("certificate verify failed"))
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    with pytest.raises(SSLVerificationError):
+        client._http_json("/conformance")  # noqa: SLF001
+
+
+def test__http_json_disable_ssl(monkeypatch):
+    """Ensure disabling SSL bypasses verification setup path (no exception)."""
+
+    client = STACClient("https://example.com/stac/v1")
+
+    class FakeResp:
+        def __init__(self):
+            self._data = b"{}"
+
+        def read(self):  # pragma: no cover - trivial
+            return self._data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    def fake_urlopen(*_, **__):
+        return FakeResp()
+
+    monkeypatch.setenv("STAC_MCP_UNSAFE_DISABLE_SSL", "1")
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    res = client._http_json("/conformance")  # noqa: SLF001
+    assert res == {}
+
+
+def test__http_json_ssl_insecure_fallback_success(monkeypatch):
+    """With fallback env an SSL error on /conformance retries insecurely."""
+    client = STACClient("https://example.com/stac/v1")
+
+    class FakeResp:
+        def __init__(self, payload: bytes):
+            self._data = payload
+
+        def read(self):  # pragma: no cover - trivial
+            return self._data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):  # pragma: no cover - trivial
+            return False
+
+    calls = {"count": 0}
+
+    def fake_urlopen(*_, **__):
+        calls["count"] += 1
+        # First call raises SSL error, second returns success JSON
+        if calls["count"] == 1:
+            raise _ue.URLError(
+                _ssl.SSLCertVerificationError("certificate verify failed"),
+            )
+        return FakeResp(b'{"conformsTo": ["core"]}')
+
+    monkeypatch.setenv("STAC_MCP_SSL_INSECURE_FALLBACK", "1")
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    res = client._http_json("/conformance")  # noqa: SLF001
+    assert res == {"conformsTo": ["core"]}
+    # Ensure exactly two attempts (one failing secure, one insecure fallback)
+    expected_attempts = 2
+    assert calls["count"] == expected_attempts
+    assert client._last_insecure_ssl is True  # noqa: SLF001
+
+
+def test__http_json_ssl_insecure_fallback_disabled(monkeypatch):
+    """Without env var, SSL verification error raises immediately (no fallback)."""
+    client = STACClient("https://example.com/stac/v1")
+
+    def fake_urlopen(*_, **__):
+        raise _ue.URLError(_ssl.SSLCertVerificationError("certificate verify failed"))
+
+    monkeypatch.delenv("STAC_MCP_SSL_INSECURE_FALLBACK", raising=False)
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    with pytest.raises(SSLVerificationError):
+        client._http_json("/conformance")  # noqa: SLF001

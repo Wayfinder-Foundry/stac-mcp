@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -1345,10 +1345,11 @@ wheels = [
 
 [[package]]
 name = "stac-mcp"
-version = "0.5.5"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
+    { name = "certifi" },
     { name = "coverage" },
     { name = "mcp" },
     { name = "odc-stac" },
@@ -1372,6 +1373,7 @@ dev = [
 requires-dist = [
     { name = "anyio", specifier = ">=3.7.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
+    { name = "certifi", specifier = ">=2025.10.5" },
     { name = "coverage", specifier = ">=7.10.7" },
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "odc-stac", specifier = ">=0.3.0" },

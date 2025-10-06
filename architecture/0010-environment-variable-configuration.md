@@ -16,6 +16,7 @@ Introduce optional configuration via environment variables prefixed `STAC_MCP_`.
 * `STAC_MCP_LOG_LEVEL` — logging verbosity (INFO by default).
 * `STAC_MCP_NODATA_SAMPLE_PIXELS`, `STAC_MCP_NODATA_MAX_ASSETS` — sampling controls (see ASR 1006).
 * `STAC_MCP_CACHE_DIR` — path for optional on‑disk cache (see ADR 0011) when persistence desired.
+* `STAC_MCP_SSL_INSECURE_FALLBACK` — when set to `1`, allows a one-time insecure (certificate verification disabled) retry for read-only metadata endpoints (`/conformance` or root) if an SSL certificate verification error occurs. This is safer than globally disabling SSL and intended only for diagnostic or constrained corporate proxy environments. Prefer providing a valid CA bundle via `STAC_MCP_CA_BUNDLE` instead.
 
 Behavior:
 1. Add a lightweight config loader (`config.py`) that reads env vars once at import and exposes a typed object/dict.
@@ -34,3 +35,4 @@ Behavior:
 
 ## Addendums
 * Future: may add `STAC_MCP_CACHE_TTL_SECONDS` aligned with ADR 0011.
+* 2025-10-06: Added `STAC_MCP_SSL_INSECURE_FALLBACK` for limited, read-only retry on SSL verification failure to reduce friction in environments with intercepting proxies.
