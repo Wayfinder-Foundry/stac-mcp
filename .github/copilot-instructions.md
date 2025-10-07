@@ -223,19 +223,22 @@ python scripts/version.py set 1.2.3
 
 ### Version Guidelines for PRs
 Use branch prefixes to control automatic version increments when PRs are merged into main:
-- **hotfix/** or **copilot/fix-** branches: Trigger patch version increments (0.1.0 -> 0.1.1)
+- **hotfix/**, **copilot/fix-**, or **copilot/hotfix/** branches: Trigger patch version increments (0.1.0 -> 0.1.1)
   - Bug fixes, security patches, documentation updates, minor improvements
-- **feature/** branches: Trigger minor version increments (0.1.0 -> 0.2.0)  
+- **feature/** or **copilot/feature/** branches: Trigger minor version increments (0.1.0 -> 0.2.0)  
   - New features, new tools, non-breaking API changes, performance improvements
-- **release/** branches: Trigger major version increments (0.1.0 -> 1.0.0)
+- **release/** or **copilot/release/** branches: Trigger major version increments (0.1.0 -> 1.0.0)
   - Breaking changes, major architecture changes, incompatible API changes
-- Other prefixes (chore/, docs/, copilot/): No automatic version increment
+- Other prefixes (chore/, docs/, copilot/chore/, copilot/docs/): No automatic version increment
 
 Examples:
 - `hotfix/fix-authentication-bug`
 - `copilot/fix-nodata-dtype-handling`
+- `copilot/hotfix/authentication-bug`
 - `feature/add-stac-search-tool`
+- `copilot/feature/stac-search-tool`
 - `release/v2-breaking-api-changes`
+- `copilot/release/v2-breaking-changes`
 
 ### Container Release Process
 1. **Development**: Create PR from appropriately prefixed branch

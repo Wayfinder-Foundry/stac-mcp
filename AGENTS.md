@@ -113,11 +113,11 @@ Commit & PR guidance
 
 Branch naming conventions
 - Use branch prefixes to control automatic version increments:
-  - **hotfix/** or **copilot/fix-** for bug fixes (triggers patch version increment: 0.1.0 -> 0.1.1)
-  - **feature/** for new features (triggers minor version increment: 0.1.0 -> 0.2.0)
-  - **release/** for breaking changes (triggers major version increment: 0.1.0 -> 1.0.0)
-- Examples: hotfix/fix-authentication, copilot/fix-nodata-dtype, feature/add-new-stac-tool, release/v2-api-changes
-- Other branch prefixes (e.g., chore/, docs/, copilot/) will not trigger automatic version increments
+  - **hotfix/**, **copilot/fix-**, or **copilot/hotfix/** for bug fixes (triggers patch version increment: 0.1.0 -> 0.1.1)
+  - **feature/** or **copilot/feature/** for new features (triggers minor version increment: 0.1.0 -> 0.2.0)
+  - **release/** or **copilot/release/** for breaking changes (triggers major version increment: 0.1.0 -> 1.0.0)
+- Examples: hotfix/fix-authentication, copilot/fix-nodata-dtype, copilot/hotfix/authentication, feature/add-new-stac-tool, copilot/feature/new-tool, release/v2-api-changes, copilot/release/v2-breaking-changes
+- Other branch prefixes (e.g., chore/, docs/, copilot/chore/, copilot/docs/) will not trigger automatic version increments
 - Version increments happen automatically when PRs are merged to main
 
 Semantic versioning & releases
@@ -128,9 +128,9 @@ Semantic versioning & releases
   - python scripts/version.py minor    # New features (0.1.0 -> 0.2.0)
   - python scripts/version.py major    # Breaking changes (0.1.0 -> 1.0.0)
 - Automatic version increments based on branch prefixes when PRs are merged:
-  - Patch: hotfix/* or copilot/fix-* branches - Bug fixes, security patches, minor improvements
-  - Minor: feature/* branches - New features, non-breaking API changes, performance improvements
-  - Major: release/* branches - Breaking changes, major architecture changes, incompatible API changes
+  - Patch: hotfix/*, copilot/fix-*, or copilot/hotfix/* branches - Bug fixes, security patches, minor improvements
+  - Minor: feature/* or copilot/feature/* branches - New features, non-breaking API changes, performance improvements
+  - Major: release/* or copilot/release/* branches - Breaking changes, major architecture changes, incompatible API changes
 - Container images are automatically tagged with semantic versions on version bump
 - Never push non-semantic tags like "cache" or "main" for production containers
 
