@@ -237,8 +237,12 @@ class TestADR0007Integration:
                 client._http_json("/search", timeout=25)  # noqa: SLF001
 
             error_msg = str(exc_info.value)
-            # Verify URL is in message
-            assert "test-catalog.example.com" in error_msg
+            # Verify URL is in message with precise hostname match
+            import re
+            from urllib.parse import urlparse
+            urls = re.findall(r'https?://[^\s"]+', error_msg)
+            assert any(urlparse(u).hostname == "test-catalog.example.com" for u in urls), \
+                f"Expected hostname 'test-catalog.example.com' in error message, got: {error_msg}"
             assert "/stac/v1/search" in error_msg
             # Verify timeout value is in message
             assert "25s" in error_msg
