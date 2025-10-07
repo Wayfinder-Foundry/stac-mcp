@@ -35,7 +35,7 @@ def example_timeout_configuration():
     try:
         result = client._http_json("/conformance", timeout=60)  # noqa: SLF001
         if result:
-            print(f"   ✓ Success with extended timeout")
+            print("   ✓ Success with extended timeout")
     except (STACTimeoutError, ConnectionFailedError) as e:
         print(f"   ✗ Error: {e}")
 
@@ -45,7 +45,7 @@ def example_timeout_configuration():
         # Note: timeout=0 means no timeout - use with caution!
         result = client._http_json("/conformance", timeout=0)  # noqa: SLF001
         if result:
-            print(f"   ✓ Success with no timeout limit")
+            print("   ✓ Success with no timeout limit")
     except (STACTimeoutError, ConnectionFailedError) as e:
         print(f"   ✗ Error: {e}")
 
@@ -67,7 +67,7 @@ def example_headers_configuration():
     try:
         result = client._http_json("/conformance")  # noqa: SLF001
         if result:
-            print(f"   ✓ Request sent with custom headers")
+            print("   ✓ Request sent with custom headers")
     except (STACTimeoutError, ConnectionFailedError) as e:
         print(f"   ✗ Error: {e}")
 
@@ -79,7 +79,7 @@ def example_headers_configuration():
             headers={"X-Custom-Header": "override-value"},
         )
         if result:
-            print(f"   ✓ Request sent with overridden header")
+            print("   ✓ Request sent with overridden header")
     except (STACTimeoutError, ConnectionFailedError) as e:
         print(f"   ✗ Error: {e}")
 
@@ -95,7 +95,7 @@ def example_error_handling():
         # Simulate timeout with very short timeout
         result = client._http_json("/conformance", timeout=0.001)  # noqa: SLF001
     except STACTimeoutError as e:
-        print(f"   ✓ Caught STACTimeoutError:")
+        print("   ✓ Caught STACTimeoutError:")
         print(f"     Message: {e}")
         print("     → Remediation: Increase timeout parameter or check network")
 
@@ -105,7 +105,7 @@ def example_error_handling():
     try:
         result = bad_client._http_json("/conformance", timeout=5)  # noqa: SLF001
     except ConnectionFailedError as e:
-        print(f"   ✓ Caught ConnectionFailedError:")
+        print("   ✓ Caught ConnectionFailedError:")
         error_msg = str(e)
         # Show first 150 chars of error message
         print(f"     Message: {error_msg[:150]}...")
@@ -134,7 +134,7 @@ def example_combined_configuration():
             headers={"X-Request-ID": "example-request-123"},
         )
         if result:
-            print(f"   ✓ Success with combined configuration")
+            print("   ✓ Success with combined configuration")
             print(f"   ✓ Got {len(result.get('conformsTo', []))} conformance classes")
     except (STACTimeoutError, ConnectionFailedError) as e:
         print(f"   ✗ Error: {e}")

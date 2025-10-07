@@ -100,11 +100,11 @@ class STACClient:
             if client_ref is None:  # Fallback if dependency missing
                 # Import inside branch so tests can simulate missing dependency.
                 from pystac_client import (  # type: ignore[attr-defined]
-                    Client as client_ref,  # noqa: PLC0415,N813,I001
+                    Client as client_ref,  # noqa: N813
                 )
 
             self._client = client_ref.open(  # type: ignore[attr-defined]
-                self.catalog_url
+                self.catalog_url,
             )
         return self._client
 
@@ -572,7 +572,7 @@ class STACClient:
         for attempt in range(1, max_attempts + 1):
             try:
                 with urllib.request.urlopen(  # type: ignore[urllib-direct-use]
-                    req,  # noqa: S310
+                    req,
                     timeout=effective_timeout,
                     context=context,
                 ) as resp:
@@ -614,7 +614,7 @@ class STACClient:
                         insecure_ctx.verify_mode = ssl.CERT_NONE  # type: ignore
                         try:
                             with urllib.request.urlopen(  # type: ignore
-                                req,  # noqa: S310
+                                req,
                                 timeout=effective_timeout,
                                 context=insecure_ctx,
                             ) as resp:
@@ -651,7 +651,9 @@ class STACClient:
                 # Map remaining URLErrors to actionable error types
                 msg = self._map_connection_error(url, exc, effective_timeout)
                 logger.error(
-                    "Connection failed after %d attempts: %s", max_attempts, msg
+                    "Connection failed after %d attempts: %s",
+                    max_attempts,
+                    msg,
                 )
                 raise ConnectionFailedError(msg) from exc
             except OSError as exc:  # pragma: no cover - network
@@ -714,10 +716,7 @@ class STACClient:
                 f"Connection refused by {url}. "
                 "The server may be down or the URL may be incorrect."
             )
-        if (
-            "Network is unreachable" in reason_str
-            or "No route to host" in reason_str
-        ):
+        if "Network is unreachable" in reason_str or "No route to host" in reason_str:
             return (
                 f"Network unreachable for {url}. "
                 "Check network connectivity and firewall settings."

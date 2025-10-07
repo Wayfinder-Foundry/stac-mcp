@@ -10,7 +10,6 @@ Tests focus on:
 
 from __future__ import annotations
 
-import socket
 from unittest.mock import patch
 from urllib.error import URLError
 
@@ -104,7 +103,8 @@ class TestHeadersConfiguration:
 
         with pytest.raises(ConnectionFailedError):
             client._http_json(  # noqa: SLF001
-                "/test", headers={"X-API-Key": "override"}
+                "/test",
+                headers={"X-API-Key": "override"},
             )
 
     @patch("stac_mcp.tools.client.urllib.request.urlopen")
@@ -146,7 +146,7 @@ class TestTimeoutErrorMapping:
         client = STACClient("https://example.com")
 
         # socket.timeout is a subclass of OSError
-        mock_urlopen.side_effect = socket.timeout("The read operation timed out")
+        mock_urlopen.side_effect = TimeoutError("The read operation timed out")
 
         with pytest.raises(STACTimeoutError) as exc_info:
             client._http_json("/test")  # noqa: SLF001
@@ -162,7 +162,7 @@ class TestTimeoutErrorMapping:
         def side_effect(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            raise socket.timeout("timed out")
+            raise TimeoutError("timed out")
 
         mock_urlopen.side_effect = side_effect
 
@@ -273,7 +273,7 @@ class TestErrorLogging:
     def test_timeout_error_logged(self, mock_urlopen, caplog):
         """Test that timeout errors are logged with error level."""
         client = STACClient("https://example.com")
-        mock_urlopen.side_effect = socket.timeout("timed out")
+        mock_urlopen.side_effect = TimeoutError("timed out")
 
         with pytest.raises(STACTimeoutError):
             client._http_json("/test")  # noqa: SLF001

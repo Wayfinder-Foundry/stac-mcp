@@ -9,7 +9,6 @@ These tests verify the complete ADR 0007 requirements:
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 from urllib.error import URLError
 
@@ -71,9 +70,8 @@ class TestADR0007Integration:
         client = STACClient("https://example.com")
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
-            import socket
 
-            mock_urlopen.side_effect = socket.timeout("read timeout")
+            mock_urlopen.side_effect = TimeoutError("read timeout")
 
             with pytest.raises(STACTimeoutError) as exc_info:
                 client._http_json("/test", timeout=15)  # noqa: SLF001
@@ -229,9 +227,8 @@ class TestADR0007Integration:
         client = STACClient("https://test-catalog.example.com/stac/v1")
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
-            import socket
 
-            mock_urlopen.side_effect = socket.timeout()
+            mock_urlopen.side_effect = TimeoutError()
 
             with pytest.raises(STACTimeoutError) as exc_info:
                 client._http_json("/search", timeout=25)  # noqa: SLF001
