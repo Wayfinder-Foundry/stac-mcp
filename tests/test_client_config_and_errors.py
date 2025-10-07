@@ -103,7 +103,9 @@ class TestHeadersConfiguration:
         mock_urlopen.side_effect = check_headers
 
         with pytest.raises(ConnectionFailedError):
-            client._http_json("/test", headers={"X-API-Key": "override"})  # noqa: SLF001
+            client._http_json(  # noqa: SLF001
+                "/test", headers={"X-API-Key": "override"}
+            )
 
     @patch("stac_mcp.tools.client.urllib.request.urlopen")
     def test_accept_header_always_set(self, mock_urlopen):

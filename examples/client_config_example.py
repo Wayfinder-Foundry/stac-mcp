@@ -25,7 +25,8 @@ def example_timeout_configuration():
     try:
         result = client._http_json("/conformance")  # noqa: SLF001
         if result:
-            print(f"   ✓ Success: got {len(result.get('conformsTo', []))} conformance classes")
+            conforms_count = len(result.get("conformsTo", []))
+            print(f"   ✓ Success: got {conforms_count} conformance classes")
     except (STACTimeoutError, ConnectionFailedError) as e:
         print(f"   ✗ Error: {e}")
 

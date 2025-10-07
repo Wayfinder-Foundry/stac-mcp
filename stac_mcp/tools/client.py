@@ -99,9 +99,13 @@ class STACClient:
             client_ref = getattr(_server, "Client", None)
             if client_ref is None:  # Fallback if dependency missing
                 # Import inside branch so tests can simulate missing dependency.
-                from pystac_client import Client as client_ref  # type: ignore[attr-defined]  # noqa: PLC0415,N813,I001
+                from pystac_client import (  # type: ignore[attr-defined]
+                    Client as client_ref,  # noqa: PLC0415,N813,I001
+                )
 
-            self._client = client_ref.open(self.catalog_url)  # type: ignore[attr-defined]
+            self._client = client_ref.open(  # type: ignore[attr-defined]
+                self.catalog_url
+            )
         return self._client
 
     @property
@@ -526,8 +530,8 @@ class STACClient:
         if not url.startswith(("http://", "https://")):
             msg = f"Unsupported URL scheme in {url}"
             raise ValueError(msg)
-        # Request object creation is safe: url already validated to http/https only.
-        req = urllib.request.Request(  # noqa: S310 safe: url already validated to http/https
+        # Request object creation is safe: url validated to http/https only.
+        req = urllib.request.Request(  # noqa: S310
             url,
             data=data,
             headers=request_headers,
@@ -567,8 +571,8 @@ class STACClient:
         effective_timeout = timeout if timeout is not None else 30
         for attempt in range(1, max_attempts + 1):
             try:
-                with urllib.request.urlopen(  # type: ignore[urllib-direct-use]  # noqa: S310
-                    req,
+                with urllib.request.urlopen(  # type: ignore[urllib-direct-use]
+                    req,  # noqa: S310
                     timeout=effective_timeout,
                     context=context,
                 ) as resp:
@@ -607,10 +611,10 @@ class STACClient:
                         # Build insecure context and retry immediately (no backoff)
                         insecure_ctx = ssl.create_default_context()
                         insecure_ctx.check_hostname = False
-                        insecure_ctx.verify_mode = ssl.CERT_NONE  # type: ignore[assignment]
+                        insecure_ctx.verify_mode = ssl.CERT_NONE  # type: ignore
                         try:
-                            with urllib.request.urlopen(  # type: ignore[urllib-direct-use]  # noqa: S310
-                                req,
+                            with urllib.request.urlopen(  # type: ignore
+                                req,  # noqa: S310
                                 timeout=effective_timeout,
                                 context=insecure_ctx,
                             ) as resp:
@@ -646,7 +650,9 @@ class STACClient:
                     continue
                 # Map remaining URLErrors to actionable error types
                 msg = self._map_connection_error(url, exc, effective_timeout)
-                logger.error("Connection failed after %d attempts: %s", max_attempts, msg)
+                logger.error(
+                    "Connection failed after %d attempts: %s", max_attempts, msg
+                )
                 raise ConnectionFailedError(msg) from exc
             except OSError as exc:  # pragma: no cover - network
                 # Catch socket.timeout (which is subclass of OSError) and other OS errors
@@ -667,7 +673,8 @@ class STACClient:
                     msg = (
                         f"Request to {url} timed out after {effective_timeout}s "
                         f"(attempted {max_attempts} times). "
-                        "Consider increasing timeout parameter or checking network connectivity."
+                        "Consider increasing timeout parameter or checking "
+                        "network connectivity."
                     )
                     logger.error("Request timeout: %s", msg)
                     raise STACTimeoutError(msg) from exc
@@ -694,7 +701,10 @@ class STACClient:
         reason_str = str(reason) if reason else str(exc)
 
         # Common error patterns and their messages
-        if "Name or service not known" in reason_str or "nodename nor servname" in reason_str:
+        if (
+            "Name or service not known" in reason_str
+            or "nodename nor servname" in reason_str
+        ):
             return (
                 f"DNS lookup failed for {url}. "
                 "Check the catalog URL and network connectivity."
@@ -704,7 +714,10 @@ class STACClient:
                 f"Connection refused by {url}. "
                 "The server may be down or the URL may be incorrect."
             )
-        if "Network is unreachable" in reason_str or "No route to host" in reason_str:
+        if (
+            "Network is unreachable" in reason_str
+            or "No route to host" in reason_str
+        ):
             return (
                 f"Network unreachable for {url}. "
                 "Check network connectivity and firewall settings."
@@ -712,7 +725,8 @@ class STACClient:
         if "timed out" in reason_str.lower():
             return (
                 f"Connection to {url} timed out after {timeout}s. "
-                "Consider increasing timeout parameter or checking network connectivity."
+                "Consider increasing timeout parameter or checking "
+                "network connectivity."
             )
 
         # Generic fallback
