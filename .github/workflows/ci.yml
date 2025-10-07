@@ -2,14 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main, hotfix/**, release/**, jules/**, copilot/**]
+    branches: [main]
   pull_request:
     branches: [main]
 
-# Prevent duplicate parallel runs for same branch/PR; keep latest
+# Prevent duplicate parallel runs for same branch/PR; let all jobs complete
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   test:
