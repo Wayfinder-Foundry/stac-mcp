@@ -228,11 +228,31 @@ This wrapping keeps the MCP content type stable while enabling machine-readable 
 
 ### Setup
 
+#### GitHub Codespaces (Recommended)
+
+The fastest way to get started is with GitHub Codespaces, which provides a fully configured development environment in your browser:
+
+1. Click the green "Code" button on the GitHub repository
+2. Select the "Codespaces" tab
+3. Click "Create codespace on main"
+
+The devcontainer will automatically:
+- Set up Python 3.12 with all dependencies
+- Install GDAL/PROJ system libraries
+- Configure VS Code with recommended extensions
+- Install the project in development mode
+
+See [`.devcontainer/README.md`](.devcontainer/README.md) for more details.
+
+#### Local Development
+
 ```bash
 git clone https://github.com/BnJam/stac-mcp.git
 cd stac-mcp
 pip install -e ".[dev]"
 ```
+
+For local development with containers, you can use VS Code's Remote Containers extension with the provided `.devcontainer` configuration.
 
 ### Testing
 

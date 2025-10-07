@@ -1,0 +1,110 @@
+{
+  "name": "STAC MCP Server Development",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "upgradePackages": true,
+      "username": "vscode",
+      "userUid": "automatic",
+      "userGid": "automatic"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "ppa": true,
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "installDirectlyFromGitHubRelease": true,
+      "version": "latest"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "charliermarsh.ruff",
+        "ms-toolsai.jupyter",
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "eamodio.gitlens",
+        "ms-azuretools.vscode-docker",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.formatting.provider": "none",
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          }
+        },
+        "black-formatter.args": [
+          "--line-length=88"
+        ],
+        "ruff.lint.args": [
+          "--config=/workspaces/stac-mcp/pyproject.toml"
+        ],
+        "ruff.lint.run": "onSave",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": [
+          "tests",
+          "-v"
+        ],
+        "files.exclude": {
+          "**/__pycache__": true,
+          "**/*.pyc": true,
+          "**/.pytest_cache": true,
+          "**/.coverage": true,
+          "**/htmlcov": true,
+          "**/.ruff_cache": true
+        },
+        "files.watcherExclude": {
+          "**/__pycache__/**": true,
+          "**/.pytest_cache/**": true,
+          "**/.ruff_cache/**": true
+        },
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/bin/zsh"
+          }
+        }
+      }
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
+
+  "containerEnv": {
+    "PYTHONUNBUFFERED": "1",
+    "STAC_MCP_LOG_LEVEL": "INFO",
+    "STAC_MCP_LOG_FORMAT": "text"
+  },
+
+  "remoteUser": "vscode",
+
+  "mounts": [
+    "source=${localWorkspaceFolder}/.devcontainer/.zsh_history,target=/home/vscode/.zsh_history,type=bind,consistency=cached"
+  ],
+
+  "forwardPorts": [],
+
+  "portsAttributes": {},
+
+  "updateContentCommand": "pip install -e '.[dev]' --no-cache-dir || true",
+
+  "postAttachCommand": "echo '🚀 STAC MCP Development Environment Ready!' && echo '📋 Quick commands:' && echo '  - pytest -v          # Run tests' && echo '  - black stac_mcp/    # Format code' && echo '  - ruff check .       # Lint code' && echo '  - stac-mcp           # Run MCP server' && echo '  - python examples/example_usage.py  # Test server'",
+
+  "waitFor": "postCreateCommand"
+}
