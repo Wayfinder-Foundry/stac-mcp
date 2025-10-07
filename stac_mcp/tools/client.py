@@ -58,6 +58,22 @@ class SSLVerificationError(ConnectionError):
     """
 
 
+class STACTimeoutError(OSError):
+    """Raised when a STAC API request times out.
+
+    Provides actionable guidance for timeout scenarios, including suggestions
+    to increase timeout or check network connectivity.
+    """
+
+
+class ConnectionFailedError(ConnectionError):
+    """Raised when connection to STAC API fails.
+
+    Wraps underlying connection errors (DNS, refused connection, etc.) with
+    clearer context and remediation guidance.
+    """
+
+
 class STACClient:
     """STAC Client wrapper for common operations."""
 
@@ -484,11 +500,19 @@ class STACClient:
         method: str = "GET",
         payload: dict | None = None,
         headers: dict[str, str] | None = None,
+        timeout: int | None = None,
     ) -> dict | None:
         """Lightweight HTTP helper using stdlib (avoids extra deps).
 
         Returns parsed JSON dict or None on 404 for capability endpoints where
         absence is acceptable.
+
+        Args:
+            path: URL path relative to catalog_url
+            method: HTTP method (GET, POST, etc.)
+            payload: Optional JSON payload for POST/PUT requests
+            headers: Optional headers to merge with default headers
+            timeout: Optional timeout in seconds (defaults to 30)
         """
         url = self.catalog_url.rstrip("/") + path
         data = None
@@ -540,11 +564,12 @@ class STACClient:
         max_attempts = 3
         base_delay = 0.2
         self._last_retry_attempts = 0
+        effective_timeout = timeout if timeout is not None else 30
         for attempt in range(1, max_attempts + 1):
             try:
                 with urllib.request.urlopen(  # type: ignore[urllib-direct-use]  # noqa: S310
                     req,
-                    timeout=30,
+                    timeout=effective_timeout,
                     context=context,
                 ) as resp:
                     raw = resp.read().decode("utf-8")
@@ -586,7 +611,7 @@ class STACClient:
                         try:
                             with urllib.request.urlopen(  # type: ignore[urllib-direct-use]  # noqa: S310
                                 req,
-                                timeout=30,
+                                timeout=effective_timeout,
                                 context=insecure_ctx,
                             ) as resp:
                                 raw = resp.read().decode("utf-8")
@@ -619,8 +644,82 @@ class STACClient:
 
                     time.sleep(delay)
                     continue
+                # Map remaining URLErrors to actionable error types
+                msg = self._map_connection_error(url, exc, effective_timeout)
+                logger.error("Connection failed after %d attempts: %s", max_attempts, msg)
+                raise ConnectionFailedError(msg) from exc
+            except OSError as exc:  # pragma: no cover - network
+                # Catch socket.timeout (which is subclass of OSError) and other OS errors
+                # Use builtin TimeoutError for isinstance check (Python 3.10+)
+                import socket  # noqa: PLC0415
+
+                if "timed out" in str(exc).lower() or isinstance(
+                    exc,
+                    (socket.timeout, TimeoutError),
+                ):
+                    if attempt < max_attempts:
+                        self._last_retry_attempts = attempt
+                        delay = base_delay * (2 ** (attempt - 1))
+                        import time  # noqa: PLC0415
+
+                        time.sleep(delay)
+                        continue
+                    msg = (
+                        f"Request to {url} timed out after {effective_timeout}s "
+                        f"(attempted {max_attempts} times). "
+                        "Consider increasing timeout parameter or checking network connectivity."
+                    )
+                    logger.error("Request timeout: %s", msg)
+                    raise STACTimeoutError(msg) from exc
                 raise
         return None  # Should not reach here; loop either returns or raises
+
+    def _map_connection_error(
+        self,
+        url: str,
+        exc: urllib.error.URLError,
+        timeout: int,
+    ) -> str:
+        """Map URLError to actionable error message.
+
+        Args:
+            url: The URL that failed
+            exc: The URLError exception
+            timeout: The timeout value used
+
+        Returns:
+            Actionable error message with guidance
+        """
+        reason = getattr(exc, "reason", None)
+        reason_str = str(reason) if reason else str(exc)
+
+        # Common error patterns and their messages
+        if "Name or service not known" in reason_str or "nodename nor servname" in reason_str:
+            return (
+                f"DNS lookup failed for {url}. "
+                "Check the catalog URL and network connectivity."
+            )
+        if "Connection refused" in reason_str:
+            return (
+                f"Connection refused by {url}. "
+                "The server may be down or the URL may be incorrect."
+            )
+        if "Network is unreachable" in reason_str or "No route to host" in reason_str:
+            return (
+                f"Network unreachable for {url}. "
+                "Check network connectivity and firewall settings."
+            )
+        if "timed out" in reason_str.lower():
+            return (
+                f"Connection to {url} timed out after {timeout}s. "
+                "Consider increasing timeout parameter or checking network connectivity."
+            )
+
+        # Generic fallback
+        return (
+            f"Failed to connect to {url}: {reason_str}. "
+            "Check network connectivity and catalog URL."
+        )
 
     def get_root_document(self) -> dict[str, Any]:
         root = self._http_json("")  # base endpoint already ends with /stac/v1
