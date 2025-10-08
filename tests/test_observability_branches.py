@@ -129,7 +129,8 @@ class TestJSONLogFormatter:
         """Test formatting with exception info."""
         formatter = JSONLogFormatter()
         try:
-            raise ValueError("Test error")
+            msg = "Test error"
+            raise ValueError(msg)  # noqa: TRY301
         except ValueError:
             exc_info = True
         else:
@@ -160,7 +161,7 @@ class TestMetricsRegistry:
         registry.increment("test.counter", 5)
         snapshot = registry.snapshot()
         assert "test.counter" in snapshot
-        assert snapshot["test.counter"] == 5
+        assert snapshot["test.counter"] == 5  # noqa: PLR2004
 
     def test_increment_existing_counter(self):
         """Test incrementing an existing counter."""
@@ -168,7 +169,7 @@ class TestMetricsRegistry:
         registry.increment("test.counter", 3)
         registry.increment("test.counter", 2)
         snapshot = registry.snapshot()
-        assert snapshot["test.counter"] == 5
+        assert snapshot["test.counter"] == 5  # noqa: PLR2004
 
     def test_observe_latency_single(self):
         """Test observing a single latency value."""
@@ -177,7 +178,7 @@ class TestMetricsRegistry:
         snapshot = registry.latency_snapshot()
         assert "test.latency" in snapshot
         assert snapshot["test.latency"]["count"] == 1
-        assert snapshot["test.latency"]["sum"] == 100.5
+        assert snapshot["test.latency"]["sum"] == 100.5  # noqa: PLR2004
 
     def test_observe_latency_multiple(self):
         """Test observing multiple latency values."""
@@ -186,10 +187,10 @@ class TestMetricsRegistry:
         registry.observe_latency("test.latency", 100.0)
         registry.observe_latency("test.latency", 150.0)
         snapshot = registry.latency_snapshot()
-        assert snapshot["test.latency"]["count"] == 3
-        assert snapshot["test.latency"]["sum"] == 300.0
-        assert snapshot["test.latency"]["min"] == 50.0
-        assert snapshot["test.latency"]["max"] == 150.0
+        assert snapshot["test.latency"]["count"] == 3  # noqa: PLR2004
+        assert snapshot["test.latency"]["sum"] == 300.0  # noqa: PLR2004
+        assert snapshot["test.latency"]["min"] == 50.0  # noqa: PLR2004
+        assert snapshot["test.latency"]["max"] == 150.0  # noqa: PLR2004
 
     def test_latency_buckets(self):
         """Test latency histogram buckets."""

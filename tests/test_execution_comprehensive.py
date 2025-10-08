@@ -33,7 +33,7 @@ class TestExecuteToolSuccess:
         result = await execute_tool("test_tool", mock_handler, None, {})
 
         assert isinstance(result, list)
-        assert len(result) == 2
+        assert len(result) == 2  # noqa: PLR2004
         assert all(isinstance(item, TextContent) for item in result)
 
     @pytest.mark.asyncio
@@ -83,13 +83,12 @@ class TestExecuteToolErrors:
     async def test_execute_tool_handler_raises_exception(self):
         """Test execute_tool when handler raises exception."""
 
-        def failing_handler(client, args):
-            raise ValueError("Handler failed")
+        def failing_handler(client, args):  # noqa: ARG001
+            msg = "Handler failed"
+            raise ValueError(msg)
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError, match="Handler failed"):
             await execute_tool("failing_tool", failing_handler, None, {})
-
-        assert "Handler failed" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_execute_tool_handler_returns_none(self):
@@ -121,7 +120,7 @@ class TestExecuteToolWithArguments:
         mock_handler = MagicMock(return_value="Result")
         args = {"param1": "value1", "param2": 42}
 
-        result = await execute_tool("test_tool", mock_handler, None, args)
+        await execute_tool("test_tool", mock_handler, None, args)
 
         mock_handler.assert_called_once()
         call_args = mock_handler.call_args
@@ -213,7 +212,7 @@ class TestExecuteToolOutputFormats:
 
         result = await execute_tool("test_tool", mock_handler, None, {})
 
-        assert len(result) == 3
+        assert len(result) == 3  # noqa: PLR2004
 
 
 class TestExecuteToolWithClient:
@@ -305,7 +304,7 @@ class TestExecuteToolEdgeCases:
         result = await execute_tool("test_tool", mock_handler, None, {})
 
         assert isinstance(result, list)
-        assert len(result[0].text) == 10000
+        assert len(result[0].text) == 10000  # noqa: PLR2004
 
     @pytest.mark.asyncio
     async def test_execute_tool_unicode_characters(self):
@@ -350,7 +349,7 @@ class TestExecuteToolPerformance:
         result = await execute_tool("test_tool", mock_handler, None, {})
 
         assert isinstance(result, list)
-        assert len(result) <= 1000  # May be truncated or limited
+        assert len(result) <= 1000  # noqa: PLR2004 - May be truncated or limited
 
     @pytest.mark.asyncio
     async def test_execute_tool_handles_deeply_nested_dict(self):
@@ -387,8 +386,9 @@ class TestExecuteToolWithLogging:
     async def test_execute_tool_logs_errors(self):
         """Test that tool execution logs errors."""
 
-        def failing_handler(client, args):
-            raise RuntimeError("Test error")
+        def failing_handler(client, args):  # noqa: ARG001
+            msg = "Test error"
+            raise RuntimeError(msg)
 
         with pytest.raises(RuntimeError):
             await execute_tool("failing_tool", failing_handler, None, {})
