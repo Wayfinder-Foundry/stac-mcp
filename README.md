@@ -350,13 +350,27 @@ ruff check stac_mcp/ tests/ examples/
 
 ### Version Management
 
-The project uses semantic versioning (SemVer) with automated version management based on branch naming, implemented in `.github/workflows/container.yml`:
+The project uses semantic versioning (SemVer) with automated version management based on PR labels or branch naming, implemented in `.github/workflows/container.yml`.
 
-#### Branch-Based Automatic Versioning
-When PRs are merged to `main`, the workflow inspects the merged branch name (via the PR head ref) and increments the version if it matches a prefix:
-- **hotfix/**, **copilot/fix-**, or **copilot/hotfix/** branches → patch increment (0.1.0 → 0.1.1) for bug fixes
+#### Automatic Versioning
+
+When PRs are merged to `main`, the workflow determines the version increment using either PR labels or branch prefixes:
+
+**PR Labels (Recommended for Automated Tools)**
+
+Labels take priority over branch prefixes. Add one of these labels to your PR:
+- **bump:patch** or **bump:hotfix** → patch increment (0.1.0 → 0.1.1) for bug fixes
+- **bump:minor** or **bump:feature** → minor increment (0.1.0 → 0.2.0) for new features
+- **bump:major** or **bump:release** → major increment (0.1.0 → 1.0.0) for breaking changes
+
+**Branch Prefixes (For Human Contributors)**
+
+If no version bump label is present, the workflow falls back to branch prefix detection:
+- **hotfix/**, **fix/**, **copilot/fix-**, or **copilot/hotfix/** branches → patch increment (0.1.0 → 0.1.1) for bug fixes
 - **feature/** or **copilot/feature/** branches → minor increment (0.1.0 → 0.2.0) for new features  
 - **release/** or **copilot/release/** branches → major increment (0.1.0 → 1.0.0) for breaking changes
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines on version bumping.
 
 #### Manual Version Management
 You can also manually manage versions using the version script (should normally not be needed unless doing a coordinated release):

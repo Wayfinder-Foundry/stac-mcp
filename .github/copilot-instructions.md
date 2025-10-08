@@ -224,27 +224,33 @@ python scripts/version.py set 1.2.3
 ```
 
 ### Version Guidelines for PRs
-Use branch prefixes to control automatic version increments when PRs are merged into main:
-- **hotfix/**, **copilot/fix-**, or **copilot/hotfix/** branches: Trigger patch version increments (0.1.0 -> 0.1.1)
+
+**IMPORTANT FOR COPILOT AGENT**: Use PR labels to control version bumping (labels take priority over branch prefixes):
+- **bump:patch** or **bump:hotfix**: Patch version increment (0.1.0 -> 0.1.1)
+  - Bug fixes, security patches, documentation updates, minor improvements
+- **bump:minor** or **bump:feature**: Minor version increment (0.1.0 -> 0.2.0)
+  - New features, new tools, non-breaking API changes, performance improvements
+- **bump:major** or **bump:release**: Major version increment (0.1.0 -> 1.0.0)
+  - Breaking changes, major architecture changes, incompatible API changes
+
+**For human contributors**: Use branch prefixes to control automatic version increments when PRs are merged into main:
+- **hotfix/**, **fix/**, **copilot/fix-**, or **copilot/hotfix/** branches: Trigger patch version increments (0.1.0 -> 0.1.1)
   - Bug fixes, security patches, documentation updates, minor improvements
 - **feature/** or **copilot/feature/** branches: Trigger minor version increments (0.1.0 -> 0.2.0)  
   - New features, new tools, non-breaking API changes, performance improvements
 - **release/** or **copilot/release/** branches: Trigger major version increments (0.1.0 -> 1.0.0)
   - Breaking changes, major architecture changes, incompatible API changes
-- Other prefixes (chore/, docs/, copilot/chore/, copilot/docs/): No automatic version increment
+- Other prefixes (chore/, docs/, copilot/chore/, copilot/docs/): No automatic version increment (unless a bump label is added)
+
+**Priority order**: Labels > Branch prefixes > No bump
 
 Examples:
-- `hotfix/fix-authentication-bug`
-- `copilot/fix-nodata-dtype-handling`
-- `copilot/hotfix/authentication-bug`
-- `feature/add-stac-search-tool`
-- `copilot/feature/stac-search-tool`
-- `release/v2-breaking-api-changes`
-- `copilot/release/v2-breaking-changes`
-
+- Label-based: Add `bump:minor` label to any PR to trigger minor version bump
+- Branch prefixes: `hotfix/fix-authentication-bug`, `feature/add-stac-search-tool`, `release/v2-breaking-changes`
+- Copilot branch prefixes: `copilot/fix-nodata-dtype-handling`, `copilot/feature/new-tool`, `copilot/release/v2-breaking-changes`
 ### Container Release Process
-1. **Development**: Create PR from appropriately prefixed branch
-2. **Merge to Main**: Automatic version increment based on branch prefix
+1. **Development**: Create PR with appropriate label or branch prefix
+2. **Merge to Main**: Automatic version increment based on label or branch prefix (labels take priority)
 3. **Container Build**: GitHub Actions automatically:
    - Increments version in all files
    - Creates git tag (e.g., v1.2.3)
