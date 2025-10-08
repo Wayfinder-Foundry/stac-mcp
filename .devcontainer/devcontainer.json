@@ -18,11 +18,51 @@
     "ghcr.io/devcontainers/features/github-cli:1": {
       "installDirectlyFromGitHubRelease": true,
       "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:1": {
+      "dockerComposeVersion": "2",
+      "installDockerBuildx": true,
+      "installDockerCliPlugins": true
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
     }
   },
 
   "customizations": {
     "vscode": {
+      "mcp": {
+        "servers": {
+          "mcp-server-time": {
+            "command": "python",
+            "args": [
+              "-m",
+              "mcp_server_time",
+              "--local-timezone=America/Los_Angeles"
+            ],
+            "env": {}
+          },
+          "git-mcp-server": {
+            "command": "npx",
+            "args": [
+              "@cyanheads/git-mcp-server"
+            ],
+            "env": {
+              "MCP_LOG_LEVEL": "info",
+              "GIT_SIGN_COMMITS": "false"
+            },
+            "type": "stdio"
+          },
+          "context7": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@upstash/context7-mcp"]
+          }
+        }
+      },
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
