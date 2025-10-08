@@ -17,10 +17,12 @@ pip install -e ".[dev]"
 # Run tests (takes ~1 second, NEVER CANCEL, set timeout to 30+ seconds)
 pytest
 
-# Run linting and formatting (takes ~0.2 seconds total)
-black stac_mcp/ tests/ examples/
+# Run formatting and linting (takes ~0.2 seconds total)
+ruff format stac_mcp/ tests/ examples/
 ruff check stac_mcp/ tests/ examples/ --fix
 ```
+
+- After ANY code edit (even small), re-run `ruff format` and `ruff check --fix` locally before committing to keep diffs clean and surface issues early.
 
 ### Run the MCP Server
 ```bash
@@ -34,7 +36,7 @@ python examples/example_usage.py
 ### Key Timing Expectations
 - **NEVER CANCEL**: Set timeout to 120+ seconds for pip install (may timeout due to network issues)
 - **NEVER CANCEL**: Set timeout to 30+ seconds for pytest (runs in ~1 second)
-- Black formatting: ~0.2 seconds
+- Ruff formatting: ~0.2 seconds
 - Ruff linting: ~0.02 seconds
 - Example script: ~0.6 seconds
 - MCP server timeout test: 5 seconds (expected timeout with exit code 124)
@@ -44,9 +46,9 @@ python examples/example_usage.py
 ### Always Run These Validation Steps After Making Changes
 1. **Format and lint code** (required for CI to pass):
    ```bash
-   # Format code (takes ~0.2 seconds)
-   black stac_mcp/ tests/ examples/
-   
+  # Format code (takes ~0.2 seconds)
+  ruff format stac_mcp/ tests/ examples/
+
    # Fix auto-fixable linting issues (takes ~0.02 seconds)
    ruff check stac_mcp/ tests/ examples/ --fix
    
@@ -115,7 +117,7 @@ After making changes, always test these core workflows:
 ### Python Requirements
 - Python 3.8+ (supports 3.8, 3.9, 3.10, 3.11, 3.12)
 - Main dependencies: mcp>=1.0.0, pystac-client>=0.7.0, pystac>=1.8.0, anyio>=3.7.0
-- Dev dependencies: pytest, pytest-asyncio, black, ruff, jsonschema
+- Dev dependencies: pytest, pytest-asyncio, ruff, jsonschema
 
 ### Network Requirements
 - **Internet access required** for real STAC API calls to:
@@ -134,7 +136,7 @@ pip install -e ".[dev]"
 # 2. Make your changes
 
 # 3. Format and lint
-black stac_mcp/ tests/ examples/
+ruff format stac_mcp/ tests/ examples/
 ruff check stac_mcp/ tests/ examples/ --fix
 
 # 4. Run tests
@@ -166,12 +168,12 @@ Configure MCP clients with:
 
 ### Common Issues
 1. **Import errors**: Run `pip install -e ".[dev]"` to install in development mode
-2. **Linting failures**: Run `black` and `ruff --fix` before committing  
+2. **Linting failures**: Run `ruff format` and `ruff check --fix` before committing  
 3. **Network timeouts**: Expected in sandbox environments, real network needed for STAC APIs
 4. **MCP protocol errors**: Test with `python examples/example_usage.py` first
 
 ### Build/Test Failures
-- **Black formatting**: Must pass for CI - run `black stac_mcp/ tests/ examples/`
+- **Ruff formatting**: Must pass for CI - run `ruff format stac_mcp/ tests/ examples/`
 - **Ruff linting**: Must pass for CI - run `ruff check --fix stac_mcp/ tests/ examples/` (62 issues currently exist, many auto-fixable)
 - **Pytest failures**: All 9 tests must pass - investigate specific test failures
 - **Network issues**: pip install may timeout in sandbox environments (expected)

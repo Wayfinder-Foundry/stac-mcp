@@ -9,7 +9,7 @@ Reliable contributor experience and CI require fast feedback and zero reliance o
 ## Requirement
 - Install step: `pip install -e ".[dev]"` completes within 120 seconds under typical conditions.
 - Formatting and linting:
-  - `black stac_mcp/ tests/ examples/` ~0.2 seconds.
+  - `ruff format stac_mcp/ tests/ examples/` ~0.2 seconds.
   - `ruff check stac_mcp/ tests/ examples/ --fix` ~0.02 seconds (auto-fixable issues).
 - Tests: `pytest -v` completes within 30 seconds and does not require Internet; all network I/O must be mocked.
 - Example usage: `python examples/example_usage.py` runs in ~0.6 seconds.

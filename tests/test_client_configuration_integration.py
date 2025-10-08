@@ -9,8 +9,10 @@ These tests verify the complete ADR 0007 requirements:
 
 from __future__ import annotations
 
+import re
 from unittest.mock import MagicMock, patch
 from urllib.error import URLError
+from urllib.parse import urlparse
 
 import pytest
 
@@ -19,6 +21,7 @@ from stac_mcp.tools.client import (
     STACClient,
     STACTimeoutError,
 )
+from tests import TIMEOUT_30_SECONDS
 
 
 class TestADR0007Integration:
@@ -70,7 +73,6 @@ class TestADR0007Integration:
         client = STACClient("https://example.com")
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
-
             mock_urlopen.side_effect = TimeoutError("read timeout")
 
             with pytest.raises(STACTimeoutError) as exc_info:
@@ -136,7 +138,7 @@ class TestADR0007Integration:
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
 
-            def check_default(req, timeout=None, context=None):
+            def check_default(req, timeout=None, context=None): # noqa: ARG001
                 assert timeout == 30, "Should use default timeout"
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"test": "data"}'
@@ -155,7 +157,7 @@ class TestADR0007Integration:
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
 
-            def check_no_extra_headers(req, timeout=None, context=None):
+            def check_no_extra_headers(req, timeout=None, context=None): # noqa: ARG001
                 # Should only have Accept header (set by default)
                 assert "Accept" in req.headers
                 mock_response = MagicMock()
@@ -176,7 +178,7 @@ class TestADR0007Integration:
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
 
-            def side_effect(req, timeout=None, context=None):
+            def side_effect(req, timeout=None, context=None): # noqa: ARG001
                 nonlocal call_count
                 call_count += 1
                 assert timeout == 45, "Custom timeout should be used in all retries"
@@ -203,7 +205,7 @@ class TestADR0007Integration:
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
 
-            def check_merge(req, timeout=None, context=None):
+            def check_merge(req, timeout=None, context=None): # noqa: ARG001
                 # Instance header kept
                 assert req.headers.get("X-instance") == "instance"
                 # Per-call override
@@ -227,7 +229,6 @@ class TestADR0007Integration:
         client = STACClient("https://test-catalog.example.com/stac/v1")
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
-
             mock_urlopen.side_effect = TimeoutError()
 
             with pytest.raises(STACTimeoutError) as exc_info:
@@ -235,9 +236,6 @@ class TestADR0007Integration:
 
             error_msg = str(exc_info.value)
             # Verify URL is in message with precise hostname match
-            import re
-            from urllib.parse import urlparse
-
             urls = re.findall(r'https?://[^\s"]+', error_msg)
             assert any(
                 urlparse(u).hostname == "test-catalog.example.com" for u in urls
@@ -259,12 +257,12 @@ class TestADR0007EdgeCases:
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
 
-            def check_zero_timeout(req, timeout=None, context=None):
+            def check_zero_timeout(req, timeout=None, context=None): # noqa: ARG001
                 assert timeout == 0, "Timeout 0 should be passed through"
                 mock_response = MagicMock()
                 mock_response.read.return_value = b"{}"
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda self, *args: None
+                mock_response.__exit__ = lambda _: None
                 return mock_response
 
             mock_urlopen.side_effect = check_zero_timeout
@@ -276,13 +274,13 @@ class TestADR0007EdgeCases:
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
 
-            def check_headers(req, timeout=None, context=None):
+            def check_headers(req, timeout=None, context=None): # noqa: ARG001
                 # Should still have Accept header
                 assert "Accept" in req.headers
                 mock_response = MagicMock()
                 mock_response.read.return_value = b"{}"
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda self, *args: None
+                mock_response.__exit__ = lambda _: None
                 return mock_response
 
             mock_urlopen.side_effect = check_headers
@@ -294,12 +292,12 @@ class TestADR0007EdgeCases:
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
 
-            def check_default(req, timeout=None, context=None):
-                assert timeout == 30, "None should use default 30s"
+            def check_default(req, timeout=None, context=None): # noqa: ARG001
+                assert timeout == TIMEOUT_30_SECONDS, "None should use default 30s"
                 mock_response = MagicMock()
                 mock_response.read.return_value = b"{}"
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda self, *args: None
+                mock_response.__exit__ = lambda _: None
                 return mock_response
 
             mock_urlopen.side_effect = check_default

@@ -33,7 +33,7 @@ jobs:
           uv sync --all-extras --dev
       - name: Lint
         run: |
-          uv run black --check stac_mcp/ tests/ examples/
+          uv run ruff format --check stac_mcp/ tests/ examples/
           uv run ruff check stac_mcp/ tests/ examples/
       - name: Build (hatchling via uv) to validate packaging
         run: |

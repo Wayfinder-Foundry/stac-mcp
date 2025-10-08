@@ -10,8 +10,9 @@ Tests focus on:
 
 from __future__ import annotations
 
+from io import BytesIO
 from unittest.mock import patch
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -20,6 +21,7 @@ from stac_mcp.tools.client import (
     STACClient,
     STACTimeoutError,
 )
+from tests import HTTP_INTERNAL_SERVER_ERROR
 
 
 class TestTimeoutConfiguration:
@@ -292,8 +294,6 @@ class TestBackwardCompatibility:
     @patch("stac_mcp.tools.client.urllib.request.urlopen")
     def test_http_404_still_returns_none(self, mock_urlopen):
         """Test that 404 responses still return None (existing behavior)."""
-        from io import BytesIO
-        from urllib.error import HTTPError
 
         client = STACClient("https://example.com")
 
@@ -314,8 +314,6 @@ class TestBackwardCompatibility:
     @patch("stac_mcp.tools.client.urllib.request.urlopen")
     def test_non_404_http_error_still_raises(self, mock_urlopen):
         """Test that non-404 HTTP errors are still raised (existing behavior)."""
-        from io import BytesIO
-        from urllib.error import HTTPError
 
         client = STACClient("https://example.com")
 
@@ -333,4 +331,4 @@ class TestBackwardCompatibility:
         with pytest.raises(HTTPError) as exc_info:
             client._http_json("/error")  # noqa: SLF001
 
-        assert exc_info.value.code == 500
+        assert exc_info.value.code == HTTP_INTERNAL_SERVER_ERROR

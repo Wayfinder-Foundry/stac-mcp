@@ -8,7 +8,6 @@
 [![Python](https://img.shields.io/pypi/pyversions/stac-mcp?style=flat-square&logo=python)](https://pypi.org/project/stac-mcp/)
 [![License](https://img.shields.io/github/license/BnJam/stac-mcp?style=flat-square)](https://github.com/BnJam/stac-mcp/blob/main/LICENSE)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/stac-mcp?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/stac-mcp)
-[![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/badge/lint-ruff-e57300?style=flat-square)](https://github.com/astral-sh/ruff)
 
 
@@ -289,7 +288,7 @@ open htmlcov/index.html  # macOS
 Configuration: `.coveragerc` enforces `branch = True` and omits `tests/*` and `scripts/version.py`. Update omit patterns only when necessary to keep metrics honest.
 
 Recommended workflow before opening a PR:
-1. `black stac_mcp/ tests/ examples/`
+1. `ruff format stac_mcp/ tests/ examples/`
 2. `ruff check stac_mcp/ tests/ examples/ --fix`
 3. `coverage run -m pytest -q`
 4. `coverage report -m` (ensure no unexpected drops)
@@ -345,8 +344,8 @@ Planned future enhancements (pending ADRs): add retry/federation logic and corre
 ### Linting
 
 ```bash
-black stac_mcp/
-ruff check stac_mcp/
+ruff format stac_mcp/ tests/ examples/
+ruff check stac_mcp/ tests/ examples/
 ```
 
 ### Version Management
