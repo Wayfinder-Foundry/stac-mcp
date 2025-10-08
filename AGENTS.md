@@ -110,13 +110,20 @@ Commit & PR guidance
   - YYYY-MM-DD: ...
   ```
 
-Branch naming conventions
-- Use branch prefixes to control automatic version increments:
+Branch naming conventions & version bumping
+- **For automated agents (Copilot)**: Use PR labels to control automatic version increments:
+  - **bump:patch** or **bump:hotfix** for bug fixes (triggers patch version increment: 0.1.0 -> 0.1.1)
+  - **bump:minor** or **bump:feature** for new features (triggers minor version increment: 0.1.0 -> 0.2.0)
+  - **bump:major** or **bump:release** for breaking changes (triggers major version increment: 0.1.0 -> 1.0.0)
+  - Labels take priority over branch prefixes when both are present
+- **For human contributors**: Use branch prefixes to control automatic version increments:
   - **hotfix/**, **copilot/fix-**, or **copilot/hotfix/** for bug fixes (triggers patch version increment: 0.1.0 -> 0.1.1)
   - **feature/** or **copilot/feature/** for new features (triggers minor version increment: 0.1.0 -> 0.2.0)
   - **release/** or **copilot/release/** for breaking changes (triggers major version increment: 0.1.0 -> 1.0.0)
-- Examples: hotfix/fix-authentication, copilot/fix-nodata-dtype, copilot/hotfix/authentication, feature/add-new-stac-tool, copilot/feature/new-tool, release/v2-api-changes, copilot/release/v2-breaking-changes
-- Other branch prefixes (e.g., chore/, docs/, copilot/chore/, copilot/docs/) will not trigger automatic version increments
+- Examples:
+  - Branch prefixes: hotfix/fix-authentication, copilot/fix-nodata-dtype, copilot/hotfix/authentication, feature/add-new-stac-tool, copilot/feature/new-tool, release/v2-api-changes, copilot/release/v2-breaking-changes
+  - Labels: Add bump:patch, bump:minor, or bump:major to your PR
+- Other branch prefixes (e.g., chore/, docs/, copilot/chore/, copilot/docs/) will not trigger automatic version increments unless a bump label is present
 - Version increments happen automatically when PRs are merged to main
 
 Semantic versioning & releases
@@ -126,10 +133,16 @@ Semantic versioning & releases
   - python scripts/version.py patch    # Bug fixes (0.1.0 -> 0.1.1)
   - python scripts/version.py minor    # New features (0.1.0 -> 0.2.0)
   - python scripts/version.py major    # Breaking changes (0.1.0 -> 1.0.0)
-- Automatic version increments based on branch prefixes when PRs are merged:
-  - Patch: hotfix/*, copilot/fix-*, or copilot/hotfix/* branches - Bug fixes, security patches, minor improvements
-  - Minor: feature/* or copilot/feature/* branches - New features, non-breaking API changes, performance improvements
-  - Major: release/* or copilot/release/* branches - Breaking changes, major architecture changes, incompatible API changes
+- Automatic version increments when PRs are merged (labels take priority over branch prefixes):
+  - **Patch** (0.1.0 -> 0.1.1): Bug fixes, security patches, minor improvements
+    - Labels: bump:patch or bump:hotfix
+    - Branch prefixes: hotfix/*, copilot/fix-*, or copilot/hotfix/*
+  - **Minor** (0.1.0 -> 0.2.0): New features, non-breaking API changes, performance improvements
+    - Labels: bump:minor or bump:feature
+    - Branch prefixes: feature/* or copilot/feature/*
+  - **Major** (0.1.0 -> 1.0.0): Breaking changes, major architecture changes, incompatible API changes
+    - Labels: bump:major or bump:release
+    - Branch prefixes: release/* or copilot/release/*
 - Container images are automatically tagged with semantic versions on version bump
 - Never push non-semantic tags like "cache" or "main" for production containers
 

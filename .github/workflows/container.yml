@@ -52,19 +52,41 @@ jobs:
         
         echo "Found PR #$PR_NUM"
         
-        # Get the branch name that was merged
+        # Get the branch name and labels from the PR
         BRANCH_NAME=$(gh pr view $PR_NUM --json headRefName --jq '.headRefName')
+        LABELS=$(gh pr view $PR_NUM --json labels --jq '.labels[].name' | tr '\n' ' ')
         echo "Branch name: $BRANCH_NAME"
+        echo "PR labels: $LABELS"
         
-        # Determine version increment based on branch prefix
-        if [[ "$BRANCH_NAME" == hotfix/* ]] || [[ "$BRANCH_NAME" == copilot/fix-* ]] || [[ "$BRANCH_NAME" == copilot/hotfix/* ]] || [[ "$BRANCH_NAME" == fix/* ]]; then
+        # Determine version increment type
+        # Priority: labels > branch prefixes > no bump
+        INCREMENT_TYPE=""
+        
+        # Check for version bump labels first (highest priority)
+        if echo "$LABELS" | grep -q "bump:major\|bump:release"; then
+          INCREMENT_TYPE="major"
+          echo "Version bump determined by label: major"
+        elif echo "$LABELS" | grep -q "bump:minor\|bump:feature"; then
+          INCREMENT_TYPE="minor"
+          echo "Version bump determined by label: minor"
+        elif echo "$LABELS" | grep -q "bump:patch\|bump:hotfix"; then
           INCREMENT_TYPE="patch"
+          echo "Version bump determined by label: patch"
+        # Fall back to branch prefix detection
+        elif [[ "$BRANCH_NAME" == hotfix/* ]] || [[ "$BRANCH_NAME" == copilot/fix-* ]] || [[ "$BRANCH_NAME" == copilot/hotfix/* ]] || [[ "$BRANCH_NAME" == fix/* ]]; then
+          INCREMENT_TYPE="patch"
+          echo "Version bump determined by branch prefix: patch"
         elif [[ "$BRANCH_NAME" == feature/* ]] || [[ "$BRANCH_NAME" == copilot/feature/* ]]; then
           INCREMENT_TYPE="minor"
+          echo "Version bump determined by branch prefix: minor"
         elif [[ "$BRANCH_NAME" == release/* ]] || [[ "$BRANCH_NAME" == copilot/release/* ]]; then
           INCREMENT_TYPE="major"
-        else
-          echo "Branch does not match fix/*, hotfix/*, copilot/fix-*, copilot/hotfix/*, feature/*, copilot/feature/*, release/*, or copilot/release/* pattern, skipping version bump"
+          echo "Version bump determined by branch prefix: major"
+        fi
+        
+        # If no increment type determined, skip version bump
+        if [ -z "$INCREMENT_TYPE" ]; then
+          echo "No version bump label or recognized branch prefix found, skipping version bump"
           echo "version_changed=false" >> $GITHUB_OUTPUT
           exit 0
         fi
