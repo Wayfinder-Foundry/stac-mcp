@@ -9,7 +9,7 @@ Date: 2025-09-18
 
 ## Decision
 - Follow repository guide:
-  - pip install -e ".[dev]" (timeout 120s), black, ruff --fix, pytest -v (timeout 30s)
+  - pip install -e ".[dev]" (timeout 120s), ruff format, ruff check --fix, pytest -v (timeout 30s)
   - Validate example script and 5s MCP timeout behavior
 - Tests:
   - Mock all network I/O; assert parameter pass-through and graceful errors

@@ -91,6 +91,6 @@ def test_instrument_tool_error(monkeypatch):
     assert matching_key, "Expected latency histogram entry for failing tool"
     counts = lat[matching_key]
     total = sum(counts.values())
-    assert (
-        total == 1
-    ), f"Expected exactly one latency observation for failure, got {total}"
+    assert total == 1, (
+        f"Expected exactly one latency observation for failure, got {total}"
+    )

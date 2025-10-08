@@ -8,7 +8,6 @@
 [![Python](https://img.shields.io/pypi/pyversions/stac-mcp?style=flat-square&logo=python)](https://pypi.org/project/stac-mcp/)
 [![License](https://img.shields.io/github/license/BnJam/stac-mcp?style=flat-square)](https://github.com/BnJam/stac-mcp/blob/main/LICENSE)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/stac-mcp?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/stac-mcp)
-[![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/badge/lint-ruff-e57300?style=flat-square)](https://github.com/astral-sh/ruff)
 
 
@@ -289,7 +288,7 @@ open htmlcov/index.html  # macOS
 Configuration: `.coveragerc` enforces `branch = True` and omits `tests/*` and `scripts/version.py`. Update omit patterns only when necessary to keep metrics honest.
 
 Recommended workflow before opening a PR:
-1. `black stac_mcp/ tests/ examples/`
+1. `ruff format stac_mcp/ tests/ examples/`
 2. `ruff check stac_mcp/ tests/ examples/ --fix`
 3. `coverage run -m pytest -q`
 4. `coverage report -m` (ensure no unexpected drops)
@@ -345,8 +344,8 @@ Planned future enhancements (pending ADRs): add retry/federation logic and corre
 ### Linting
 
 ```bash
-black stac_mcp/
-ruff check stac_mcp/
+ruff format stac_mcp/ tests/ examples/
+ruff check stac_mcp/ tests/ examples/
 ```
 
 ### Version Management
@@ -479,6 +478,99 @@ Promotion of experimental fields to stable requires an ADR update and minor vers
 - OAuth / token refresh flows for credential layer
 
 For contributions impacting architecture, add or update an ADR/ASR following `AGENTS.md` guidelines.
+
+## Client Configuration (ADR 0007)
+
+The STAC client implementation supports flexible configuration options for varied deployment scenarios (corporate proxies, slow networks, custom authentication).
+
+### Per-Call Configuration (Programmatic API)
+
+When using the `STACClient` class directly (e.g., in custom tools or extensions), you can configure requests at call time:
+
+#### Timeout Configuration
+
+All STAC API requests support an optional `timeout` parameter (in seconds):
+
+```python
+from stac_mcp.tools.client import STACClient
+
+client = STACClient("https://planetarycomputer.microsoft.com/api/stac/v1")
+
+# Use custom timeout (60 seconds instead of default 30)
+result = client._http_json("/conformance", timeout=60)
+
+# Disable timeout (wait indefinitely)
+result = client._http_json("/conformance", timeout=0)
+```
+
+**Default**: 30 seconds if not specified
+
+**Use cases**:
+- Slow networks or high-latency connections: increase timeout
+- Large catalog queries: increase timeout to prevent premature failures
+- Testing/diagnostics: adjust timeout to isolate performance issues
+
+#### Headers Configuration
+
+Custom headers can be provided at two levels:
+
+1. **Instance-level** (applies to all requests from that client):
+```python
+client = STACClient(
+    "https://example.com/stac/v1",
+    headers={"X-API-Key": "your-key", "User-Agent": "MyApp/1.0"}
+)
+```
+
+2. **Per-call** (merges with or overrides instance headers):
+```python
+# Override specific header for this call only
+result = client._http_json("/search", headers={"X-API-Key": "different-key"})
+```
+
+**Behavior**: Per-call headers are merged with instance headers, with per-call values taking precedence for duplicate keys. The `Accept: application/json` header is always set automatically.
+
+**Note**: These configuration options are for programmatic use. MCP tool calls use the default client configuration.
+
+### Error Handling
+
+The client provides structured error types with actionable guidance:
+
+#### Timeout Errors
+
+When requests exceed the timeout threshold, a `STACTimeoutError` is raised with context:
+
+```
+Request to https://example.com/stac/v1/search timed out after 30s (attempted 3 times).
+Consider increasing timeout parameter or checking network connectivity.
+```
+
+**Automatic retries**: Timeout errors are retried 3 times with exponential backoff before failing.
+
+#### Connection Errors
+
+Connection failures are mapped to specific, actionable messages via `ConnectionFailedError`:
+
+- **DNS failures**: "DNS lookup failed for [url]. Check the catalog URL and network connectivity."
+- **Connection refused**: "Connection refused by [url]. The server may be down or the URL may be incorrect."
+- **Network unreachable**: "Network unreachable for [url]. Check network connectivity and firewall settings."
+- **Generic errors**: Includes the underlying error reason with remediation guidance
+
+**Automatic retries**: Connection errors are retried 3 times with exponential backoff (0.2s, 0.4s, 0.8s delays).
+
+#### SSL/TLS Errors
+
+SSL certificate verification failures raise `SSLVerificationError` with detailed remediation steps. See the [SSL / TLS Troubleshooting](#ssl--tls-troubleshooting) section for environment variables and configuration options.
+
+### Error Logging
+
+Network errors are logged at ERROR level (not EXCEPTION level) to preserve context without excessive stack traces:
+
+```
+ERROR stac_mcp.tools.client: Connection failed after 3 attempts: DNS lookup failed for ...
+```
+
+This follows ADR 0007 guidance: "Log at error level; no prints."
 
 ## Observability Configuration (ADR 0012)
 

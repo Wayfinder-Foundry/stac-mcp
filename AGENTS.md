@@ -12,13 +12,12 @@ Core principles
 - Keep functions small and single-responsibility. Favor composition over inheritance when appropriate.
 
 Formatting & linting
-- Use Black for formatting; accept its defaults (88-char line length).
-- Use Ruff for linting and auto-fixes; resolve remaining issues manually.
+- Use Ruff for both formatting (`ruff format`) and linting (`ruff check`); resolve any outstanding issues manually.
 - Commands:
   - pip install -e ".[dev]"
-  - black stac_mcp/ tests/ examples/
+  - ruff format stac_mcp/ tests/ examples/
   - ruff check stac_mcp/ tests/ examples/ --fix
- - After ANY code edit (even small), re-run Black and Ruff locally before committing to keep diffs clean and surface issues early.
+- After ANY code edit (even small), re-run Ruff format and check locally before committing to keep diffs clean and surface issues early.
 
 Testing & validation
 - Write tests for behavior, not implementation; prefer parametrized tests for similar cases.
@@ -135,7 +134,7 @@ Semantic versioning & releases
 - Never push non-semantic tags like "cache" or "main" for production containers
 
 CI & pre-merge checks
-- Ensure Black and Ruff pass.
+- Ensure Ruff format and linting pass.
 - Ensure all tests pass locally and in the CI.
 - Follow the repository's Validation checklist (format, lint, tests, example run).
 
@@ -143,8 +142,8 @@ Quick contributor checklist
 1. Install dev deps:
    - pip install -e ".[dev]"
 2. Format & lint:
-   - black stac_mcp/ tests/ examples/
-   - ruff check stac_mcp/ tests/ examples/ --fix
+  - ruff format stac_mcp/ tests/ examples/
+  - ruff check stac_mcp/ tests/ examples/ --fix
   - (Repeat these two commands after every change before staging/committing.)
 3. Run tests:
    - pytest -v
@@ -162,7 +161,7 @@ References
 - PEP 484 — Type Hints: https://peps.python.org/pep-0484/
 
 Notes
-- This project already standardizes on Black, Ruff, and pytest — prefer those tools and the commands above.
+- This project standardizes on Ruff (formatting + linting) and pytest — prefer those tools and the commands above.
 - Keep changes minimal, test-driven, and well-documented in PR descriptions.
 
 ## GDAL/rasterio compatibility notes
