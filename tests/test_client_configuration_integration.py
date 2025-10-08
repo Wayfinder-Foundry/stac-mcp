@@ -47,7 +47,7 @@ class TestADR0007Integration:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"conformsTo": []}'
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda _: None
+                mock_response.__exit__ = lambda *_: None
                 return mock_response
 
             mock_urlopen.side_effect = capture_timeout
@@ -69,7 +69,7 @@ class TestADR0007Integration:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"conformsTo": []}'
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda _: None
+                mock_response.__exit__ = lambda *_: None
                 return mock_response
 
             mock_urlopen.side_effect = capture_headers
@@ -148,7 +148,7 @@ class TestADR0007Integration:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"test": "data"}'
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda _: None
+                mock_response.__exit__ = lambda *_: None
                 return mock_response
 
             mock_urlopen.side_effect = check_default
@@ -168,7 +168,7 @@ class TestADR0007Integration:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"test": "data"}'
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda _: None
+                mock_response.__exit__ = lambda *_: None
                 return mock_response
 
             mock_urlopen.side_effect = check_no_extra_headers
@@ -197,7 +197,7 @@ class TestADR0007Integration:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"success": true}'
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda _: None
+                mock_response.__exit__ = lambda *_: None
                 return mock_response
 
             mock_urlopen.side_effect = side_effect
@@ -224,7 +224,7 @@ class TestADR0007Integration:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b"{}"
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda _: None
+                mock_response.__exit__ = lambda *_: None
                 return mock_response
 
             mock_urlopen.side_effect = check_merge
@@ -271,7 +271,7 @@ class TestADR0007EdgeCases:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b"{}"
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda _: None
+                mock_response.__exit__ = lambda *_: None
                 return mock_response
 
             mock_urlopen.side_effect = check_zero_timeout
@@ -289,7 +289,7 @@ class TestADR0007EdgeCases:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b"{}"
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda _: None
+                mock_response.__exit__ = lambda *_: None
                 return mock_response
 
             mock_urlopen.side_effect = check_headers
@@ -306,7 +306,7 @@ class TestADR0007EdgeCases:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b"{}"
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda _: None
+                mock_response.__exit__ = lambda *_: None
                 return mock_response
 
             mock_urlopen.side_effect = check_default

@@ -23,7 +23,7 @@ startCommand:
     (config) => {
       return {
         command: 'python',
-        args: ['-m', 'stac_mcp.server']
+        args: ['-m', 'stac_mcp']
       };
     }
 

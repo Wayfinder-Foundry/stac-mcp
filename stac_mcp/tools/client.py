@@ -585,6 +585,7 @@ class STACClient:
         base_delay = 0.2
         self._last_retry_attempts = 0
         effective_timeout = timeout if timeout is not None else 30
+
         for attempt in range(1, max_attempts + 1):
             try:
                 with urllib.request.urlopen(  # noqa: S310

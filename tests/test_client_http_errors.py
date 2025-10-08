@@ -17,7 +17,7 @@ from urllib.error import HTTPError, URLError
 import pytest
 from pystac_client.exceptions import APIError
 
-from stac_mcp.tools.client import STACClient
+from stac_mcp.tools.client import ConnectionFailedError, STACClient
 
 
 class _FakeResponse:
@@ -73,7 +73,7 @@ def test_http_json_500_raises(mock_urlopen):
 def test_http_json_url_error(mock_urlopen):
     client = STACClient("https://example.com")
     mock_urlopen.side_effect = URLError("down")
-    with pytest.raises(URLError):
+    with pytest.raises(ConnectionFailedError, match="Failed to connect"):
         client._http_json("/boom")  # noqa: SLF001
 
 
