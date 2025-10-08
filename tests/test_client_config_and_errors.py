@@ -21,7 +21,14 @@ from stac_mcp.tools.client import (
     STACClient,
     STACTimeoutError,
 )
-from tests import HTTP_INTERNAL_SERVER_ERROR
+from tests import (
+    CALL_COUNT,
+    HTTP_INTERNAL_SERVER_ERROR,
+    RETRY_ATTEMPTS,
+    TIMEOUT_30_SECONDS,
+    TIMEOUT_60_SECONDS,
+    TIMEOUT_NONE,
+)
 
 
 class TestTimeoutConfiguration:
@@ -32,9 +39,10 @@ class TestTimeoutConfiguration:
         """Test that default timeout of 30s is used when not specified."""
         client = STACClient("https://example.com")
 
-        def check_timeout(req, timeout=None, context=None):
-            assert timeout == 30, "Default timeout should be 30 seconds"
-            raise URLError("test")
+        def check_timeout(req, timeout=None, context=None): # noqa: ARG001
+            assert timeout == TIMEOUT_30_SECONDS, "Default timeout should be 30 seconds"
+            test_error = "test"
+            raise URLError(test_error)
 
         mock_urlopen.side_effect = check_timeout
 
@@ -46,9 +54,10 @@ class TestTimeoutConfiguration:
         """Test that custom timeout is passed to urlopen."""
         client = STACClient("https://example.com")
 
-        def check_timeout(req, timeout=None, context=None):
-            assert timeout == 60, "Custom timeout should be 60 seconds"
-            raise URLError("test")
+        def check_timeout(req, timeout=None, context=None): # noqa: ARG001
+            assert timeout == TIMEOUT_60_SECONDS, "Custom timeout should be 60 seconds"
+            test_error = "test"
+            raise URLError(test_error)
 
         mock_urlopen.side_effect = check_timeout
 
@@ -60,9 +69,10 @@ class TestTimeoutConfiguration:
         """Test that timeout=0 (no timeout) is allowed."""
         client = STACClient("https://example.com")
 
-        def check_timeout(req, timeout=None, context=None):
-            assert timeout == 0, "Timeout 0 should be passed through"
-            raise URLError("test")
+        def check_timeout(req, timeout=None, context=None): # noqa: ARG001
+            assert timeout == TIMEOUT_NONE, "Timeout 0 should be passed through"
+            test_error = "test"
+            raise URLError(test_error)
 
         mock_urlopen.side_effect = check_timeout
 
@@ -78,9 +88,10 @@ class TestHeadersConfiguration:
         """Test that instance headers are included in requests."""
         client = STACClient("https://example.com", headers={"X-API-Key": "secret123"})
 
-        def check_headers(req, timeout=None, context=None):
+        def check_headers(req, timeout=None, context=None): # noqa: ARG001
             assert req.headers.get("X-api-key") == "secret123"
-            raise URLError("test")
+            test_error = "test"
+            raise URLError(test_error)
 
         mock_urlopen.side_effect = check_headers
 
@@ -95,11 +106,12 @@ class TestHeadersConfiguration:
             headers={"X-API-Key": "default", "X-Other": "value"},
         )
 
-        def check_headers(req, timeout=None, context=None):
+        def check_headers(req, timeout=None, context=None): # noqa: ARG001
             # Override should replace X-API-Key but keep X-Other
             assert req.headers.get("X-api-key") == "override"
             assert req.headers.get("X-other") == "value"
-            raise URLError("test")
+            test_error = "test"
+            raise URLError(test_error)
 
         mock_urlopen.side_effect = check_headers
 
@@ -114,9 +126,10 @@ class TestHeadersConfiguration:
         """Test that Accept header is always set to application/json."""
         client = STACClient("https://example.com")
 
-        def check_headers(req, timeout=None, context=None):
+        def check_headers(req, timeout=None, context=None): # noqa: ARG001
             assert req.headers.get("Accept") == "application/json"
-            raise URLError("test")
+            test_error = "test"
+            raise URLError(test_error)
 
         mock_urlopen.side_effect = check_headers
 
@@ -161,10 +174,11 @@ class TestTimeoutErrorMapping:
         client = STACClient("https://example.com")
         call_count = 0
 
-        def side_effect(*args, **kwargs):
+        def side_effect(*args, **kwargs): # noqa: ARG001
             nonlocal call_count
             call_count += 1
-            raise TimeoutError("timed out")
+            timed_out_error = "timed out"
+            raise TimeoutError(timed_out_error)
 
         mock_urlopen.side_effect = side_effect
 
@@ -172,8 +186,8 @@ class TestTimeoutErrorMapping:
             client._http_json("/test")  # noqa: SLF001
 
         # Should retry 3 times (initial + 2 retries)
-        assert call_count == 3
-        assert client._last_retry_attempts == 2
+        assert call_count == CALL_COUNT
+        assert client._last_retry_attempts == RETRY_ATTEMPTS # noqa: SLF001
 
 
 class TestConnectionErrorMapping:
@@ -237,10 +251,11 @@ class TestConnectionErrorMapping:
         client = STACClient("https://example.com")
         call_count = 0
 
-        def side_effect(*args, **kwargs):
+        def side_effect(*args, **kwargs): # noqa: ARG001
             nonlocal call_count
             call_count += 1
-            raise URLError("Connection refused")
+            conn_refused = "Connection refused"
+            raise URLError(conn_refused)
 
         mock_urlopen.side_effect = side_effect
 
@@ -248,8 +263,8 @@ class TestConnectionErrorMapping:
             client._http_json("/test")  # noqa: SLF001
 
         # Should retry 3 times (initial + 2 retries)
-        assert call_count == 3
-        assert client._last_retry_attempts == 2
+        assert call_count == CALL_COUNT
+        assert client._last_retry_attempts == RETRY_ATTEMPTS # noqa: SLF001
 
 
 class TestErrorLogging:

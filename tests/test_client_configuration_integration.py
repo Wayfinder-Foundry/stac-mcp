@@ -9,6 +9,7 @@ These tests verify the complete ADR 0007 requirements:
 
 from __future__ import annotations
 
+import contextlib
 import re
 from unittest.mock import MagicMock, patch
 from urllib.error import URLError
@@ -21,7 +22,13 @@ from stac_mcp.tools.client import (
     STACClient,
     STACTimeoutError,
 )
-from tests import TIMEOUT_30_SECONDS
+from tests import (
+    CALL_COUNT,
+    TIMEOUT_15_SECONDS,
+    TIMEOUT_30_SECONDS,
+    TIMEOUT_45_SECONDS,
+    TIMEOUT_120_SECONDS,
+)
 
 
 class TestADR0007Integration:
@@ -34,13 +41,13 @@ class TestADR0007Integration:
         # Test that timeout parameter is accepted and used
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
 
-            def capture_timeout(req, timeout=None, context=None):
+            def capture_timeout(req, timeout=None, context=None): # noqa: ARG001
                 # Verify timeout was passed through
-                assert timeout == 120, "Custom timeout should be used"
+                assert timeout == TIMEOUT_120_SECONDS, "Custom timeout should be used"
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"conformsTo": []}'
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda self, *args: None
+                mock_response.__exit__ = lambda _: None
                 return mock_response
 
             mock_urlopen.side_effect = capture_timeout
@@ -55,14 +62,14 @@ class TestADR0007Integration:
 
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
 
-            def capture_headers(req, timeout=None, context=None):
+            def capture_headers(req, timeout=None, context=None): # noqa: ARG001
                 # Verify headers were merged correctly
                 assert req.headers.get("X-instance") == "value1"
                 assert req.headers.get("X-override") == "value2"
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"conformsTo": []}'
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda self, *args: None
+                mock_response.__exit__ = lambda _: None
                 return mock_response
 
             mock_urlopen.side_effect = capture_headers
@@ -76,7 +83,7 @@ class TestADR0007Integration:
             mock_urlopen.side_effect = TimeoutError("read timeout")
 
             with pytest.raises(STACTimeoutError) as exc_info:
-                client._http_json("/test", timeout=15)  # noqa: SLF001
+                client._http_json("/test", timeout=TIMEOUT_15_SECONDS)  # noqa: SLF001
 
             error_msg = str(exc_info.value)
             # Verify message is concise and actionable
@@ -122,10 +129,8 @@ class TestADR0007Integration:
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
             mock_urlopen.side_effect = URLError("test error")
 
-            try:
+            with contextlib.suppress(ConnectionFailedError):
                 client._http_json("/test")  # noqa: SLF001
-            except ConnectionFailedError:
-                pass
 
             # Verify error was logged at ERROR level (not EXCEPTION)
             error_logs = [r for r in caplog.records if r.levelname == "ERROR"]
@@ -139,11 +144,11 @@ class TestADR0007Integration:
         with patch("stac_mcp.tools.client.urllib.request.urlopen") as mock_urlopen:
 
             def check_default(req, timeout=None, context=None): # noqa: ARG001
-                assert timeout == 30, "Should use default timeout"
+                assert timeout == TIMEOUT_30_SECONDS, "Should use default timeout"
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"test": "data"}'
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda self, *args: None
+                mock_response.__exit__ = lambda _: None
                 return mock_response
 
             mock_urlopen.side_effect = check_default
@@ -163,7 +168,7 @@ class TestADR0007Integration:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"test": "data"}'
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda self, *args: None
+                mock_response.__exit__ = lambda _: None
                 return mock_response
 
             mock_urlopen.side_effect = check_no_extra_headers
@@ -181,20 +186,22 @@ class TestADR0007Integration:
             def side_effect(req, timeout=None, context=None): # noqa: ARG001
                 nonlocal call_count
                 call_count += 1
-                assert timeout == 45, "Custom timeout should be used in all retries"
-                if call_count < 3:
-                    raise URLError("temporary error")
+                assert timeout == TIMEOUT_45_SECONDS, "Custom timeout should \
+                    be used in all retries"
+                if call_count < CALL_COUNT:
+                    temp_err = "temporary error"
+                    raise URLError(temp_err)
                 # Success on 3rd attempt
                 mock_response = MagicMock()
                 mock_response.read.return_value = b'{"success": true}'
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda self, *args: None
+                mock_response.__exit__ = lambda _: None
                 return mock_response
 
             mock_urlopen.side_effect = side_effect
             result = client._http_json("/test", timeout=45)  # noqa: SLF001
             assert result == {"success": True}  # JSON boolean becomes Python bool
-            assert call_count == 3
+            assert call_count == CALL_COUNT
 
     def test_headers_merge_behavior(self):
         """Verify headers are merged correctly with precedence rules."""
@@ -215,7 +222,7 @@ class TestADR0007Integration:
                 mock_response = MagicMock()
                 mock_response.read.return_value = b"{}"
                 mock_response.__enter__ = lambda self: self
-                mock_response.__exit__ = lambda self, *args: None
+                mock_response.__exit__ = lambda _: None
                 return mock_response
 
             mock_urlopen.side_effect = check_merge

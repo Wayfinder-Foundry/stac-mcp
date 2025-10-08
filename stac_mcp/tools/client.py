@@ -9,7 +9,10 @@ import ssl
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 from pystac_client.exceptions import APIError
 from shapely.geometry import shape
@@ -73,7 +76,6 @@ class ConnectionFailedError(ConnectionError):
     clearer context and remediation guidance.
     """
 
-
 class STACClient:
     """STAC Client wrapper for common operations."""
 
@@ -99,7 +101,7 @@ class STACClient:
             client_ref = getattr(_server, "Client", None)
             if client_ref is None:  # Fallback if dependency missing
                 # Import inside branch so tests can simulate missing dependency.
-                from pystac_client import (  # type: ignore[attr-defined]
+                from pystac_client import (  # noqa: PLC0415
                     Client as client_ref,  # noqa: N813
                 )
 
@@ -134,6 +136,15 @@ class STACClient:
             )
             raise ConformanceError(msg)
 
+    # ----------------------------- Utility Methods ------------------------- #
+    def _url_scheme_is_permitted(
+        self,
+        request: urllib.request.Request,
+        allowed: Sequence[str] = ("http", "https"),
+    ) -> bool:
+        """Return True when the request URL uses a permitted scheme."""
+        url = getattr(request, "full_url", request.get_full_url())
+        return urllib.parse.urlparse(url).scheme in allowed
     # ----------------------------- Collections ----------------------------- #
     def search_collections(self, limit: int = 10) -> list[dict[str, Any]]:
         try:
@@ -537,6 +548,9 @@ class STACClient:
             headers=request_headers,
             method=method,
         )
+        if not self._url_scheme_is_permitted(req):
+            msg = f"Unsupported URL scheme in {url}"
+            raise ValueError(msg)
         # ---------------- SSL Context Handling ---------------- #
         context: ssl.SSLContext | None = None
         disable_ssl = os.getenv("STAC_MCP_UNSAFE_DISABLE_SSL") == "1"
@@ -571,7 +585,7 @@ class STACClient:
         effective_timeout = timeout if timeout is not None else 30
         for attempt in range(1, max_attempts + 1):
             try:
-                with urllib.request.urlopen(  # type: ignore[urllib-direct-use]
+                with urllib.request.urlopen(  # noqa: S310
                     req,
                     timeout=effective_timeout,
                     context=context,
@@ -611,9 +625,9 @@ class STACClient:
                         # Build insecure context and retry immediately (no backoff)
                         insecure_ctx = ssl.create_default_context()
                         insecure_ctx.check_hostname = False
-                        insecure_ctx.verify_mode = ssl.CERT_NONE  # type: ignore
+                        insecure_ctx.verify_mode = ssl.CERT_NONE
                         try:
-                            with urllib.request.urlopen(  # type: ignore
+                            with urllib.request.urlopen(  # noqa: S310
                                 req,
                                 timeout=effective_timeout,
                                 context=insecure_ctx,
@@ -650,14 +664,15 @@ class STACClient:
                     continue
                 # Map remaining URLErrors to actionable error types
                 msg = self._map_connection_error(url, exc, effective_timeout)
-                logger.error(
+                logger.exception(
                     "Connection failed after %d attempts: %s",
                     max_attempts,
                     msg,
                 )
                 raise ConnectionFailedError(msg) from exc
             except OSError as exc:  # pragma: no cover - network
-                # Catch socket.timeout (which is subclass of OSError) and other OS errors
+                # Catch socket.timeout (which is subclass of OSError) and
+                # other OS errors.
                 # Use builtin TimeoutError for isinstance check (Python 3.10+)
                 import socket  # noqa: PLC0415
 
@@ -673,12 +688,12 @@ class STACClient:
                         time.sleep(delay)
                         continue
                     msg = (
-                        f"Request to {url} timed out after {effective_timeout}s "
+                        f"Request to {url} timed out after {effective_timeout}s"
                         f"(attempted {max_attempts} times). "
                         "Consider increasing timeout parameter or checking "
                         "network connectivity."
                     )
-                    logger.error("Request timeout: %s", msg)
+                    logger.exception("Request timeout: %s", msg)
                     raise STACTimeoutError(msg) from exc
                 raise
         return None  # Should not reach here; loop either returns or raises

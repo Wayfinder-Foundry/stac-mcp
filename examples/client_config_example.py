@@ -93,7 +93,7 @@ def example_error_handling():
     client = STACClient("https://planetarycomputer.microsoft.com/api/stac/v1")
     try:
         # Simulate timeout with very short timeout
-        result = client._http_json("/conformance", timeout=0.001)  # noqa: SLF001
+        _ = client._http_json("/conformance", timeout=0.001)  # noqa: SLF001
     except STACTimeoutError as e:
         print("   ✓ Caught STACTimeoutError:")
         print(f"     Message: {e}")
@@ -103,7 +103,7 @@ def example_error_handling():
     print("\n2. Handling connection errors...")
     bad_client = STACClient("https://invalid-stac-catalog-example.com")
     try:
-        result = bad_client._http_json("/conformance", timeout=5)  # noqa: SLF001
+        _ = bad_client._http_json("/conformance", timeout=5)  # noqa: SLF001
     except ConnectionFailedError as e:
         print("   ✓ Caught ConnectionFailedError:")
         error_msg = str(e)
@@ -155,8 +155,8 @@ if __name__ == "__main__":
         print("Examples completed!")
         print("=" * 70 + "\n")
 
-    except Exception as e:
-        print(f"\nUnexpected error: {e}")
+    except RuntimeError as e:
+        print(f"\nRuntime error: {e}")
         import traceback
 
         traceback.print_exc()
