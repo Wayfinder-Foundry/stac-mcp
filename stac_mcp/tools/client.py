@@ -76,6 +76,7 @@ class ConnectionFailedError(ConnectionError):
     clearer context and remediation guidance.
     """
 
+
 class STACClient:
     """STAC Client wrapper for common operations."""
 
@@ -145,6 +146,7 @@ class STACClient:
         """Return True when the request URL uses a permitted scheme."""
         url = getattr(request, "full_url", request.get_full_url())
         return urllib.parse.urlparse(url).scheme in allowed
+
     # ----------------------------- Collections ----------------------------- #
     def search_collections(self, limit: int = 10) -> list[dict[str, Any]]:
         try:

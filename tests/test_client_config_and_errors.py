@@ -39,7 +39,7 @@ class TestTimeoutConfiguration:
         """Test that default timeout of 30s is used when not specified."""
         client = STACClient("https://example.com")
 
-        def check_timeout(req, timeout=None, context=None): # noqa: ARG001
+        def check_timeout(req, timeout=None, context=None):  # noqa: ARG001
             assert timeout == TIMEOUT_30_SECONDS, "Default timeout should be 30 seconds"
             test_error = "test"
             raise URLError(test_error)
@@ -54,7 +54,7 @@ class TestTimeoutConfiguration:
         """Test that custom timeout is passed to urlopen."""
         client = STACClient("https://example.com")
 
-        def check_timeout(req, timeout=None, context=None): # noqa: ARG001
+        def check_timeout(req, timeout=None, context=None):  # noqa: ARG001
             assert timeout == TIMEOUT_60_SECONDS, "Custom timeout should be 60 seconds"
             test_error = "test"
             raise URLError(test_error)
@@ -69,7 +69,7 @@ class TestTimeoutConfiguration:
         """Test that timeout=0 (no timeout) is allowed."""
         client = STACClient("https://example.com")
 
-        def check_timeout(req, timeout=None, context=None): # noqa: ARG001
+        def check_timeout(req, timeout=None, context=None):  # noqa: ARG001
             assert timeout == TIMEOUT_NONE, "Timeout 0 should be passed through"
             test_error = "test"
             raise URLError(test_error)
@@ -88,7 +88,7 @@ class TestHeadersConfiguration:
         """Test that instance headers are included in requests."""
         client = STACClient("https://example.com", headers={"X-API-Key": "secret123"})
 
-        def check_headers(req, timeout=None, context=None): # noqa: ARG001
+        def check_headers(req, timeout=None, context=None):  # noqa: ARG001
             assert req.headers.get("X-api-key") == "secret123"
             test_error = "test"
             raise URLError(test_error)
@@ -106,7 +106,7 @@ class TestHeadersConfiguration:
             headers={"X-API-Key": "default", "X-Other": "value"},
         )
 
-        def check_headers(req, timeout=None, context=None): # noqa: ARG001
+        def check_headers(req, timeout=None, context=None):  # noqa: ARG001
             # Override should replace X-API-Key but keep X-Other
             assert req.headers.get("X-api-key") == "override"
             assert req.headers.get("X-other") == "value"
@@ -126,7 +126,7 @@ class TestHeadersConfiguration:
         """Test that Accept header is always set to application/json."""
         client = STACClient("https://example.com")
 
-        def check_headers(req, timeout=None, context=None): # noqa: ARG001
+        def check_headers(req, timeout=None, context=None):  # noqa: ARG001
             assert req.headers.get("Accept") == "application/json"
             test_error = "test"
             raise URLError(test_error)
@@ -174,7 +174,7 @@ class TestTimeoutErrorMapping:
         client = STACClient("https://example.com")
         call_count = 0
 
-        def side_effect(*args, **kwargs): # noqa: ARG001
+        def side_effect(*args, **kwargs):  # noqa: ARG001
             nonlocal call_count
             call_count += 1
             timed_out_error = "timed out"
@@ -187,7 +187,7 @@ class TestTimeoutErrorMapping:
 
         # Should retry 3 times (initial + 2 retries)
         assert call_count == CALL_COUNT
-        assert client._last_retry_attempts == RETRY_ATTEMPTS # noqa: SLF001
+        assert client._last_retry_attempts == RETRY_ATTEMPTS  # noqa: SLF001
 
 
 class TestConnectionErrorMapping:
@@ -251,7 +251,7 @@ class TestConnectionErrorMapping:
         client = STACClient("https://example.com")
         call_count = 0
 
-        def side_effect(*args, **kwargs): # noqa: ARG001
+        def side_effect(*args, **kwargs):  # noqa: ARG001
             nonlocal call_count
             call_count += 1
             conn_refused = "Connection refused"
@@ -264,7 +264,7 @@ class TestConnectionErrorMapping:
 
         # Should retry 3 times (initial + 2 retries)
         assert call_count == CALL_COUNT
-        assert client._last_retry_attempts == RETRY_ATTEMPTS # noqa: SLF001
+        assert client._last_retry_attempts == RETRY_ATTEMPTS  # noqa: SLF001
 
 
 class TestErrorLogging:
