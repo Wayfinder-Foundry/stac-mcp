@@ -354,9 +354,9 @@ The project uses semantic versioning (SemVer) with automated version management 
 
 #### Branch-Based Automatic Versioning
 When PRs are merged to `main`, the workflow inspects the merged branch name (via the PR head ref) and increments the version if it matches a prefix:
-- **hotfix/** or **copilot/fix-** branches → patch increment (0.1.0 → 0.1.1) for bug fixes
-- **feature/** branches → minor increment (0.1.0 → 0.2.0) for new features  
-- **release/** branches → major increment (0.1.0 → 1.0.0) for breaking changes
+- **hotfix/**, **copilot/fix-**, or **copilot/hotfix/** branches → patch increment (0.1.0 → 0.1.1) for bug fixes
+- **feature/** or **copilot/feature/** branches → minor increment (0.1.0 → 0.2.0) for new features  
+- **release/** or **copilot/release/** branches → major increment (0.1.0 → 1.0.0) for breaking changes
 
 #### Manual Version Management
 You can also manually manage versions using the version script (should normally not be needed unless doing a coordinated release):
