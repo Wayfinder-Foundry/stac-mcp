@@ -10,8 +10,6 @@ Tests focus on:
 
 from __future__ import annotations
 
-import pytest
-
 from stac_mcp.tools.definitions import get_tool_definitions
 
 
@@ -45,25 +43,7 @@ class TestToolDefinitions:
         """Test that all expected tools are present."""
         tools = get_tool_definitions()
         tool_names = {tool.name for tool in tools}
-        
-        expected_tools = {
-            "get_root",
-            "get_conformance",
-            "get_queryables",
-            "get_aggregations",
-            "search_collections",
-            "get_collection",
-            "search_items",
-            "get_item",
-            "estimate_data_size",
-            "create_collection",
-            "create_item",
-            "update_collection",
-            "update_item",
-            "delete_collection",
-            "delete_item",
-        }
-        
+
         # Check that at least the core tools are present
         core_tools = {
             "get_root",
@@ -76,7 +56,7 @@ class TestToolDefinitions:
             "get_item",
             "estimate_data_size",
         }
-        
+
         assert core_tools.issubset(tool_names)
 
 
@@ -93,12 +73,12 @@ class TestToolInputSchemas:
     def test_output_format_parameter_consistent(self):
         """Test that output_format parameter is consistently defined."""
         tools = get_tool_definitions()
-        
+
         # Most tools should have output_format parameter
         for tool in tools:
             schema = tool.inputSchema
             properties = schema.get("properties", {})
-            
+
             if "output_format" in properties:
                 output_format = properties["output_format"]
                 assert output_format.get("type") == "string"
@@ -109,11 +89,11 @@ class TestToolInputSchemas:
     def test_catalog_url_parameter_consistent(self):
         """Test that catalog_url parameter is consistently defined."""
         tools = get_tool_definitions()
-        
+
         for tool in tools:
             schema = tool.inputSchema
             properties = schema.get("properties", {})
-            
+
             if "catalog_url" in properties:
                 catalog_url = properties["catalog_url"]
                 assert catalog_url.get("type") == "string"
@@ -127,10 +107,10 @@ class TestSpecificToolDefinitions:
         """Test get_root tool definition."""
         tools = get_tool_definitions()
         get_root = next((t for t in tools if t.name == "get_root"), None)
-        
+
         assert get_root is not None
         assert "root document" in get_root.description.lower()
-        
+
         properties = get_root.inputSchema.get("properties", {})
         assert "output_format" in properties
         assert "catalog_url" in properties
@@ -142,15 +122,15 @@ class TestSpecificToolDefinitions:
             (t for t in tools if t.name == "get_conformance"),
             None,
         )
-        
+
         assert get_conformance is not None
         assert "conformance" in get_conformance.description.lower()
-        
+
         properties = get_conformance.inputSchema.get("properties", {})
         assert "output_format" in properties
         assert "check" in properties
         assert "catalog_url" in properties
-        
+
         # Check parameter should accept string or array
         check = properties["check"]
         assert "oneOf" in check or "type" in check
@@ -162,10 +142,10 @@ class TestSpecificToolDefinitions:
             (t for t in tools if t.name == "get_queryables"),
             None,
         )
-        
+
         assert get_queryables is not None
         assert "queryable" in get_queryables.description.lower()
-        
+
         properties = get_queryables.inputSchema.get("properties", {})
         assert "output_format" in properties
         assert "collection_id" in properties
@@ -178,14 +158,14 @@ class TestSpecificToolDefinitions:
             (t for t in tools if t.name == "get_aggregations"),
             None,
         )
-        
+
         assert get_aggregations is not None
         assert "aggregation" in get_aggregations.description.lower()
-        
+
         properties = get_aggregations.inputSchema.get("properties", {})
         assert "output_format" in properties
         assert "collections" in properties
-        
+
         # Should have optional search parameters
         optional_params = ["bbox", "datetime", "query", "fields", "operations", "limit"]
         for param in optional_params:
@@ -199,7 +179,7 @@ class TestSpecificToolDefinitions:
             (t for t in tools if t.name == "search_collections"),
             None,
         )
-        
+
         assert search_collections is not None
         assert "search" in search_collections.description.lower()
         assert "collection" in search_collections.description.lower()
@@ -211,11 +191,11 @@ class TestSpecificToolDefinitions:
             (t for t in tools if t.name == "get_collection"),
             None,
         )
-        
+
         assert get_collection is not None
         properties = get_collection.inputSchema.get("properties", {})
         assert "collection_id" in properties
-        
+
         # collection_id should be required
         collection_id = properties["collection_id"]
         assert collection_id.get("type") == "string"
@@ -227,10 +207,10 @@ class TestSpecificToolDefinitions:
             (t for t in tools if t.name == "search_items"),
             None,
         )
-        
+
         assert search_items is not None
         properties = search_items.inputSchema.get("properties", {})
-        
+
         # Should have search parameters
         search_params = ["collections", "bbox", "datetime", "limit"]
         for param in search_params:
@@ -241,7 +221,7 @@ class TestSpecificToolDefinitions:
         """Test get_item tool definition."""
         tools = get_tool_definitions()
         get_item = next((t for t in tools if t.name == "get_item"), None)
-        
+
         assert get_item is not None
         properties = get_item.inputSchema.get("properties", {})
         assert "collection_id" in properties
@@ -254,11 +234,13 @@ class TestSpecificToolDefinitions:
             (t for t in tools if t.name == "estimate_data_size"),
             None,
         )
-        
+
         assert estimate_data_size is not None
-        assert "estimate" in estimate_data_size.description.lower() or \
-               "size" in estimate_data_size.description.lower()
-        
+        assert (
+            "estimate" in estimate_data_size.description.lower()
+            or "size" in estimate_data_size.description.lower()
+        )
+
         properties = estimate_data_size.inputSchema.get("properties", {})
         # Should have search parameters plus AOI
         if "aoi_geojson" in properties:
@@ -275,7 +257,7 @@ class TestTransactionToolDefinitions:
             (t for t in tools if t.name == "create_collection"),
             None,
         )
-        
+
         if create_collection:
             assert "create" in create_collection.description.lower()
             properties = create_collection.inputSchema.get("properties", {})
@@ -288,11 +270,16 @@ class TestTransactionToolDefinitions:
             (t for t in tools if t.name == "create_item"),
             None,
         )
-        
+
         if create_item:
             assert "create" in create_item.description.lower()
             properties = create_item.inputSchema.get("properties", {})
-            assert "item" in properties or "collection_id" in properties or len(properties) > 0
+            # Check that properties exist and contain expected fields
+            assert (
+                "item" in properties
+                or "collection_id" in properties
+                or len(properties) > 0
+            )
 
     def test_update_collection_definition(self):
         """Test update_collection tool definition."""
@@ -301,7 +288,7 @@ class TestTransactionToolDefinitions:
             (t for t in tools if t.name == "update_collection"),
             None,
         )
-        
+
         if update_collection:
             assert "update" in update_collection.description.lower()
 
@@ -312,7 +299,7 @@ class TestTransactionToolDefinitions:
             (t for t in tools if t.name == "update_item"),
             None,
         )
-        
+
         if update_item:
             assert "update" in update_item.description.lower()
 
@@ -323,7 +310,7 @@ class TestTransactionToolDefinitions:
             (t for t in tools if t.name == "delete_collection"),
             None,
         )
-        
+
         if delete_collection:
             assert "delete" in delete_collection.description.lower()
 
@@ -334,7 +321,7 @@ class TestTransactionToolDefinitions:
             (t for t in tools if t.name == "delete_item"),
             None,
         )
-        
+
         if delete_item:
             assert "delete" in delete_item.description.lower()
 
@@ -345,17 +332,18 @@ class TestToolDescriptions:
     def test_all_descriptions_are_informative(self):
         """Test that all tool descriptions are sufficiently detailed."""
         tools = get_tool_definitions()
-        
+
+        min_desc_length = 20
         for tool in tools:
             # Description should be at least 20 characters
-            assert len(tool.description) >= 20
+            assert len(tool.description) >= min_desc_length
             # Description should not be just the tool name
             assert tool.description.lower() != tool.name.lower()
 
     def test_descriptions_mention_key_functionality(self):
         """Test that descriptions mention key functionality."""
         tools = get_tool_definitions()
-        
+
         functionality_keywords = {
             "get_root": ["root", "document"],
             "get_conformance": ["conformance", "class"],
@@ -367,7 +355,7 @@ class TestToolDescriptions:
             "get_item": ["item"],
             "estimate_data_size": ["estimate", "size", "data"],
         }
-        
+
         for tool in tools:
             if tool.name in functionality_keywords:
                 keywords = functionality_keywords[tool.name]
@@ -382,7 +370,7 @@ class TestSchemaValidation:
     def test_schemas_are_valid_objects(self):
         """Test that all schemas are valid dictionaries."""
         tools = get_tool_definitions()
-        
+
         for tool in tools:
             schema = tool.inputSchema
             assert isinstance(schema, dict)
@@ -392,25 +380,22 @@ class TestSchemaValidation:
     def test_properties_are_properly_typed(self):
         """Test that all properties have valid type definitions."""
         tools = get_tool_definitions()
-        
-        valid_types = {"string", "number", "integer", "boolean", "array", "object"}
-        
+
         for tool in tools:
             properties = tool.inputSchema.get("properties", {})
-            for prop_name, prop_schema in properties.items():
+            for prop_schema in properties.values():
                 if isinstance(prop_schema, dict):
                     # Either has type or oneOf/anyOf/allOf
                     has_type = "type" in prop_schema
                     has_composite = any(
-                        k in prop_schema
-                        for k in ["oneOf", "anyOf", "allOf"]
+                        k in prop_schema for k in ["oneOf", "anyOf", "allOf"]
                     )
                     assert has_type or has_composite
 
     def test_enum_constraints_are_arrays(self):
         """Test that enum constraints are arrays."""
         tools = get_tool_definitions()
-        
+
         for tool in tools:
             properties = tool.inputSchema.get("properties", {})
             for prop_schema in properties.values():

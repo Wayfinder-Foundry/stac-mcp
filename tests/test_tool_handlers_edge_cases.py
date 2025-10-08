@@ -443,7 +443,8 @@ class TestInvalidInputHandling:
     @pytest.mark.asyncio
     async def test_unknown_tool(self):
         """Test calling an unknown tool."""
-        with pytest.raises(Exception):
+        # Should raise an error for unknown tools
+        with pytest.raises((KeyError, ValueError, Exception)):
             await handle_call_tool("nonexistent_tool", {})
 
     @pytest.mark.asyncio

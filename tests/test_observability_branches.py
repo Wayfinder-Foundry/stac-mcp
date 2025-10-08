@@ -13,9 +13,8 @@ from __future__ import annotations
 import io
 import json
 import logging
-import os
+import threading
 from contextlib import redirect_stderr
-from unittest.mock import patch
 
 import pytest
 
@@ -76,10 +75,7 @@ class TestInitLogging:
         logger = logging.getLogger("stac_mcp")
         # Should have JSON formatter
         assert len(logger.handlers) > 0
-        assert any(
-            isinstance(h.formatter, JSONLogFormatter)
-            for h in logger.handlers
-        )
+        assert any(isinstance(h.formatter, JSONLogFormatter) for h in logger.handlers)
 
     def test_init_logging_idempotent(self, monkeypatch):
         """Test that init_logging can be called multiple times safely."""
@@ -138,7 +134,7 @@ class TestJSONLogFormatter:
             exc_info = True
         else:
             exc_info = None
-        
+
         record = logging.LogRecord(
             name="test",
             level=logging.ERROR,
@@ -199,11 +195,11 @@ class TestMetricsRegistry:
         """Test latency histogram buckets."""
         registry = MetricsRegistry()
         # Observe values in different buckets
-        registry.observe_latency("test.latency", 3.0)    # bucket: 5
-        registry.observe_latency("test.latency", 15.0)   # bucket: 25
-        registry.observe_latency("test.latency", 75.0)   # bucket: 100
+        registry.observe_latency("test.latency", 3.0)  # bucket: 5
+        registry.observe_latency("test.latency", 15.0)  # bucket: 25
+        registry.observe_latency("test.latency", 75.0)  # bucket: 100
         registry.observe_latency("test.latency", 500.0)  # bucket: 500
-        
+
         snapshot = registry.latency_snapshot()
         buckets = snapshot["test.latency"]["buckets"]
         assert buckets["5"] >= 1
@@ -218,7 +214,7 @@ class TestMetricsRegistry:
         snapshot1 = registry.snapshot()
         registry.increment("counter2", 20)
         snapshot2 = registry.snapshot()
-        
+
         # snapshot1 should not be affected by later increments
         assert "counter2" not in snapshot1
         assert "counter1" in snapshot2
@@ -248,12 +244,11 @@ class TestTraceSpan:
         monkeypatch.setenv("STAC_MCP_LOG_LEVEL", "DEBUG")
         observability._logger_state["initialized"] = False  # noqa: SLF001
         init_logging()
-        
+
         stderr = io.StringIO()
-        with redirect_stderr(stderr):
-            with trace_span("test_operation", attr1="value1"):
-                pass
-        
+        with redirect_stderr(stderr), trace_span("test_operation", attr1="value1"):
+            pass
+
         # Should log span information
         output = stderr.getvalue()
         # May contain trace_span in debug logs
@@ -262,10 +257,13 @@ class TestTraceSpan:
     def test_trace_span_with_exception(self, monkeypatch):
         """Test trace_span with exception inside."""
         monkeypatch.setenv("STAC_MCP_ENABLE_TRACE", "true")
-        
-        with pytest.raises(ValueError):
-            with trace_span("failing_operation"):
-                raise ValueError("Test error")
+
+        error_msg = "Test error"
+        with (
+            pytest.raises(ValueError, match=error_msg),
+            trace_span("failing_operation"),
+        ):
+            raise ValueError(error_msg)
 
 
 class TestCorrelationId:
@@ -275,13 +273,16 @@ class TestCorrelationId:
         """Test that correlation IDs are UUIDs."""
         corr_id = new_correlation_id()
         assert isinstance(corr_id, str)
-        assert len(corr_id) == 36  # UUID format
-        assert corr_id.count("-") == 4
+        uuid_length = 36
+        uuid_dash_count = 4
+        assert len(corr_id) == uuid_length  # UUID format
+        assert corr_id.count("-") == uuid_dash_count
 
     def test_correlation_id_uniqueness(self):
         """Test that correlation IDs are unique."""
-        ids = {new_correlation_id() for _ in range(100)}
-        assert len(ids) == 100
+        num_ids = 100
+        ids = {new_correlation_id() for _ in range(num_ids)}
+        assert len(ids) == num_ids
 
 
 class TestMetricsEnabled:
@@ -377,43 +378,43 @@ class TestConcurrentAccess:
 
     def test_concurrent_metric_increments(self):
         """Test concurrent increments are thread-safe."""
-        import threading
-        
         registry = MetricsRegistry()
-        
+        increments_per_thread = 100
+        num_threads = 10
+
         def increment_many():
-            for _ in range(100):
+            for _ in range(increments_per_thread):
                 registry.increment("concurrent.counter", 1)
-        
-        threads = [threading.Thread(target=increment_many) for _ in range(10)]
+
+        threads = [threading.Thread(target=increment_many) for _ in range(num_threads)]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
-        
+
         snapshot = registry.snapshot()
-        # Should have exactly 1000 increments (10 threads * 100 each)
-        assert snapshot["concurrent.counter"] == 1000
+        expected_total = num_threads * increments_per_thread
+        assert snapshot["concurrent.counter"] == expected_total
 
     def test_concurrent_latency_observations(self):
         """Test concurrent latency observations are thread-safe."""
-        import threading
-        
         registry = MetricsRegistry()
-        
+        observations_per_thread = 50
+        num_threads = 5
+
         def observe_many():
-            for i in range(50):
+            for i in range(observations_per_thread):
                 registry.observe_latency("concurrent.latency", float(i))
-        
-        threads = [threading.Thread(target=observe_many) for _ in range(5)]
+
+        threads = [threading.Thread(target=observe_many) for _ in range(num_threads)]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
-        
+
         snapshot = registry.latency_snapshot()
-        # Should have exactly 250 observations (5 threads * 50 each)
-        assert snapshot["concurrent.latency"]["count"] == 250
+        expected_total = num_threads * observations_per_thread
+        assert snapshot["concurrent.latency"]["count"] == expected_total
 
 
 class TestLoggerBackwardCompatibility:
@@ -424,9 +425,9 @@ class TestLoggerBackwardCompatibility:
         # Reset state
         observability._logger_state["initialized"] = False  # noqa: SLF001
         observability._logger_initialized = False  # noqa: SLF001
-        
+
         init_logging()
-        
+
         # Both should be set
         assert observability._logger_state["initialized"]  # noqa: SLF001
         # Note: _logger_initialized may be a shim for compatibility
