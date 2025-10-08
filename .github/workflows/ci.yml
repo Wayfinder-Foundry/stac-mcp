@@ -47,6 +47,9 @@ jobs:
           uv run coverage xml
           uv run python scripts/generate_coverage_badge.py coverage.xml coverage-badge.svg
           uv run coverage report
+      - name: Check coverage threshold
+        run: |
+          uv run coverage report --fail-under=85
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
