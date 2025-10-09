@@ -9,24 +9,19 @@ build:
 
 startCommand:
   type: "stdio"
-  
+  # Command to start the MCP server over stdio
+  command: "python"
+  args:
+    - "-m"
+    - "stac_mcp"
+
   # Configuration schema - the server accepts per-tool catalog_url parameters
   # rather than server-level configuration
   configSchema:
     type: "object"
     properties: {}
     required: []
-  
-  # Command to start the MCP server
-  # The server runs via stdio and accepts tool calls with optional catalog_url parameters
-  commandFunction: |-
-    (config) => {
-      return {
-        command: 'python',
-        args: ['-m', 'stac_mcp']
-      };
-    }
 
-# No server-level configuration needed
-# Each tool accepts an optional catalog_url parameter (defaults to Microsoft Planetary Computer)
-exampleConfig: {}
+  # No server-level configuration needed
+  # Each tool accepts an optional catalog_url parameter (defaults to Microsoft Planetary Computer)
+  exampleConfig: {}
