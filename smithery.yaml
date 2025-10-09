@@ -7,7 +7,7 @@ startCommand:
   # Command to start the MCP server over stdio
   commandFunction: |-
     (config) => ({
-      command: "python",
+      command: ".venv/bin/python",
       args: ["-m", "stac_mcp"]
     })
 
