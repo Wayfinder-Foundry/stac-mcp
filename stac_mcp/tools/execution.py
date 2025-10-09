@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
-from typing import Any, Iterable, NoReturn
+from collections.abc import Callable, Iterable
+from typing import Any, NoReturn
 
 from mcp.types import TextContent
 
 from stac_mcp import server as _server
-from stac_mcp.observability import instrument_tool_execution
+from stac_mcp.observability import instrument_tool_execution, record_tool_result_size
 from stac_mcp.tools.client import STACClient
 from stac_mcp.tools.estimate_data_size import handle_estimate_data_size
 from stac_mcp.tools.get_aggregations import handle_get_aggregations
@@ -117,7 +117,11 @@ async def execute_tool(
         if arguments is None:
             arguments = dict(handler)
         handler = None
-    if client is not None and not isinstance(client, STACClient) and isinstance(client, dict):
+    if (
+        client is not None
+        and not isinstance(client, STACClient)
+        and isinstance(client, dict)
+    ):
         if arguments is None:
             arguments = dict(client)
         client = None
@@ -149,10 +153,10 @@ async def execute_tool(
             }
         else:
             payload = {"mode": "json", "data": raw_result}
-        return [
-            TextContent(type="text", text=json.dumps(payload, separators=(",", ":"))),
-        ]
+        payload_text = json.dumps(payload, separators=(",", ":"))
+        record_tool_result_size(tool_name, len(payload_text.encode("utf-8")))
+        return [TextContent(type="text", text=payload_text)]
     normalized = _as_text_content_list(raw_result)
-    if not normalized:
-        return []
+    total_bytes = sum(len(item.text.encode("utf-8")) for item in normalized)
+    record_tool_result_size(tool_name, total_bytes)
     return normalized

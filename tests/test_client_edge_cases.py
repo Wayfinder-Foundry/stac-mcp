@@ -233,10 +233,10 @@ class TestTimeoutHandling:
                 __exit__=MagicMock(return_value=False),
             ),
         ]
-
         result = client._http_json("/test", timeout=5)  # noqa: SLF001
         assert result == {"ok": True}
-        assert mock_urlopen.call_count == 2
+        expected_calls = 2
+        assert mock_urlopen.call_count == expected_calls
 
     @patch("stac_mcp.tools.client.urllib.request.urlopen")
     def test_timeout_all_retries_exhausted(self, mock_urlopen):
@@ -250,7 +250,8 @@ class TestTimeoutHandling:
 
         with pytest.raises(STACTimeoutError):
             client._http_json("/test", timeout=5)  # noqa: SLF001
-        assert mock_urlopen.call_count == 3
+        expected_calls = 3
+        assert mock_urlopen.call_count == expected_calls
 
 
 class TestResponseParsing:
@@ -344,6 +345,7 @@ class TestSearchOperations:
         result = client.search_collections()
         assert result == []
         mock_api.get_collections.assert_called_once()
+        mock_urlopen.assert_not_called()
 
     @patch("stac_mcp.tools.client.urllib.request.urlopen")
     def test_search_items_with_all_parameters(
@@ -371,6 +373,7 @@ class TestSearchOperations:
         assert result == []
         mock_api.search.assert_called_once()
         mock_search.items.assert_called_once()
+        mock_urlopen.assert_not_called()
 
     @patch("stac_mcp.tools.client.urllib.request.urlopen")
     def test_get_collection_not_found(
@@ -384,6 +387,7 @@ class TestSearchOperations:
 
         with pytest.raises(APIError):
             client.get_collection("missing")
+        mock_urlopen.assert_not_called()
 
     @patch("stac_mcp.tools.client.urllib.request.urlopen")
     def test_get_item_not_found(
@@ -399,6 +403,7 @@ class TestSearchOperations:
 
         with pytest.raises(APIError):
             client.get_item("col1", "missing")
+        mock_urlopen.assert_not_called()
 
 
 class TestConformanceHandling:
@@ -473,6 +478,7 @@ class TestURLEncoding:
         result = client.get_collection("test-col name")
         assert result["id"] == "test-col name"
         mock_api.get_collection.assert_called_once_with("test-col name")
+        mock_urlopen.assert_not_called()
 
     @patch("stac_mcp.tools.client.urllib.request.urlopen")
     def test_special_characters_in_item_id(
@@ -492,3 +498,4 @@ class TestURLEncoding:
         assert result["id"] == "test-item/path"
         mock_api.get_collection.assert_called_once_with("col1")
         mock_collection.get_item.assert_called_once_with("test-item/path")
+        mock_urlopen.assert_not_called()

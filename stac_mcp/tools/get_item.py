@@ -6,6 +6,8 @@ from mcp.types import TextContent
 
 from stac_mcp.tools.client import STACClient
 
+BBOX_MIN_COORDS = 4
+
 
 def handle_get_item(
     client: STACClient,
@@ -24,7 +26,7 @@ def handle_get_item(
     if dt_value:
         result_text += f"Date: {dt_value}\n"
     bbox = item.get("bbox")
-    if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+    if isinstance(bbox, (list, tuple)) and len(bbox) >= BBOX_MIN_COORDS:
         result_text += (
             f"BBox: [{bbox[0]:.2f}, {bbox[1]:.2f}, {bbox[2]:.2f}, {bbox[3]:.2f}]\n"
         )
@@ -40,7 +42,9 @@ def handle_get_item(
     for asset_key, asset in asset_entries:
         title = asset.get("title", asset_key) if isinstance(asset, dict) else asset_key
         result_text += f"  - **{asset_key}**: {title}\n"
-        asset_type = asset.get("type", "unknown") if isinstance(asset, dict) else "unknown"
+        asset_type = (
+            asset.get("type", "unknown") if isinstance(asset, dict) else "unknown"
+        )
         result_text += f"    Type: {asset_type}\n"
         if isinstance(asset, dict) and "href" in asset:
             result_text += f"    URL: {asset['href']}\n"

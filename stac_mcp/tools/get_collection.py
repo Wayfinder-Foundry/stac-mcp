@@ -6,6 +6,8 @@ from mcp.types import TextContent
 
 from stac_mcp.tools.client import STACClient
 
+BBOX_MIN_COORDS = 4
+
 
 def handle_get_collection(
     client: STACClient,
@@ -29,7 +31,7 @@ def handle_get_collection(
         bbox_list = spatial.get("bbox") or []
         if bbox_list:
             bbox = bbox_list[0]
-            if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+            if isinstance(bbox, (list, tuple)) and len(bbox) >= BBOX_MIN_COORDS:
                 result_text += (
                     "Spatial Extent: "
                     f"[{bbox[0]:.2f}, {bbox[1]:.2f}, {bbox[2]:.2f}, {bbox[3]:.2f}]\n"
@@ -40,9 +42,7 @@ def handle_get_collection(
             interval = interval_list[0]
             start = interval[0] if len(interval) > 0 else "unknown"
             end = interval[1] if len(interval) > 1 else "present"
-            result_text += (
-                f"Temporal Extent: {start} to {end or 'present'}\n"
-            )
+            result_text += f"Temporal Extent: {start} to {end or 'present'}\n"
     providers = collection.get("providers") or []
     if providers:
         result_text += f"\nProviders: {len(providers)}\n"

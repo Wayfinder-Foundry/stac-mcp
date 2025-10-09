@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 from mcp.types import TextContent
 
+from stac_mcp.observability import metrics_gauge_snapshot, metrics_snapshot
 from stac_mcp.tools.execution import execute_tool
 
 
@@ -394,3 +395,74 @@ class TestExecuteToolWithLogging:
             await execute_tool("failing_tool", failing_handler, None, {})
 
         # Error should be logged (verification would require log capture)
+
+
+class TestExecuteToolMetrics:
+    """Test that execute_tool records observability metrics."""
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_records_result_size_text(self, fresh_metrics_registry):
+        """Ensure result size metrics are recorded for text output."""
+
+        mock_handler = MagicMock(
+            return_value=[
+                TextContent(type="text", text="alpha"),
+                TextContent(type="text", text="βeta"),
+            ]
+        )
+
+        result = await execute_tool("metrics_text_tool", mock_handler, None, {})
+        combined = "".join(item.text for item in result)
+        expected_bytes = len(combined.encode("utf-8"))
+
+        registry_snapshot = fresh_metrics_registry.snapshot()
+        assert (
+            registry_snapshot["tool_result_bytes_total.metrics_text_tool"]
+            == expected_bytes
+        )
+
+        global_snapshot = metrics_snapshot()
+        assert (
+            global_snapshot.get("tool_result_bytes_total.metrics_text_tool")
+            == expected_bytes
+        )
+        assert global_snapshot.get("tool_result_bytes_total._all") == expected_bytes
+
+        gauges = metrics_gauge_snapshot()
+        size_gauge = gauges.get("tool_last_result_bytes.metrics_text_tool")
+        assert size_gauge == float(expected_bytes)
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_records_result_size_json(self, fresh_metrics_registry):
+        """Ensure result size metrics are recorded for JSON output."""
+
+        payload = {"items": [1, 2, 3]}
+        mock_handler = MagicMock(return_value=payload)
+
+        result = await execute_tool(
+            "metrics_json_tool",
+            mock_handler,
+            None,
+            {"output_format": "json"},
+        )
+
+        assert result
+        output_text = result[0].text
+        expected_bytes = len(output_text.encode("utf-8"))
+
+        registry_snapshot = fresh_metrics_registry.snapshot()
+        assert (
+            registry_snapshot["tool_result_bytes_total.metrics_json_tool"]
+            == expected_bytes
+        )
+
+        global_snapshot = metrics_snapshot()
+        assert (
+            global_snapshot.get("tool_result_bytes_total.metrics_json_tool")
+            == expected_bytes
+        )
+        assert global_snapshot.get("tool_result_bytes_total._all") == expected_bytes
+
+        gauges = metrics_gauge_snapshot()
+        size_gauge = gauges.get("tool_last_result_bytes.metrics_json_tool")
+        assert size_gauge == float(expected_bytes)
