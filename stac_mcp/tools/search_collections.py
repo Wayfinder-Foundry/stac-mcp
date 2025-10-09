@@ -22,11 +22,15 @@ def handle_search_collections(
         }
     result_text = f"Found {len(collections)} collections:\n\n"
     for collection in collections:
-        result_text += f"**{collection['title']}** (`{collection['id']}`)\n"
-        if collection["description"]:
-            desc = collection["description"]
+        title = collection.get("title") or collection.get("id", "Untitled collection")
+        identifier = collection.get("id", "unknown")
+        result_text += f"**{title}** (`{identifier}`)\n"
+        description = collection.get("description")
+        if description:
+            desc = str(description)
             truncated = desc[:MAX_DESC_PREVIEW]
             ellipsis = "..." if len(desc) > MAX_DESC_PREVIEW else ""
             result_text += f"  {truncated}{ellipsis}\n"
-        result_text += f"  License: {collection['license']}\n\n"
+        license_value = collection.get("license", "unspecified")
+        result_text += f"  License: {license_value}\n\n"
     return [TextContent(type="text", text=result_text)]

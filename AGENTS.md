@@ -23,6 +23,10 @@ Testing & validation
 - Write tests for behavior, not implementation; prefer parametrized tests for similar cases.
 - Run the full test suite locally:
   - pytest -v
+- Ensure all tests pass before pushing.
+- Follow the repository's Validation checklist:
+  - Ruff format and lint pass.
+  - All tests pass.
 - Validate MCP server functionality (example usage):
   - python examples/example_usage.py
 

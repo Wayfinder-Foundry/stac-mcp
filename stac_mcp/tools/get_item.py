@@ -16,21 +16,32 @@ def handle_get_item(
     item = client.get_item(collection_id, item_id)
     if arguments.get("output_format") == "json":
         return {"type": "item", "item": item}
-    result_text = f"**Item: {item['id']}**\n\n"
-    result_text += f"Collection: `{item['collection']}`\n"
-    if item["datetime"]:
-        result_text += f"Date: {item['datetime']}\n"
-    if item["bbox"]:
-        b = item["bbox"]
-        result_text += f"BBox: [{b[0]:.2f}, {b[1]:.2f}, {b[2]:.2f}, {b[3]:.2f}]\n"
+    item_id_value = item.get("id", item_id)
+    result_text = f"**Item: {item_id_value}**\n\n"
+    collection_value = item.get("collection", collection_id)
+    result_text += f"Collection: `{collection_value}`\n"
+    dt_value = item.get("datetime")
+    if dt_value:
+        result_text += f"Date: {dt_value}\n"
+    bbox = item.get("bbox")
+    if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+        result_text += (
+            f"BBox: [{bbox[0]:.2f}, {bbox[1]:.2f}, {bbox[2]:.2f}, {bbox[3]:.2f}]\n"
+        )
     result_text += "\n**Properties:**\n"
-    for key, value in item["properties"].items():
-        if isinstance(value, str | int | float | bool):
+    properties = item.get("properties") or {}
+    for key, value in properties.items():
+        if isinstance(value, (str, int, float, bool)):
             result_text += f"  {key}: {value}\n"
-    result_text += f"\n**Assets ({len(item['assets'])}):**\n"
-    for asset_key, asset in item["assets"].items():
-        result_text += f"  - **{asset_key}**: {asset.get('title', asset_key)}\n"
-        result_text += f"    Type: {asset.get('type', 'unknown')}\n"
-        if "href" in asset:
+    assets = item.get("assets") or {}
+    asset_count = len(assets) if hasattr(assets, "__len__") else 0
+    result_text += f"\n**Assets ({asset_count}):**\n"
+    asset_entries = assets.items() if isinstance(assets, dict) else []
+    for asset_key, asset in asset_entries:
+        title = asset.get("title", asset_key) if isinstance(asset, dict) else asset_key
+        result_text += f"  - **{asset_key}**: {title}\n"
+        asset_type = asset.get("type", "unknown") if isinstance(asset, dict) else "unknown"
+        result_text += f"    Type: {asset_type}\n"
+        if isinstance(asset, dict) and "href" in asset:
             result_text += f"    URL: {asset['href']}\n"
     return [TextContent(type="text", text=result_text)]

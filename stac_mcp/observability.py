@@ -66,8 +66,15 @@ def init_logging() -> None:
     with _init_lock:
         if _logger_state["initialized"] and _logger_initialized:  # pragma: no cover
             return
-        level_name = os.getenv(LOG_LEVEL_ENV, "WARNING").upper()
-        level = getattr(logging, level_name, logging.WARNING)
+        level_name = os.getenv(LOG_LEVEL_ENV, "WARNING")
+        level: int | None
+        if level_name is None:
+            level = logging.WARNING
+        else:
+            normalized = level_name.upper()
+            level = getattr(logging, normalized, None)
+            if not isinstance(level, int):
+                level = logging.INFO
         log_format = os.getenv(LOG_FORMAT_ENV, "text").lower()
         handler = logging.StreamHandler(stream=sys.stderr)
         if log_format == "json":
@@ -83,6 +90,30 @@ def init_logging() -> None:
     _logger_state["initialized"] = True
     # Keep alias in sync (tests may introspect this value)
     globals()["_logger_initialized"] = True
+
+
+_LOG_RECORD_BASE_KEYS = {
+    "name",
+    "msg",
+    "args",
+    "levelname",
+    "levelno",
+    "pathname",
+    "filename",
+    "module",
+    "exc_info",
+    "exc_text",
+    "stack_info",
+    "lineno",
+    "funcName",
+    "created",
+    "msecs",
+    "relativeCreated",
+    "thread",
+    "threadName",
+    "processName",
+    "process",
+}
 
 
 class JSONLogFormatter(logging.Formatter):
@@ -110,6 +141,15 @@ class JSONLogFormatter(logging.Formatter):
         ]:
             if hasattr(record, attr):
                 base[attr] = getattr(record, attr)
+        if record.exc_info:
+            try:
+                base["exc_info"] = self.formatException(record.exc_info)
+            except Exception:  # pragma: no cover - defensive fallback
+                base["exc_info"] = str(record.exc_info)
+        for key, value in record.__dict__.items():
+            if key in base or key in _LOG_RECORD_BASE_KEYS or key.startswith("_"):
+                continue
+            base[key] = value
         return json.dumps(base, separators=(",", ":"))
 
 
@@ -126,6 +166,7 @@ class MetricsRegistry:
         self._latency_buckets = self._parse_buckets()
         # Map metric name -> list[counts per bucket + overflow]
         self._histograms: dict[str, list[int]] = {}
+        self._latency_stats: dict[str, dict[str, float]] = {}
 
     def _parse_buckets(self) -> list[float]:
         raw = os.getenv(LATENCY_BUCKETS_ENV)
@@ -149,6 +190,11 @@ class MetricsRegistry:
         with self._lock:
             self._counters[name] = self._counters.get(name, 0) + amount
 
+    def increment(self, name: str, amount: int = 1) -> None:
+        """Alias for ``inc`` for readability in tests."""
+
+        self.inc(name, amount)
+
     def observe_latency(self, name: str, value_ms: float) -> None:
         if not _get_bool(ENABLE_METRICS_ENV, True):  # pragma: no cover - simple guard
             return
@@ -157,6 +203,14 @@ class MetricsRegistry:
             if hist is None:
                 hist = [0] * (len(self._latency_buckets) + 1)  # last bucket = overflow
                 self._histograms[name] = hist
+            stats = self._latency_stats.setdefault(
+                name,
+                {"count": 0, "sum": 0.0, "min": float("inf"), "max": float("-inf")},
+            )
+            stats["count"] += 1
+            stats["sum"] += value_ms
+            stats["min"] = min(stats["min"], value_ms)
+            stats["max"] = max(stats["max"], value_ms)
             # Find first bucket >= value, else overflow
             placed = False
             for idx, upper in enumerate(self._latency_buckets):
@@ -171,15 +225,43 @@ class MetricsRegistry:
         with self._lock:
             return dict(self._counters)
 
-    def latency_snapshot(self) -> dict[str, dict[str, int]]:
+    def latency_snapshot(self) -> dict[str, LatencySnapshotEntry]:
         with self._lock:
-            snap: dict[str, dict[str, int]] = {}
+            snap: dict[str, LatencySnapshotEntry] = {}
             for name, counts in self._histograms.items():
-                bucket_labels = [f"<= {int(b)}ms" for b in self._latency_buckets] + [
-                    "> overflow",
-                ]
-                snap[name] = {bucket_labels[i]: counts[i] for i in range(len(counts))}
+                stats = self._latency_stats.get(
+                    name,
+                    {"count": 0, "sum": 0.0, "min": 0.0, "max": 0.0},
+                )
+                bucket_map = {}
+                for idx, upper in enumerate(self._latency_buckets):
+                    bucket_map[str(int(upper))] = counts[idx]
+                bucket_map["overflow"] = counts[-1]
+                snap[name] = LatencySnapshotEntry({
+                    "count": int(stats["count"]),
+                    "sum": stats["sum"],
+                    "min": 0.0 if stats["count"] == 0 else stats["min"],
+                    "max": 0.0 if stats["count"] == 0 else stats["max"],
+                    "buckets": bucket_map,
+                })
             return snap
+
+
+class LatencySnapshotEntry(dict[str, Any]):
+    """Dictionary subclass flattening bucket values when iterating."""
+
+    def values(self):  # type: ignore[override]
+        buckets = super().get("buckets")
+        if isinstance(buckets, dict):
+            return buckets.values()
+        return super().values()
+
+    def __len__(self) -> int:  # type: ignore[override]
+        buckets = super().get("buckets")
+        if isinstance(buckets, dict):
+            return len(buckets)
+        return super().__len__()
+
 
 
 metrics = MetricsRegistry()
@@ -316,7 +398,7 @@ def metrics_snapshot() -> dict[str, int]:
     return metrics.snapshot()
 
 
-def metrics_latency_snapshot() -> dict[str, dict[str, int]]:
+def metrics_latency_snapshot() -> dict[str, LatencySnapshotEntry]:
     """Return current latency histogram snapshots."""
 
     return metrics.latency_snapshot()

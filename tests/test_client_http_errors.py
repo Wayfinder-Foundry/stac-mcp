@@ -10,7 +10,6 @@ These focus on branches previously un-covered:
 from __future__ import annotations
 
 import json
-from io import BytesIO
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
@@ -35,22 +34,12 @@ class _FakeResponse:
         return False
 
 
-def _mk_http_error(code: int) -> HTTPError:
-    return HTTPError(
-        url="https://example.com",
-        code=code,
-        msg="err",
-        hdrs=None,
-        fp=BytesIO(),
-    )
-
-
 @patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_http_json_404_returns_none(mock_urlopen):
+def test_http_json_404_returns_none(mock_urlopen, http_error_factory):
     client = STACClient("https://example.com")
 
     def raise_404(*_, **__):
-        raise _mk_http_error(404)
+        raise http_error_factory(404)
 
     mock_urlopen.side_effect = raise_404
     # 404 should yield None
@@ -58,11 +47,11 @@ def test_http_json_404_returns_none(mock_urlopen):
 
 
 @patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_http_json_500_raises(mock_urlopen):
+def test_http_json_500_raises(mock_urlopen, http_error_factory):
     client = STACClient("https://example.com")
 
     def raise_500(*_, **__):
-        raise _mk_http_error(500)
+        raise http_error_factory(500)
 
     mock_urlopen.side_effect = raise_500
     with pytest.raises(HTTPError):
