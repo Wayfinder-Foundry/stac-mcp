@@ -346,7 +346,7 @@ def get_tool_definitions() -> list[Tool]:
         ),
         Tool(
             name="delete_item",
-            description="Delete a STAC item",
+            description="Delete an existing STAC item from a collection",
             inputSchema={
                 "type": "object",
                 "properties": {

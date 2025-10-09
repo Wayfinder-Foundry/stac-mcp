@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any, NoReturn
 
 from mcp.types import TextContent
 
 from stac_mcp import server as _server
-from stac_mcp.observability import instrument_tool_execution
+from stac_mcp.observability import instrument_tool_execution, record_tool_result_size
 from stac_mcp.tools.client import STACClient
 from stac_mcp.tools.estimate_data_size import handle_estimate_data_size
 from stac_mcp.tools.get_aggregations import handle_get_aggregations
@@ -63,26 +63,79 @@ _TOOL_HANDLERS: dict[str, Handler] = {
 }
 
 
-async def execute_tool(tool_name: str, arguments: dict[str, Any]):
-    """Dispatch tool execution based on name using registered handlers.
+def _raise_unknown_tool(name: str) -> NoReturn:
+    """Raise a standardized error for unknown tool names."""
+    _tools = list(_TOOL_HANDLERS.keys())
+    msg = f"Unknown tool: {name}. Available tools: {_tools}"
+    raise ValueError(msg)
 
-    Maintains backward-compatible output format (list[TextContent]).
+
+def _as_text_content_list(result: Any) -> list[TextContent]:
+    """Normalize arbitrary handler results into a list of TextContent."""
+
+    def _single(value: Any) -> TextContent:
+        if isinstance(value, TextContent):
+            return value
+        if isinstance(value, str):
+            return TextContent(type="text", text=value)
+        try:
+            serialized = json.dumps(value, separators=(",", ":"))
+        except TypeError:
+            serialized = str(value)
+        return TextContent(type="text", text=serialized)
+
+    if result is None:
+        return []
+    if isinstance(result, TextContent):
+        return [result]
+    if isinstance(result, list):
+        normalized: list[TextContent] = []
+        for item in result:
+            normalized.append(_single(item))
+        return normalized
+    if isinstance(result, Iterable) and not isinstance(result, (str, bytes, dict)):
+        return [_single(item) for item in result]
+    return [_single(result)]
+
+
+async def execute_tool(
+    tool_name: str,
+    handler: Handler | None = None,
+    client: STACClient | None = None,
+    arguments: dict[str, Any] | None = None,
+):
+    """Execute a tool handler with optional overrides for tests.
+
+    Parameters mirror the comprehensive execution tests: when *handler* or
+    *client* are provided they are used directly, otherwise the registered
+    handler and shared client are used. The return value is always normalized
+    to a ``list[TextContent]`` for compatibility with existing tooling.
     """
 
-    def _raise_unknown_tool(name: str) -> NoReturn:
-        """Raise a standardized error for unknown tool names."""
-        _tools = list(_TOOL_HANDLERS.keys())
-        msg = f"Unknown tool: {name}. Available tools: {_tools}"
-        raise ValueError(msg)
+    # Backward compatibility: legacy callers passed only (tool_name, arguments).
+    if handler is not None and not callable(handler):
+        if arguments is None:
+            arguments = dict(handler)
+        handler = None
+    if (
+        client is not None
+        and not isinstance(client, STACClient)
+        and isinstance(client, dict)
+    ):
+        if arguments is None:
+            arguments = dict(client)
+        client = None
 
-    catalog_url = arguments.get("catalog_url")
-    client = STACClient(catalog_url) if catalog_url else _server.stac_client
-    handler = _TOOL_HANDLERS.get(tool_name)
+    arguments = dict(arguments or {})
     if handler is None:
-        _raise_unknown_tool(tool_name)
-    # Let handler exceptions propagate so tests can assert on them
+        handler = _TOOL_HANDLERS.get(tool_name)
+        if handler is None:
+            _raise_unknown_tool(tool_name)
+    catalog_url = arguments.get("catalog_url")
+    if client is None:
+        client = STACClient(catalog_url) if catalog_url else _server.stac_client
+
     output_format = arguments.get("output_format", "text")
-    # Instrument execution (synchronous handler functions today)
     instrumented = instrument_tool_execution(
         tool_name,
         catalog_url,
@@ -91,23 +144,19 @@ async def execute_tool(tool_name: str, arguments: dict[str, Any]):
         arguments,
     )
     raw_result = instrumented.value
-    # Backward compatibility: existing handlers return list[TextContent].
-    # New JSON mode: handlers may return dict when output_format == 'json'.
     if output_format == "json":
-        if isinstance(raw_result, list):  # handler didn't implement JSON branch
-            # Wrap textual output in a JSON envelope for consistency
-            payload = {"mode": "text_fallback", "content": [c.text for c in raw_result]}
+        if isinstance(raw_result, list):
+            normalized = _as_text_content_list(raw_result)
+            payload = {
+                "mode": "text_fallback",
+                "content": [item.text for item in normalized],
+            }
         else:
             payload = {"mode": "json", "data": raw_result}
-        return [
-            TextContent(type="text", text=json.dumps(payload, separators=(",", ":"))),
-        ]
-    # Default text path: ensure list[TextContent]
-    if isinstance(raw_result, list):
-        return raw_result
-    # If a dict was returned but text requested, convert to pretty text summary
-    try:
-        summary = json.dumps(raw_result, indent=2)
-    except TypeError:  # pragma: no cover - edge serialization
-        summary = str(raw_result)
-    return [TextContent(type="text", text=summary)]
+        payload_text = json.dumps(payload, separators=(",", ":"))
+        record_tool_result_size(tool_name, len(payload_text.encode("utf-8")))
+        return [TextContent(type="text", text=payload_text)]
+    normalized = _as_text_content_list(raw_result)
+    total_bytes = sum(len(item.text.encode("utf-8")) for item in normalized)
+    record_tool_result_size(tool_name, total_bytes)
+    return normalized
