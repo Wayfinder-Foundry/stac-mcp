@@ -1,19 +1,15 @@
 # Smithery configuration for STAC MCP Server
 # This file enables deployment of the STAC MCP server on Smithery.ai
 
-runtime: "container"
-
-build:
-  dockerfile: "Containerfile"
-  dockerBuildPath: "."
+runtime: "python"
 
 startCommand:
-  type: "stdio"
   # Command to start the MCP server over stdio
-  command: "python"
-  args:
-    - "-m"
-    - "stac_mcp"
+  commandFunction: |-
+    (config) => ({
+      command: "python",
+      args: ["-m", "stac_mcp"]
+    })
 
   # Configuration schema - the server accepts per-tool catalog_url parameters
   # rather than server-level configuration

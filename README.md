@@ -9,6 +9,7 @@
 [![License](https://img.shields.io/github/license/BnJam/stac-mcp?style=flat-square)](https://github.com/BnJam/stac-mcp/blob/main/LICENSE)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/stac-mcp?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/stac-mcp)
 [![Ruff](https://img.shields.io/badge/lint-ruff-e57300?style=flat-square)](https://github.com/astral-sh/ruff)
+[![smithery badge](https://smithery.ai/badge/@Wayfinder-Foundry/stac-mcp)](https://smithery.ai/server/@Wayfinder-Foundry/stac-mcp)
 
 
 
