@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+import sys
 from unittest.mock import MagicMock, patch
 
-import pystac
 import pytest
 
 from stac_mcp.tools.pystac_management import PySTACManager
+
+
+def _get_pystac_from_sys():
+    """Get pystac module from sys.modules when mocked."""
+    return sys.modules.get("pystac", MagicMock())
 
 
 @pytest.fixture
@@ -79,8 +84,8 @@ def test_create_catalog_local(pystac_manager, tmp_path):
     """Test creating a local STAC Catalog."""
     mock_catalog = MagicMock()
     mock_catalog.to_dict.return_value = {"id": "test-catalog"}
-    pystac.Catalog.return_value = mock_catalog
-    pystac.CatalogType.SELF_CONTAINED = "SELF_CONTAINED"
+    sys.modules["pystac"].Catalog.return_value = mock_catalog
+    sys.modules["pystac"].CatalogType.SELF_CONTAINED = "SELF_CONTAINED"
 
     catalog_path = str(tmp_path / "catalog.json")
     result = pystac_manager.create_catalog(
@@ -91,7 +96,7 @@ def test_create_catalog_local(pystac_manager, tmp_path):
     )
 
     assert result == {"id": "test-catalog"}
-    pystac.Catalog.assert_called_once_with(
+    sys.modules["pystac"].Catalog.assert_called_once_with(
         id="test-catalog",
         description="Test catalog",
         title="Test Catalog",
@@ -136,12 +141,14 @@ def test_read_catalog_local(pystac_manager, sample_catalog):
     """Test reading a local STAC Catalog."""
     mock_catalog = MagicMock()
     mock_catalog.to_dict.return_value = sample_catalog
-    pystac.Catalog.from_file.return_value = mock_catalog
+    sys.modules["pystac"].Catalog.from_file.return_value = mock_catalog
 
     result = pystac_manager.read_catalog("/path/to/catalog.json")
 
     assert result == sample_catalog
-    pystac.Catalog.from_file.assert_called_once_with("/path/to/catalog.json")
+    sys.modules["pystac"].Catalog.from_file.assert_called_once_with(
+        "/path/to/catalog.json"
+    )
 
 
 @patch.dict("sys.modules", {"pystac": MagicMock()})
@@ -149,12 +156,12 @@ def test_read_catalog_remote(pystac_manager, sample_catalog):
     """Test reading a remote STAC Catalog."""
     mock_catalog = MagicMock()
     mock_catalog.to_dict.return_value = sample_catalog
-    pystac.Catalog.from_file.return_value = mock_catalog
+    sys.modules["pystac"].Catalog.from_file.return_value = mock_catalog
 
     result = pystac_manager.read_catalog("https://example.com/catalog.json")
 
     assert result == sample_catalog
-    pystac.Catalog.from_file.assert_called_once()
+    sys.modules["pystac"].Catalog.from_file.assert_called_once()
 
 
 @patch.dict("sys.modules", {"pystac": MagicMock()})
@@ -162,8 +169,8 @@ def test_update_catalog_local(pystac_manager, sample_catalog):
     """Test updating a local STAC Catalog."""
     mock_catalog = MagicMock()
     mock_catalog.to_dict.return_value = sample_catalog
-    pystac.Catalog.from_dict.return_value = mock_catalog
-    pystac.CatalogType.SELF_CONTAINED = "SELF_CONTAINED"
+    sys.modules["pystac"].Catalog.from_dict.return_value = mock_catalog
+    sys.modules["pystac"].CatalogType.SELF_CONTAINED = "SELF_CONTAINED"
 
     result = pystac_manager.update_catalog("/path/to/catalog.json", sample_catalog)
 
@@ -176,7 +183,7 @@ def test_update_catalog_local(pystac_manager, sample_catalog):
 def test_update_catalog_remote(mock_urlopen, pystac_manager, sample_catalog):
     """Test updating a remote STAC Catalog."""
     mock_catalog = MagicMock()
-    pystac.Catalog.from_dict.return_value = mock_catalog
+    sys.modules["pystac"].Catalog.from_dict.return_value = mock_catalog
 
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(sample_catalog).encode("utf-8")
@@ -218,9 +225,9 @@ def test_delete_catalog_remote(mock_urlopen, pystac_manager):
 def test_list_catalogs_remote(mock_urlopen, pystac_manager, sample_catalog):
     """Test listing remote STAC Catalogs."""
     mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps({"catalogs": [sample_catalog]}).encode(
-        "utf-8"
-    )
+    mock_response.read.return_value = json.dumps(
+        {"catalogs": [sample_catalog]}
+    ).encode("utf-8")
     mock_response.__enter__.return_value = mock_response
     mock_urlopen.return_value = mock_response
 
@@ -238,8 +245,8 @@ def test_create_collection_local(pystac_manager, sample_collection):
     """Test creating a local STAC Collection."""
     mock_collection = MagicMock()
     mock_collection.to_dict.return_value = sample_collection
-    pystac.Collection.from_dict.return_value = mock_collection
-    pystac.CatalogType.SELF_CONTAINED = "SELF_CONTAINED"
+    sys.modules["pystac"].Collection.from_dict.return_value = mock_collection
+    sys.modules["pystac"].CatalogType.SELF_CONTAINED = "SELF_CONTAINED"
 
     result = pystac_manager.create_collection(
         "/path/to/collection.json", sample_collection
@@ -279,7 +286,7 @@ def test_read_collection(pystac_manager, sample_collection):
     """Test reading a STAC Collection."""
     mock_coll = MagicMock()
     mock_coll.to_dict.return_value = sample_collection
-    pystac.Collection.from_file.return_value = mock_coll
+    sys.modules["pystac"].Collection.from_file.return_value = mock_coll
 
     result = pystac_manager.read_collection("/path/to/collection.json")
 
@@ -291,8 +298,8 @@ def test_update_collection_local(pystac_manager, sample_collection):
     """Test updating a local STAC Collection."""
     mock_coll = MagicMock()
     mock_coll.to_dict.return_value = sample_collection
-    pystac.Collection.from_dict.return_value = mock_coll
-    pystac.CatalogType.SELF_CONTAINED = "SELF_CONTAINED"
+    sys.modules["pystac"].Collection.from_dict.return_value = mock_coll
+    sys.modules["pystac"].CatalogType.SELF_CONTAINED = "SELF_CONTAINED"
 
     result = pystac_manager.update_collection(
         "/path/to/collection.json", sample_collection
@@ -337,7 +344,7 @@ def test_create_item_local(pystac_manager, sample_item):
     """Test creating a local STAC Item."""
     mock_item = MagicMock()
     mock_item.to_dict.return_value = sample_item
-    pystac.Item.from_dict.return_value = mock_item
+    sys.modules["pystac"].Item.from_dict.return_value = mock_item
 
     result = pystac_manager.create_item("/path/to/item.json", sample_item)
 
@@ -350,7 +357,7 @@ def test_create_item_local(pystac_manager, sample_item):
 def test_create_item_remote(mock_urlopen, pystac_manager, sample_item):
     """Test creating a remote STAC Item."""
     mock_item_obj = MagicMock()
-    pystac.Item.from_dict.return_value = mock_item_obj
+    sys.modules["pystac"].Item.from_dict.return_value = mock_item_obj
 
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(sample_item).encode("utf-8")
@@ -368,7 +375,7 @@ def test_read_item(pystac_manager, sample_item):
     """Test reading a STAC Item."""
     mock_item = MagicMock()
     mock_item.to_dict.return_value = sample_item
-    pystac.Item.from_file.return_value = mock_item
+    sys.modules["pystac"].Item.from_file.return_value = mock_item
 
     result = pystac_manager.read_item("/path/to/item.json")
 
@@ -380,7 +387,7 @@ def test_update_item_local(pystac_manager, sample_item):
     """Test updating a local STAC Item."""
     mock_item = MagicMock()
     mock_item.to_dict.return_value = sample_item
-    pystac.Item.from_dict.return_value = mock_item
+    sys.modules["pystac"].Item.from_dict.return_value = mock_item
 
     result = pystac_manager.update_item("/path/to/item.json", sample_item)
 

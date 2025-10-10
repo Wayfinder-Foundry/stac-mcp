@@ -51,7 +51,9 @@ class PySTACManager:
     def _read_json_file(self, path: str) -> dict[str, Any]:
         """Read JSON from local file or remote URL."""
         if self._is_remote(path):
-            req = urllib.request.Request(path, headers=self._get_headers())  # noqa: S310
+            req = urllib.request.Request(  # noqa: S310
+                path, headers=self._get_headers()
+            )
             with urllib.request.urlopen(req) as response:  # noqa: S310
                 return json.loads(response.read().decode("utf-8"))
         else:
@@ -213,7 +215,9 @@ class PySTACManager:
         """
         if self._is_remote(base_path):
             # For remote, fetch catalog list from API
-            req = urllib.request.Request(base_path, headers=self._get_headers())  # noqa: S310
+            req = urllib.request.Request(  # noqa: S310
+                base_path, headers=self._get_headers()
+            )
             with urllib.request.urlopen(req) as response:  # noqa: S310
                 data = json.loads(response.read().decode("utf-8"))
                 # Handle different API responses
@@ -236,7 +240,9 @@ class PySTACManager:
                     try:
                         catalogs.append(self.read_catalog(str(catalog_file)))
                     except Exception as e:  # noqa: BLE001
-                        logger.warning("Failed to read catalog %s: %s", catalog_file, e)
+                        logger.warning(
+                            "Failed to read catalog %s: %s", catalog_file, e
+                        )
             return catalogs
 
     # ======================== Collection Operations ========================
@@ -353,7 +359,9 @@ class PySTACManager:
         """
         if self._is_remote(base_path):
             # For remote, fetch collections from API
-            req = urllib.request.Request(base_path, headers=self._get_headers())  # noqa: S310
+            req = urllib.request.Request(  # noqa: S310
+                base_path, headers=self._get_headers()
+            )
             with urllib.request.urlopen(req) as response:  # noqa: S310
                 data = json.loads(response.read().decode("utf-8"))
                 if "collections" in data:
@@ -486,7 +494,9 @@ class PySTACManager:
         """
         if self._is_remote(base_path):
             # For remote, fetch items from API
-            req = urllib.request.Request(base_path, headers=self._get_headers())  # noqa: S310
+            req = urllib.request.Request(  # noqa: S310
+                base_path, headers=self._get_headers()
+            )
             with urllib.request.urlopen(req) as response:  # noqa: S310
                 data = json.loads(response.read().decode("utf-8"))
                 if "features" in data:

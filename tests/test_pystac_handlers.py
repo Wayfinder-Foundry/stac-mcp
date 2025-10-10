@@ -181,7 +181,9 @@ def test_handle_pystac_delete_collection(pystac_manager):
     result = handle_pystac_delete_collection(pystac_manager, arguments)
 
     assert result == {"status": "success"}
-    pystac_manager.delete_collection.assert_called_once_with("/path/to/collection.json")
+    pystac_manager.delete_collection.assert_called_once_with(
+        "/path/to/collection.json"
+    )
 
 
 def test_handle_pystac_list_collections(pystac_manager):
