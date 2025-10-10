@@ -240,9 +240,7 @@ class PySTACManager:
                     try:
                         catalogs.append(self.read_catalog(str(catalog_file)))
                     except Exception as e:  # noqa: BLE001
-                        logger.warning(
-                            "Failed to read catalog %s: %s", catalog_file, e
-                        )
+                        logger.warning("Failed to read catalog %s: %s", catalog_file, e)
             return catalogs
 
     # ======================== Collection Operations ========================

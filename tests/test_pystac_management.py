@@ -107,13 +107,11 @@ def test_create_catalog_local(pystac_manager, tmp_path):
 
 @patch("stac_mcp.tools.pystac_management.urllib.request.urlopen")
 @patch.dict("sys.modules", {"pystac": MagicMock()})
-def test_create_catalog_remote(
-    mock_pystac, mock_urlopen, pystac_manager_with_key, sample_catalog
-):
+def test_create_catalog_remote(mock_urlopen, pystac_manager_with_key, sample_catalog):
     """Test creating a remote STAC Catalog with API key."""
     mock_catalog = MagicMock()
     mock_catalog.to_dict.return_value = sample_catalog
-    pystac.Catalog.return_value = mock_catalog
+    sys.modules["pystac"].Catalog.return_value = mock_catalog
 
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(sample_catalog).encode("utf-8")
@@ -126,7 +124,7 @@ def test_create_catalog_remote(
         description="Test catalog",
     )
 
-    mock_pystac.Catalog.assert_called_once_with(
+    sys.modules["pystac"].Catalog.assert_called_once_with(
         id="test-catalog",
         description="Test catalog",
         title=None,
@@ -225,9 +223,9 @@ def test_delete_catalog_remote(mock_urlopen, pystac_manager):
 def test_list_catalogs_remote(mock_urlopen, pystac_manager, sample_catalog):
     """Test listing remote STAC Catalogs."""
     mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(
-        {"catalogs": [sample_catalog]}
-    ).encode("utf-8")
+    mock_response.read.return_value = json.dumps({"catalogs": [sample_catalog]}).encode(
+        "utf-8"
+    )
     mock_response.__enter__.return_value = mock_response
     mock_urlopen.return_value = mock_response
 
@@ -259,12 +257,10 @@ def test_create_collection_local(pystac_manager, sample_collection):
 
 @patch("stac_mcp.tools.pystac_management.urllib.request.urlopen")
 @patch.dict("sys.modules", {"pystac": MagicMock()})
-def test_create_collection_remote(
-    mock_pystac, mock_urlopen, pystac_manager, sample_collection
-):
+def test_create_collection_remote(mock_urlopen, pystac_manager, sample_collection):
     """Test creating a remote STAC Collection."""
     mock_coll = MagicMock()
-    pystac.Collection.from_dict.return_value = mock_coll
+    sys.modules["pystac"].Collection.from_dict.return_value = mock_coll
 
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(sample_collection).encode("utf-8")
@@ -275,7 +271,9 @@ def test_create_collection_remote(
         "https://example.com/collections", sample_collection
     )
 
-    mock_pystac.Collection.from_dict.assert_called_once_with(sample_collection)
+    sys.modules["pystac"].Collection.from_dict.assert_called_once_with(
+        sample_collection
+    )
 
     assert result == sample_collection
     mock_urlopen.assert_called_once()
