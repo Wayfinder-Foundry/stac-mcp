@@ -127,7 +127,7 @@ def test_create_catalog_remote(mock_urlopen, pystac_manager_with_key, sample_cat
     sys.modules["pystac"].Catalog.assert_called_once_with(
         id="test-catalog",
         description="Test catalog",
-        title=None,
+        title="test-catalog",
     )
 
     assert result == sample_catalog
