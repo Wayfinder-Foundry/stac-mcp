@@ -64,7 +64,7 @@ async def demonstrate_pystac_usage():
                 print(f"   ✅ Catalog created at: {catalog_path}")
                 data = json.loads(result.content[0].text)
                 print(f"   Catalog ID: {data.get('id', 'N/A')}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"   ⚠️ Note: {str(e)[:100]}")
 
         print("\n   2b. Reading the catalog:")
@@ -77,7 +77,7 @@ async def demonstrate_pystac_usage():
                 print(f"   ❌ Error: {result.content[0].text[:200]}")
             else:
                 print("   ✅ Catalog read successfully")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"   ⚠️ Note: {str(e)[:100]}")
 
         print("\n   2c. Listing catalogs in directory:")
@@ -90,7 +90,7 @@ async def demonstrate_pystac_usage():
                 print(f"   ❌ Error: {result.content[0].text[:200]}")
             else:
                 print("   ✅ Catalogs listed successfully")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"   ⚠️ Note: {str(e)[:100]}")
 
         # ==================== Collection Examples ====================
@@ -122,7 +122,7 @@ async def demonstrate_pystac_usage():
                 print(f"   ❌ Error: {result.content[0].text[:200]}")
             else:
                 print(f"   ✅ Collection created at: {collection_path}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"   ⚠️ Note: {str(e)[:100]}")
 
         print("\n   3b. Reading the collection:")
@@ -135,7 +135,7 @@ async def demonstrate_pystac_usage():
                 print(f"   ❌ Error: {result.content[0].text[:200]}")
             else:
                 print("   ✅ Collection read successfully")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"   ⚠️ Note: {str(e)[:100]}")
 
         # ==================== Item Examples ====================
@@ -167,7 +167,7 @@ async def demonstrate_pystac_usage():
                 print(f"   ❌ Error: {result.content[0].text[:200]}")
             else:
                 print(f"   ✅ Item created at: {item_path}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"   ⚠️ Note: {str(e)[:100]}")
 
         print("\n   4b. Reading the item:")
@@ -180,7 +180,7 @@ async def demonstrate_pystac_usage():
                 print(f"   ❌ Error: {result.content[0].text[:200]}")
             else:
                 print("   ✅ Item read successfully")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"   ⚠️ Note: {str(e)[:100]}")
 
         # ==================== Remote Examples ====================

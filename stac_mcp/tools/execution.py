@@ -164,10 +164,10 @@ async def execute_tool(
         client = None
 
     arguments = dict(arguments or {})
-    
+
     # Check if this is a pystac tool
     is_pystac_tool = tool_name in _PYSTAC_TOOL_HANDLERS
-    
+
     if handler is None:
         if is_pystac_tool:
             handler = _PYSTAC_TOOL_HANDLERS.get(tool_name)
@@ -175,7 +175,7 @@ async def execute_tool(
             handler = _TOOL_HANDLERS.get(tool_name)
         if handler is None:
             _raise_unknown_tool(tool_name)
-    
+
     # PySTAC tools use PySTACManager instead of STACClient
     if is_pystac_tool:
         api_key = arguments.get("api_key")
@@ -193,7 +193,7 @@ async def execute_tool(
             arguments,
         )
         raw_result = instrumented.value
-    
+
     output_format = arguments.get("output_format", "text")
     if output_format == "json":
         if isinstance(raw_result, list):

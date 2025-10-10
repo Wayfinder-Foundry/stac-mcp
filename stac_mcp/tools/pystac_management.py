@@ -20,10 +20,7 @@ import os
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +51,8 @@ class PySTACManager:
     def _read_json_file(self, path: str) -> dict[str, Any]:
         """Read JSON from local file or remote URL."""
         if self._is_remote(path):
-            req = urllib.request.Request(path, headers=self._get_headers())
-            with urllib.request.urlopen(req) as response:
+            req = urllib.request.Request(path, headers=self._get_headers())  # noqa: S310
+            with urllib.request.urlopen(req) as response:  # noqa: S310
                 return json.loads(response.read().decode("utf-8"))
         else:
             with Path(path).open("r") as f:
@@ -64,13 +61,13 @@ class PySTACManager:
     def _write_json_file(self, path: str, data: dict[str, Any]) -> None:
         """Write JSON to local file or remote URL."""
         if self._is_remote(path):
-            req = urllib.request.Request(
+            req = urllib.request.Request(  # noqa: S310
                 path,
                 data=json.dumps(data).encode("utf-8"),
                 headers=self._get_headers(),
                 method="PUT",
             )
-            urllib.request.urlopen(req)
+            urllib.request.urlopen(req)  # noqa: S310
         else:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             with Path(path).open("w") as f:
@@ -79,12 +76,12 @@ class PySTACManager:
     def _delete_file(self, path: str) -> None:
         """Delete local file or remote resource."""
         if self._is_remote(path):
-            req = urllib.request.Request(
+            req = urllib.request.Request(  # noqa: S310
                 path,
                 headers=self._get_headers(),
                 method="DELETE",
             )
-            urllib.request.urlopen(req)
+            urllib.request.urlopen(req)  # noqa: S310
         else:
             Path(path).unlink(missing_ok=True)
 
@@ -123,13 +120,13 @@ class PySTACManager:
 
         if self._is_remote(path):
             # For remote, POST to endpoint
-            req = urllib.request.Request(
+            req = urllib.request.Request(  # noqa: S310
                 path,
                 data=json.dumps(catalog_dict).encode("utf-8"),
                 headers=self._get_headers(),
                 method="POST",
             )
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req) as response:  # noqa: S310
                 return json.loads(response.read().decode("utf-8"))
         else:
             # For local, save to file
@@ -181,13 +178,13 @@ class PySTACManager:
         catalog = pystac.Catalog.from_dict(catalog_dict)
 
         if self._is_remote(path):
-            req = urllib.request.Request(
+            req = urllib.request.Request(  # noqa: S310
                 path,
                 data=json.dumps(catalog_dict).encode("utf-8"),
                 headers=self._get_headers(),
                 method="PUT",
             )
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req) as response:  # noqa: S310
                 return json.loads(response.read().decode("utf-8"))
         else:
             catalog.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
@@ -216,13 +213,13 @@ class PySTACManager:
         """
         if self._is_remote(base_path):
             # For remote, fetch catalog list from API
-            req = urllib.request.Request(base_path, headers=self._get_headers())
-            with urllib.request.urlopen(req) as response:
+            req = urllib.request.Request(base_path, headers=self._get_headers())  # noqa: S310
+            with urllib.request.urlopen(req) as response:  # noqa: S310
                 data = json.loads(response.read().decode("utf-8"))
                 # Handle different API responses
                 if "catalogs" in data:
                     return data["catalogs"]
-                elif "links" in data:
+                if "links" in data:
                     # Extract child catalogs from links
                     return [
                         link
@@ -267,13 +264,13 @@ class PySTACManager:
         collection = pystac.Collection.from_dict(collection_dict)
 
         if self._is_remote(path):
-            req = urllib.request.Request(
+            req = urllib.request.Request(  # noqa: S310
                 path,
                 data=json.dumps(collection_dict).encode("utf-8"),
                 headers=self._get_headers(),
                 method="POST",
             )
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req) as response:  # noqa: S310
                 return json.loads(response.read().decode("utf-8"))
         else:
             collection.normalize_hrefs(str(Path(path).parent))
@@ -321,13 +318,13 @@ class PySTACManager:
         collection = pystac.Collection.from_dict(collection_dict)
 
         if self._is_remote(path):
-            req = urllib.request.Request(
+            req = urllib.request.Request(  # noqa: S310
                 path,
                 data=json.dumps(collection_dict).encode("utf-8"),
                 headers=self._get_headers(),
                 method="PUT",
             )
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req) as response:  # noqa: S310
                 return json.loads(response.read().decode("utf-8"))
         else:
             collection.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
@@ -356,8 +353,8 @@ class PySTACManager:
         """
         if self._is_remote(base_path):
             # For remote, fetch collections from API
-            req = urllib.request.Request(base_path, headers=self._get_headers())
-            with urllib.request.urlopen(req) as response:
+            req = urllib.request.Request(base_path, headers=self._get_headers())  # noqa: S310
+            with urllib.request.urlopen(req) as response:  # noqa: S310
                 data = json.loads(response.read().decode("utf-8"))
                 if "collections" in data:
                     return data["collections"]
@@ -401,13 +398,13 @@ class PySTACManager:
         item = pystac.Item.from_dict(item_dict)
 
         if self._is_remote(path):
-            req = urllib.request.Request(
+            req = urllib.request.Request(  # noqa: S310
                 path,
                 data=json.dumps(item_dict).encode("utf-8"),
                 headers=self._get_headers(),
                 method="POST",
             )
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req) as response:  # noqa: S310
                 return json.loads(response.read().decode("utf-8"))
         else:
             item.save_object(dest_href=path)
@@ -454,13 +451,13 @@ class PySTACManager:
         item = pystac.Item.from_dict(item_dict)
 
         if self._is_remote(path):
-            req = urllib.request.Request(
+            req = urllib.request.Request(  # noqa: S310
                 path,
                 data=json.dumps(item_dict).encode("utf-8"),
                 headers=self._get_headers(),
                 method="PUT",
             )
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req) as response:  # noqa: S310
                 return json.loads(response.read().decode("utf-8"))
         else:
             item.save_object(dest_href=path)
@@ -489,12 +486,12 @@ class PySTACManager:
         """
         if self._is_remote(base_path):
             # For remote, fetch items from API
-            req = urllib.request.Request(base_path, headers=self._get_headers())
-            with urllib.request.urlopen(req) as response:
+            req = urllib.request.Request(base_path, headers=self._get_headers())  # noqa: S310
+            with urllib.request.urlopen(req) as response:  # noqa: S310
                 data = json.loads(response.read().decode("utf-8"))
                 if "features" in data:
                     return data["features"]
-                elif "items" in data:
+                if "items" in data:
                     return data["items"]
                 return [data]
         else:
