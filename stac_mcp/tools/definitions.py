@@ -404,4 +404,250 @@ def get_tool_definitions() -> list[Tool]:
                 "required": ["collection_id"],
             },
         ),
+        # ==================== PySTAC-based CRUDL Tools ====================
+        # Catalog CRUDL
+        Tool(
+            name="pystac_create_catalog",
+            description="Create a new STAC Catalog using pystac (local file or remote endpoint with optional STAC_API_KEY authentication)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to save catalog (local file path or remote URL)",
+                    },
+                    "catalog_id": {
+                        "type": "string",
+                        "description": "Catalog identifier",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Catalog description",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Catalog title (optional, defaults to catalog_id)",
+                    },
+                },
+                "required": ["path", "catalog_id", "description"],
+            },
+        ),
+        Tool(
+            name="pystac_read_catalog",
+            description="Read a STAC Catalog using pystac (local file or remote URL)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to catalog (local file path or remote URL)",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
+            name="pystac_update_catalog",
+            description="Update a STAC Catalog using pystac (local file or remote endpoint with optional STAC_API_KEY authentication)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to catalog (local file path or remote URL)",
+                    },
+                    "catalog": {
+                        "type": "object",
+                        "description": "Updated catalog dictionary following STAC Catalog specification",
+                    },
+                },
+                "required": ["path", "catalog"],
+            },
+        ),
+        Tool(
+            name="pystac_delete_catalog",
+            description="Delete a STAC Catalog using pystac (local file or remote endpoint with optional STAC_API_KEY authentication)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to catalog (local file path or remote URL)",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
+            name="pystac_list_catalogs",
+            description="List STAC Catalogs using pystac (local directory or remote endpoint)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "base_path": {
+                        "type": "string",
+                        "description": "Base path to search (local directory or remote URL)",
+                    },
+                },
+                "required": ["base_path"],
+            },
+        ),
+        # Collection CRUDL
+        Tool(
+            name="pystac_create_collection",
+            description="Create a new STAC Collection using pystac (local file or remote endpoint with optional STAC_API_KEY authentication)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to save collection (local file path or remote URL)",
+                    },
+                    "collection": {
+                        "type": "object",
+                        "description": "Collection dictionary following STAC Collection specification",
+                    },
+                },
+                "required": ["path", "collection"],
+            },
+        ),
+        Tool(
+            name="pystac_read_collection",
+            description="Read a STAC Collection using pystac (local file or remote URL)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to collection (local file path or remote URL)",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
+            name="pystac_update_collection",
+            description="Update a STAC Collection using pystac (local file or remote endpoint with optional STAC_API_KEY authentication)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to collection (local file path or remote URL)",
+                    },
+                    "collection": {
+                        "type": "object",
+                        "description": "Updated collection dictionary following STAC Collection specification",
+                    },
+                },
+                "required": ["path", "collection"],
+            },
+        ),
+        Tool(
+            name="pystac_delete_collection",
+            description="Delete a STAC Collection using pystac (local file or remote endpoint with optional STAC_API_KEY authentication)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to collection (local file path or remote URL)",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
+            name="pystac_list_collections",
+            description="List STAC Collections using pystac (local directory or remote endpoint)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "base_path": {
+                        "type": "string",
+                        "description": "Base path to search (local directory or remote URL)",
+                    },
+                },
+                "required": ["base_path"],
+            },
+        ),
+        # Item CRUDL
+        Tool(
+            name="pystac_create_item",
+            description="Create a new STAC Item using pystac (local file or remote endpoint with optional STAC_API_KEY authentication)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to save item (local file path or remote URL)",
+                    },
+                    "item": {
+                        "type": "object",
+                        "description": "Item dictionary following STAC Item specification",
+                    },
+                },
+                "required": ["path", "item"],
+            },
+        ),
+        Tool(
+            name="pystac_read_item",
+            description="Read a STAC Item using pystac (local file or remote URL)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to item (local file path or remote URL)",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
+            name="pystac_update_item",
+            description="Update a STAC Item using pystac (local file or remote endpoint with optional STAC_API_KEY authentication)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to item (local file path or remote URL)",
+                    },
+                    "item": {
+                        "type": "object",
+                        "description": "Updated item dictionary following STAC Item specification",
+                    },
+                },
+                "required": ["path", "item"],
+            },
+        ),
+        Tool(
+            name="pystac_delete_item",
+            description="Delete a STAC Item using pystac (local file or remote endpoint with optional STAC_API_KEY authentication)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to item (local file path or remote URL)",
+                    },
+                },
+                "required": ["path"],
+            },
+        ),
+        Tool(
+            name="pystac_list_items",
+            description="List STAC Items using pystac (local directory or remote endpoint)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "base_path": {
+                        "type": "string",
+                        "description": "Base path to search (local directory or remote URL)",
+                    },
+                },
+                "required": ["base_path"],
+            },
+        ),
     ]

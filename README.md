@@ -40,6 +40,39 @@ All tools accept an optional `output_format` parameter (`"text"` default, or `"j
 - **`get_item`**: Get detailed information about a specific STAC item
 - **`estimate_data_size`**: Estimate data size for STAC items using lazy loading (XArray + odc.stac)
 
+### PySTAC-based CRUDL Tools
+
+The server also provides a comprehensive set of PySTAC-based tools for managing STAC resources with full Create, Read, Update, Delete, and List (CRUDL) operations. These tools work with both local filesystems and remote STAC servers:
+
+**Catalog Management:**
+- **`pystac_create_catalog`**: Create a new STAC Catalog (local or remote)
+- **`pystac_read_catalog`**: Read an existing STAC Catalog
+- **`pystac_update_catalog`**: Update a STAC Catalog
+- **`pystac_delete_catalog`**: Delete a STAC Catalog
+- **`pystac_list_catalogs`**: List STAC Catalogs in a directory or endpoint
+
+**Collection Management:**
+- **`pystac_create_collection`**: Create a new STAC Collection (local or remote)
+- **`pystac_read_collection`**: Read an existing STAC Collection
+- **`pystac_update_collection`**: Update a STAC Collection
+- **`pystac_delete_collection`**: Delete a STAC Collection
+- **`pystac_list_collections`**: List STAC Collections in a directory or endpoint
+
+**Item Management:**
+- **`pystac_create_item`**: Create a new STAC Item (local or remote)
+- **`pystac_read_item`**: Read an existing STAC Item
+- **`pystac_update_item`**: Update a STAC Item
+- **`pystac_delete_item`**: Delete a STAC Item
+- **`pystac_list_items`**: List STAC Items in a directory or endpoint
+
+**Key Features:**
+- **Local Operations**: Manage STAC resources on the filesystem
+- **Remote Operations**: Interact with remote STAC servers via HTTP/HTTPS
+- **API Key Authentication**: Set `STAC_API_KEY` environment variable for authenticated requests
+- **Complementary**: Works alongside existing transaction tools without replacing them
+
+For detailed documentation and examples, see [PySTAC CRUDL Tools Documentation](docs/pystac_crudl_tools.md).
+
 ### Capability Discovery & Aggregations
 
 The new capability tools (ADR 0004) allow adaptive client behavior:
