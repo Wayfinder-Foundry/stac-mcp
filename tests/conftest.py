@@ -196,9 +196,10 @@ def stac_test_server() -> Iterator[dict[str, str]]:
     """
     # Import locally to avoid test-time import errors when FastAPI isn't installed
     try:
-        from fastapi.testclient import TestClient
-        from tests.support.stac_test_server import app, API_KEY
-    except Exception:
+        from fastapi.testclient import TestClient  # noqa: PLC0415
+
+        from tests.support.stac_test_server import API_KEY, app  # noqa: PLC0415
+    except (ImportError, ModuleNotFoundError):
         # If fastapi or the support server aren't available, provide a noop fixture
         yield {"client": None, "url": "http://example.com", "api_key": ""}
         return

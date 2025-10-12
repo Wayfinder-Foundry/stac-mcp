@@ -1,7 +1,7 @@
 def test_list_items_empty_or_present(stac_test_server):
     client = stac_test_server["client"]
     rv = client.get("/collections/vancouver-subaoi-collection/items")
-    assert rv.status_code == 200
+    assert rv.status_code == 200  # noqa: PLR2004
     body = rv.json()
     assert body.get("type") == "FeatureCollection"
 
@@ -10,7 +10,10 @@ def test_create_items_feature_collection(stac_test_server):
     client = stac_test_server["client"]
     api_key = stac_test_server["api_key"]
     # create a minimal feature collection with one generated item
-    fc = {"type": "FeatureCollection", "features": [{"id": "test-create-1", "type": "Feature", "properties": {}}]}
+    fc = {
+        "type": "FeatureCollection",
+        "features": [{"id": "test-create-1", "type": "Feature", "properties": {}}],
+    }
     rv = client.post(
         "/collections/vancouver-subaoi-collection/items",
         json=fc,
@@ -25,6 +28,6 @@ def test_get_created_item(stac_test_server):
     client = stac_test_server["client"]
     # the previous test should have created test-create-1
     rv = client.get("/collections/vancouver-subaoi-collection/items/test-create-1")
-    assert rv.status_code == 200
+    assert rv.status_code == 200  # noqa: PLR2004
     item = rv.json()
     assert item.get("id") == "test-create-1"

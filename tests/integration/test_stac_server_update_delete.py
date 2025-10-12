@@ -3,7 +3,7 @@ def test_update_and_delete_item(stac_test_server):
     api_key = stac_test_server["api_key"]
     # ensure item exists
     rv = client.get("/collections/vancouver-subaoi-collection/items/test-create-1")
-    if rv.status_code != 200:
+    if rv.status_code != 200:  # noqa: PLR2004
         # create it first
         client.post(
             "/collections/vancouver-subaoi-collection/items",
@@ -17,15 +17,15 @@ def test_update_and_delete_item(stac_test_server):
         json=updated,
         headers={"X-API-Key": api_key},
     )
-    assert rv.status_code == 200
+    assert rv.status_code == 200  # noqa: PLR2004
     assert rv.json().get("updated") == "test-create-1"
     # delete
     rv = client.delete(
         "/collections/vancouver-subaoi-collection/items/test-create-1",
         headers={"X-API-Key": api_key},
     )
-    assert rv.status_code == 200
+    assert rv.status_code == 200  # noqa: PLR2004
     assert rv.json().get("deleted") == "test-create-1"
     # verify gone
     rv = client.get("/collections/vancouver-subaoi-collection/items/test-create-1")
-    assert rv.status_code == 404
+    assert rv.status_code == 404  # noqa: PLR2004
