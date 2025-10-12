@@ -681,7 +681,7 @@ class STACClient:
 
                 if "timed out" in str(exc).lower() or isinstance(
                     exc,
-                    (socket.timeout, TimeoutError),
+                    socket.timeout | TimeoutError,
                 ):
                     if attempt < max_attempts:
                         self._last_retry_attempts = attempt

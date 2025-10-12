@@ -130,7 +130,7 @@ def _as_text_content_list(result: Any) -> list[TextContent]:
         for item in result:
             normalized.append(_single(item))
         return normalized
-    if isinstance(result, Iterable) and not isinstance(result, (str, bytes, dict)):
+    if isinstance(result, Iterable) and not isinstance(result, str | bytes | dict):
         return [_single(item) for item in result]
     return [_single(result)]
 

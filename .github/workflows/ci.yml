@@ -36,14 +36,14 @@ jobs:
           uv sync --all-extras --dev
       - name: Lint
         run: |
-          uv run ruff format --check stac_mcp/ tests/ examples/
-          uv run ruff check stac_mcp/ tests/ examples/
+          uv run ruff format stac_mcp/ tests/ examples/
+          uv run ruff check stac_mcp/ tests/ examples/ --fix --no-cache
       - name: Build (hatchling via uv) to validate packaging
         run: |
           uv build
       - name: Tests + coverage
         run: |
-          uv run coverage run -m pytest -q
+          uv run coverage run -m pytest -v
           uv run coverage xml
           uv run python scripts/generate_coverage_badge.py coverage.xml coverage-badge.svg
           uv run coverage report

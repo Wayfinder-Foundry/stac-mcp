@@ -48,7 +48,7 @@ async def get_collection():
 
 
 @app.get("/collections/{collection_id}/items")
-async def list_items(_collection_id: str):
+async def list_items(collection_id: str):
     # naive listing of items directory
     logger = logging.getLogger("stac_mcp.testserver")
     items = []
@@ -65,7 +65,7 @@ async def list_items(_collection_id: str):
 
 
 @app.get("/collections/{collection_id}/items/{item_id}")
-async def get_item(_collection_id: str, item_id: str):
+async def get_item(collection_id: str, item_id: str):
     p = ITEMS_DIR / f"{item_id}.json"
     if not p.exists():
         raise HTTPException(status_code=404, detail="item not found") from None
@@ -74,7 +74,7 @@ async def get_item(_collection_id: str, item_id: str):
 
 @app.post("/collections/{collection_id}/items")
 async def create_item(
-    _collection_id: str, request: Request, x_api_key: str | None = Header(None)
+    collection_id: str, request: Request, x_api_key: str | None = Header(None)
 ):
     # simple API key check
     allowed = await check_api_key(x_api_key)
@@ -103,7 +103,7 @@ async def create_item(
 
 @app.put("/collections/{collection_id}/items/{item_id}")
 async def update_item(
-    _collection_id: str,
+    collection_id: str,
     item_id: str,
     request: Request,
     x_api_key: str | None = Header(None),
@@ -121,7 +121,7 @@ async def update_item(
 
 @app.delete("/collections/{collection_id}/items/{item_id}")
 async def delete_item(
-    _collection_id: str, item_id: str, x_api_key: str | None = Header(None)
+    collection_id: str, item_id: str, x_api_key: str | None = Header(None)
 ):
     allowed = await check_api_key(x_api_key)
     if not allowed:

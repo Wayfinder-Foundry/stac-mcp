@@ -198,13 +198,24 @@ def stac_test_server() -> Iterator[dict[str, str]]:
     try:
         from fastapi.testclient import TestClient  # noqa: PLC0415
 
-        from tests.support.stac_test_server import API_KEY, app  # noqa: PLC0415
+        from tests.support.stac_test_server import (  # noqa: PLC0415
+            API_KEY,
+            ITEMS_DIR,
+            app,
+        )
     except (ImportError, ModuleNotFoundError):
         # If fastapi or the support server aren't available, provide a noop fixture
         yield {"client": None, "url": "http://example.com", "api_key": ""}
         return
 
+    # a folder for items to be created in
+    ITEMS_DIR.mkdir(parents=True, exist_ok=True)
+
     client = TestClient(app)
     # yield the TestClient instance and api key for tests to call directly
     yield {"client": client, "api_key": API_KEY}
     # no explicit teardown needed for TestClient
+
+    # teardown: remove any created items
+    for p in ITEMS_DIR.glob("*.json"):
+        p.unlink()
