@@ -446,6 +446,187 @@ def test_manager_without_api_key(pystac_manager):
     assert "Authorization" not in headers
 
 
+# ======================== Additional Coverage Tests ========================
+
+
+def test_write_json_file_remote(pystac_manager, sample_catalog):
+    """Test writing JSON to remote URL."""
+    with patch(
+        "stac_mcp.tools.pystac_management.urllib.request.urlopen"
+    ) as mock_urlopen:
+        pystac_manager._write_json_file(  # noqa: SLF001
+            "https://example.com/catalog.json", sample_catalog
+        )
+
+        mock_urlopen.assert_called_once()
+
+
+def test_delete_file_remote(pystac_manager):
+    """Test deleting a remote resource."""
+    with patch(
+        "stac_mcp.tools.pystac_management.urllib.request.urlopen"
+    ) as mock_urlopen:
+        pystac_manager._delete_file("https://example.com/catalog.json")  # noqa: SLF001
+
+        mock_urlopen.assert_called_once()
+
+
+def test_list_catalogs_local_with_directory(pystac_manager, tmp_path, sample_catalog):
+    """Test listing local catalogs from a directory."""
+    # Create a nested directory structure with catalog files
+    subdir1 = tmp_path / "catalog1"
+    subdir1.mkdir()
+    catalog_file1 = subdir1 / "catalog.json"
+    catalog_file1.write_text(json.dumps(sample_catalog))
+
+    subdir2 = tmp_path / "catalog2"
+    subdir2.mkdir()
+    catalog_file2 = subdir2 / "catalog.json"
+    catalog_file2.write_text(json.dumps(sample_catalog))
+
+    with patch.dict("sys.modules", {"pystac": MagicMock()}):
+        mock_catalog = MagicMock()
+        mock_catalog.to_dict.return_value = sample_catalog
+        sys.modules["pystac"].Catalog.from_file.return_value = mock_catalog
+
+        result = pystac_manager.list_catalogs(str(tmp_path))
+
+        assert len(result) == 2  # noqa: PLR2004
+
+
+def test_list_catalogs_local_with_error(pystac_manager, tmp_path):
+    """Test listing catalogs with a read error."""
+
+    # Create a catalog file with invalid content
+    subdir = tmp_path / "catalog1"
+    subdir.mkdir()
+    catalog_file = subdir / "catalog.json"
+    catalog_file.write_text("{invalid json}")
+
+    # Set up logging to capture warnings
+    with patch.dict("sys.modules", {"pystac": MagicMock()}):
+        # Make from_file raise an exception
+        sys.modules["pystac"].Catalog.from_file.side_effect = Exception("Invalid JSON")
+
+        with patch("stac_mcp.tools.pystac_management.logger") as mock_logger:
+            result = pystac_manager.list_catalogs(str(tmp_path))
+
+            # Should return empty list and log warning
+            assert result == []
+            mock_logger.warning.assert_called()
+
+
+def test_list_collections_local_with_directory(
+    pystac_manager, tmp_path, sample_collection
+):
+    """Test listing local collections from a directory."""
+    # Create subdirectories with collection.json files
+    subdir1 = tmp_path / "collection1"
+    subdir1.mkdir()
+    coll_file1 = subdir1 / "collection.json"
+    coll_file1.write_text(json.dumps(sample_collection))
+
+    subdir2 = tmp_path / "collection2"
+    subdir2.mkdir()
+    coll_file2 = subdir2 / "collection.json"
+    coll_file2.write_text(json.dumps(sample_collection))
+
+    with patch.dict("sys.modules", {"pystac": MagicMock()}):
+        mock_coll = MagicMock()
+        mock_coll.to_dict.return_value = sample_collection
+        sys.modules["pystac"].Collection.from_file.return_value = mock_coll
+
+        result = pystac_manager.list_collections(str(tmp_path))
+
+        assert len(result) == 2  # noqa: PLR2004
+
+
+def test_list_items_local_with_directory(pystac_manager, tmp_path, sample_item):
+    """Test listing local items from a directory."""
+    subdir = tmp_path / "items"
+    subdir.mkdir()
+    item_file1 = subdir / "item1.json"
+    item_file1.write_text(json.dumps(sample_item))
+
+    item_file2 = subdir / "item2.json"
+    item_file2.write_text(json.dumps(sample_item))
+
+    with patch.dict("sys.modules", {"pystac": MagicMock()}):
+        mock_item = MagicMock()
+        mock_item.to_dict.return_value = sample_item
+        sys.modules["pystac"].Item.from_file.return_value = mock_item
+
+        result = pystac_manager.list_items(str(tmp_path))
+
+        assert len(result) == 2  # noqa: PLR2004
+
+
+def test_update_collection_remote(pystac_manager, sample_collection):
+    """Test updating a remote collection."""
+    with patch.dict("sys.modules", {"pystac": MagicMock()}), patch(
+        "stac_mcp.tools.pystac_management.urllib.request.urlopen"
+    ) as mock_urlopen:
+        mock_coll = MagicMock()
+        mock_coll.to_dict.return_value = sample_collection
+        sys.modules["pystac"].Collection.from_dict.return_value = mock_coll
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps(sample_collection).encode(
+            "utf-8"
+        )
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        result = pystac_manager.update_collection(
+            "https://example.com/collections/test", sample_collection
+        )
+
+        assert result == sample_collection
+
+
+def test_update_item_remote(pystac_manager, sample_item):
+    """Test updating a remote item."""
+    with patch.dict("sys.modules", {"pystac": MagicMock()}), patch(
+        "stac_mcp.tools.pystac_management.urllib.request.urlopen"
+    ) as mock_urlopen:
+        mock_item = MagicMock()
+        mock_item.to_dict.return_value = sample_item
+        sys.modules["pystac"].Item.from_dict.return_value = mock_item
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps(sample_item).encode("utf-8")
+        mock_response.__enter__.return_value = mock_response
+        mock_urlopen.return_value = mock_response
+
+        result = pystac_manager.update_item(
+            "https://example.com/items/test", sample_item
+        )
+
+        assert result == sample_item
+
+
+def test_delete_collection_remote(pystac_manager):
+    """Test deleting a remote collection."""
+    with patch(
+        "stac_mcp.tools.pystac_management.urllib.request.urlopen"
+    ) as mock_urlopen:
+        result = pystac_manager.delete_collection("https://example.com/collection.json")
+
+        assert result["status"] == "success"
+        mock_urlopen.assert_called_once()
+
+
+def test_delete_item_remote(pystac_manager):
+    """Test deleting a remote item."""
+    with patch(
+        "stac_mcp.tools.pystac_management.urllib.request.urlopen"
+    ) as mock_urlopen:
+        result = pystac_manager.delete_item("https://example.com/item.json")
+
+        assert result["status"] == "success"
+        mock_urlopen.assert_called_once()
+
+
 # ======================== Error Handling Tests ========================
 
 
