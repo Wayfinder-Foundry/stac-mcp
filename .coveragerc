@@ -3,6 +3,15 @@ source = stac_mcp
 omit = 
     tests/*
     scripts/version.py
+    docs/*
+    examples/*
+    assets/*
+    architecture/*
+    .venv/*
+    dist/*
+    build/*
+    .eggs/*
+    */__init__.py
 branch = True
 
 [report]
