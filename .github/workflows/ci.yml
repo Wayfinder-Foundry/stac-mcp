@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 # Prevent duplicate parallel runs for same branch/PR (e.g. when pushing multiple commits in succession to a PR)
 # or when a PR is opened while a push to the same branch is being processed.
