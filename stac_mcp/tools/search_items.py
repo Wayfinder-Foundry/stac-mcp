@@ -36,7 +36,7 @@ def handle_search_items(
         if dt_value:
             result_text += f"  Date: {dt_value}\n"
         bbox = item.get("bbox")
-        if isinstance(bbox, (list, tuple)) and len(bbox) >= BBOX_MIN_COORDS:
+        if isinstance(bbox, list | tuple) and len(bbox) >= BBOX_MIN_COORDS:
             result_text += (
                 "  BBox: "
                 f"[{bbox[0]:.2f}, {bbox[1]:.2f}, {bbox[2]:.2f}, {bbox[3]:.2f}]\n"

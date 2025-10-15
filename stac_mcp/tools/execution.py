@@ -24,6 +24,24 @@ from stac_mcp.tools.get_conformance import handle_get_conformance
 from stac_mcp.tools.get_item import handle_get_item
 from stac_mcp.tools.get_queryables import handle_get_queryables
 from stac_mcp.tools.get_root import handle_get_root
+from stac_mcp.tools.pystac_handlers import (
+    handle_pystac_create_catalog,
+    handle_pystac_create_collection,
+    handle_pystac_create_item,
+    handle_pystac_delete_catalog,
+    handle_pystac_delete_collection,
+    handle_pystac_delete_item,
+    handle_pystac_list_catalogs,
+    handle_pystac_list_collections,
+    handle_pystac_list_items,
+    handle_pystac_read_catalog,
+    handle_pystac_read_collection,
+    handle_pystac_read_item,
+    handle_pystac_update_catalog,
+    handle_pystac_update_collection,
+    handle_pystac_update_item,
+)
+from stac_mcp.tools.pystac_management import PySTACManager
 from stac_mcp.tools.search_collections import handle_search_collections
 from stac_mcp.tools.search_items import handle_search_items
 from stac_mcp.tools.transactions import (
@@ -62,10 +80,29 @@ _TOOL_HANDLERS: dict[str, Handler] = {
     "delete_collection": handle_delete_collection,
 }
 
+# PySTAC-based CRUDL handlers (use PySTACManager instead of STACClient)
+_PYSTAC_TOOL_HANDLERS: dict[str, Callable] = {
+    "pystac_create_catalog": handle_pystac_create_catalog,
+    "pystac_read_catalog": handle_pystac_read_catalog,
+    "pystac_update_catalog": handle_pystac_update_catalog,
+    "pystac_delete_catalog": handle_pystac_delete_catalog,
+    "pystac_list_catalogs": handle_pystac_list_catalogs,
+    "pystac_create_collection": handle_pystac_create_collection,
+    "pystac_read_collection": handle_pystac_read_collection,
+    "pystac_update_collection": handle_pystac_update_collection,
+    "pystac_delete_collection": handle_pystac_delete_collection,
+    "pystac_list_collections": handle_pystac_list_collections,
+    "pystac_create_item": handle_pystac_create_item,
+    "pystac_read_item": handle_pystac_read_item,
+    "pystac_update_item": handle_pystac_update_item,
+    "pystac_delete_item": handle_pystac_delete_item,
+    "pystac_list_items": handle_pystac_list_items,
+}
+
 
 def _raise_unknown_tool(name: str) -> NoReturn:
     """Raise a standardized error for unknown tool names."""
-    _tools = list(_TOOL_HANDLERS.keys())
+    _tools = list(_TOOL_HANDLERS.keys()) + list(_PYSTAC_TOOL_HANDLERS.keys())
     msg = f"Unknown tool: {name}. Available tools: {_tools}"
     raise ValueError(msg)
 
@@ -93,7 +130,7 @@ def _as_text_content_list(result: Any) -> list[TextContent]:
         for item in result:
             normalized.append(_single(item))
         return normalized
-    if isinstance(result, Iterable) and not isinstance(result, (str, bytes, dict)):
+    if isinstance(result, Iterable) and not isinstance(result, str | bytes | dict):
         return [_single(item) for item in result]
     return [_single(result)]
 
@@ -127,23 +164,37 @@ async def execute_tool(
         client = None
 
     arguments = dict(arguments or {})
+
+    # Check if this is a pystac tool
+    is_pystac_tool = tool_name in _PYSTAC_TOOL_HANDLERS
+
     if handler is None:
-        handler = _TOOL_HANDLERS.get(tool_name)
+        if is_pystac_tool:
+            handler = _PYSTAC_TOOL_HANDLERS.get(tool_name)
+        else:
+            handler = _TOOL_HANDLERS.get(tool_name)
         if handler is None:
             _raise_unknown_tool(tool_name)
-    catalog_url = arguments.get("catalog_url")
-    if client is None:
-        client = STACClient(catalog_url) if catalog_url else _server.stac_client
+
+    # PySTAC tools use PySTACManager instead of STACClient
+    if is_pystac_tool:
+        api_key = arguments.get("api_key")
+        manager = PySTACManager(api_key=api_key)
+        raw_result = handler(manager, arguments)
+    else:
+        catalog_url = arguments.get("catalog_url")
+        if client is None:
+            client = STACClient(catalog_url) if catalog_url else _server.stac_client
+        instrumented = instrument_tool_execution(
+            tool_name,
+            catalog_url,
+            handler,
+            client,
+            arguments,
+        )
+        raw_result = instrumented.value
 
     output_format = arguments.get("output_format", "text")
-    instrumented = instrument_tool_execution(
-        tool_name,
-        catalog_url,
-        handler,
-        client,
-        arguments,
-    )
-    raw_result = instrumented.value
     if output_format == "json":
         if isinstance(raw_result, list):
             normalized = _as_text_content_list(raw_result)

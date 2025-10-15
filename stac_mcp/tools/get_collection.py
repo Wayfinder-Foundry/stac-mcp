@@ -31,7 +31,7 @@ def handle_get_collection(
         bbox_list = spatial.get("bbox") or []
         if bbox_list:
             bbox = bbox_list[0]
-            if isinstance(bbox, (list, tuple)) and len(bbox) >= BBOX_MIN_COORDS:
+            if isinstance(bbox, list | tuple) and len(bbox) >= BBOX_MIN_COORDS:
                 result_text += (
                     "Spatial Extent: "
                     f"[{bbox[0]:.2f}, {bbox[1]:.2f}, {bbox[2]:.2f}, {bbox[3]:.2f}]\n"

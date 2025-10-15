@@ -1,0 +1,42 @@
+version: "3.8"
+services:
+  postgis:
+    image: postgis/postgis:15-3.4
+    environment:
+      POSTGRES_USER: stac
+      POSTGRES_PASSWORD: stac
+      POSTGRES_DB: stac
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stac -d stac"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  stac-api:
+    image: ghcr.io/stac-utils/stac-fastapi:latest
+    depends_on:
+      postgis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://stac:stac@postgis:5432/stac
+      API_ID: "stac-test"
+      API_TITLE: "STAC Test API"
+      API_DESCRIPTION: "STAC FastAPI for integration tests"
+      # configure additional env vars per stac-fastapi docs if needed
+    ports:
+      - "8080:8080"
+    command:
+      [
+        "uvicorn",
+        "stac_fastapi.api.app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+      ]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080 || exit 1"]
+      interval: 5s
+      retries: 20

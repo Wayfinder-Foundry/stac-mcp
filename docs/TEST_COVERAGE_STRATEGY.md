@@ -45,12 +45,12 @@ As of this analysis, the STAC MCP Server has the following test coverage structu
 - `get_item.py` (36 lines)
 - `search_collections.py` (32 lines)
 - `search_items.py` (37 lines)
-- `create_collection.py` (29 lines)
-- `create_item.py` (30 lines)
-- `delete_collection.py` (29 lines)
-- `delete_item.py` (30 lines)
-- `update_collection.py` (29 lines)
-- `update_item.py` (29 lines)
+
+##### PySTAC Management Tools
+- `pystac_management.py` (517 lines) - CRUD operations for local/remote STAC resources
+- `pystac_handlers.py` (163 lines) - Handler functions for PySTAC tools
+
+**Note**: Transaction tools (`create_item`, `update_item`, etc.) are implemented as handler functions in `transactions.py`, not as separate tool class files.
 
 ## Coverage Gaps Identified
 

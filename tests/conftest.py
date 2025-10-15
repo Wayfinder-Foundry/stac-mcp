@@ -184,3 +184,38 @@ def http_error_factory() -> Callable[[int, str | None], HTTPError]:
         )
 
     return _factory
+
+
+@pytest.fixture(scope="session")
+def stac_test_server() -> Iterator[dict[str, str]]:
+    """Start the lightweight FastAPI test STAC server and return connection info.
+
+    Yields a dict with keys:
+      - url: base URL to the test server e.g. http://testserver
+      - api_key: the API key string to authenticate (X-API-Key)
+    """
+    # Import locally to avoid test-time import errors when FastAPI isn't installed
+    try:
+        from fastapi.testclient import TestClient  # noqa: PLC0415
+
+        from tests.support.stac_test_server import (  # noqa: PLC0415
+            API_KEY,
+            ITEMS_DIR,
+            app,
+        )
+    except (ImportError, ModuleNotFoundError):
+        # If fastapi or the support server aren't available, provide a noop fixture
+        yield {"client": None, "url": "http://example.com", "api_key": ""}
+        return
+
+    # a folder for items to be created in
+    ITEMS_DIR.mkdir(parents=True, exist_ok=True)
+
+    client = TestClient(app)
+    # yield the TestClient instance and api key for tests to call directly
+    yield {"client": client, "api_key": API_KEY}
+    # no explicit teardown needed for TestClient
+
+    # teardown: remove any created items
+    for p in ITEMS_DIR.glob("*.json"):
+        p.unlink()

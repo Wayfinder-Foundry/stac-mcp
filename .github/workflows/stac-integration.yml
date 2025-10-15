@@ -1,0 +1,61 @@
+name: STAC Integration Tests
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "test-data/**"
+      - "tests/**"
+      - "docker-compose.stac.yml"
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    services: {}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Sync dependencies (dev + extras)
+        run: |
+          # Use uv to sync project dependencies (dev + optional extras)
+          uv sync --all-extras --dev
+          # Ensure `requests` is available for the example/test scripts
+          uv run pip install requests
+
+      - name: Start docker-compose stack
+        run: |
+          docker compose -f docker-compose.stac.yml up -d
+
+      - name: Wait for stac-api
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8080/ >/dev/null; then
+              echo "stac-api up" && break
+            fi
+            sleep 2
+          done
+
+      - name: Load test data
+        run: |
+          python scripts/load_test_data.py
+
+      - name: Run stac-api-validator
+        run: |
+          docker run --rm stacutils/stac-api-validator --url http://localhost:8080 || true
+
+      - name: Run integration tests
+        run: |
+          pytest -q tests/integration -k "stac_server"
+
+      - name: Tear down stack
+        if: always()
+        run: |
+          docker compose -f docker-compose.stac.yml down -v
