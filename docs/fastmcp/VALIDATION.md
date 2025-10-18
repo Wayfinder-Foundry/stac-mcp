@@ -194,11 +194,11 @@ def handle_search_items(
 ) -> list[TextContent] | dict[str, Any]:
     collections = arguments.get("collections")
     bbox = arguments.get("bbox")
-    dt = arguments.get("datetime")
+    dt = arguments.get("datetime")  # Note: abbreviated as 'dt' internally
     # ...
 ```
 
-✅ **Pattern transformation documented**: Documentation clearly shows current vs. future patterns, with migration guidance.
+✅ **Pattern transformation documented**: Documentation clearly shows current vs. future patterns, with migration guidance. The current implementation uses internal abbreviations (e.g., `dt` for datetime) while the future FastMCP pattern will use full parameter names for clarity.
 
 ---
 
