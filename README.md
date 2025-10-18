@@ -451,6 +451,29 @@ Current Containerfile (single-stage) notes:
 - Entrypoint: `python -m stac_mcp.server` (stdio MCP transport)
 - Multi-stage/distroless hardening can be reintroduced later (tracked by potential future ADR)
 
+## Documentation
+
+### FastMCP Guidelines and Architecture
+
+STAC MCP includes comprehensive documentation for FastMCP patterns and agentic geospatial reasoning:
+
+- **[FastMCP Documentation](docs/fastmcp/)**: Complete guide to MCP decorators, resources, tools, and prompts for STAC workflows
+  - [DECORATORS.md](docs/fastmcp/DECORATORS.md): Choosing the right decorator for STAC operations
+  - [GUIDELINES.md](docs/fastmcp/GUIDELINES.md): FastMCP architecture and usage patterns
+  - [PROMPTS.md](docs/fastmcp/PROMPTS.md): Agentic STAC search reasoning and methodology
+  - [RESOURCES.md](docs/fastmcp/RESOURCES.md): STAC catalog discovery and metadata patterns
+  - [CONTEXT.md](docs/fastmcp/CONTEXT.md): Context usage for logging and progress tracking
+
+These documents provide guidance for:
+- AI agents reasoning about STAC catalog searches
+- Developers implementing STAC MCP features
+- Understanding the planned FastMCP integration (issues #69, #78)
+
+### Additional Documentation
+
+- [PySTAC CRUDL Tools Documentation](docs/pystac_crudl_tools.md): Detailed guide to PySTAC-based CRUD operations
+- [Test Coverage Strategy](docs/TEST_COVERAGE_STRATEGY.md): Testing approach and coverage goals
+
 ## STAC Resources
 
 - [STAC Specification](https://stacspec.org/)
