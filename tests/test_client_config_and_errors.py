@@ -14,7 +14,8 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
-from requests.exceptions import ConnectionError as RequestsConnectionError, Timeout
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout
 
 from stac_mcp.tools.client import (
     ConnectionFailedError,
@@ -77,11 +78,13 @@ class TestTimeoutErrorMapping:
         """Test that timeout errors are mapped to STACTimeoutError."""
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
-        with patch.object(
-            client.client._stac_io.session, "request", side_effect=Timeout
+        with (
+            patch.object(
+                client.client._stac_io.session, "request", side_effect=Timeout
+            ),
+            pytest.raises(STACTimeoutError),
         ):
-            with pytest.raises(STACTimeoutError):
-                client.delete_item("test", "test")
+            client.delete_item("test", "test")
 
 
 class TestConnectionErrorMapping:
@@ -92,13 +95,15 @@ class TestConnectionErrorMapping:
         """Test that DNS lookup failures are mapped with actionable message."""
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
-        with patch.object(
-            client.client._stac_io.session,
-            "request",
-            side_effect=RequestsConnectionError,
+        with (
+            patch.object(
+                client.client._stac_io.session,
+                "request",
+                side_effect=RequestsConnectionError,
+            ),
+            pytest.raises(ConnectionFailedError),
         ):
-            with pytest.raises(ConnectionFailedError):
-                client.delete_item("test", "test")
+            client.delete_item("test", "test")
 
 
 class TestErrorLogging:
@@ -120,13 +125,15 @@ class TestErrorLogging:
         logger = logging.getLogger("stac_mcp.tools.client")
         handler = self.CaptureHandler()
         logger.addHandler(handler)
-        with patch.object(
-            client.client._stac_io.session,
-            "request",
-            side_effect=RequestsConnectionError,
+        with (
+            patch.object(
+                client.client._stac_io.session,
+                "request",
+                side_effect=RequestsConnectionError,
+            ),
+            pytest.raises(ConnectionFailedError),
         ):
-            with pytest.raises(ConnectionFailedError):
-                client.delete_item("test", "test")
+            client.delete_item("test", "test")
         assert any(
             "Failed to connect" in record.message
             for record in handler.records
@@ -141,11 +148,13 @@ class TestErrorLogging:
         logger = logging.getLogger("stac_mcp.tools.client")
         handler = self.CaptureHandler()
         logger.addHandler(handler)
-        with patch.object(
-            client.client._stac_io.session, "request", side_effect=Timeout
+        with (
+            patch.object(
+                client.client._stac_io.session, "request", side_effect=Timeout
+            ),
+            pytest.raises(STACTimeoutError),
         ):
-            with pytest.raises(STACTimeoutError):
-                client.delete_item("test", "test")
+            client.delete_item("test", "test")
         assert any(
             "Request timed out" in record.message
             for record in handler.records

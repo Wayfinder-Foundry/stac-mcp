@@ -22,7 +22,11 @@ async def test_update_and_delete_item(stac_test_server, default_catalog_url):
                 "create_item",
                 {
                     "collection_id": "vancouver-subaoi-collection",
-                    "item": {"id": "test-create-1", "type": "Feature", "properties": {}},
+                    "item": {
+                        "id": "test-create-1",
+                        "type": "Feature",
+                        "properties": {},
+                    },
                     "api_key": api_key,
                     "catalog_url": default_catalog_url,
                 },

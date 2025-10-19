@@ -1,6 +1,6 @@
 """Tests for tool handler edge cases and error conditions."""
 
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Literal
 
 import pytest
 from fastmcp.client import Client
@@ -23,7 +23,7 @@ async def test_get_root_minimal_response(test_app):
     """Test get_root with minimal root document."""
 
     def dummy_get_root(
-        output_format: Literal["text", "json"] = "text", catalog_url: Optional[str] = None
+        output_format: Literal["text", "json"] = "text", catalog_url: str | None = None
     ) -> ToolResult:
         return ToolResult(
             content=[TextContent(type="text", text="id: minimal-catalog\nlinks: []\n")],
@@ -46,8 +46,8 @@ async def test_get_conformance_no_classes(test_app):
 
     def dummy_get_conformance(
         output_format: Literal["text", "json"] = "text",
-        check: Optional[Union[str, List[str]]] = None,
-        catalog_url: Optional[str] = None,
+        check: str | list[str] | None = None,
+        catalog_url: str | None = None,
     ) -> ToolResult:
         return ToolResult(
             content=[TextContent(type="text", text="Conformance Classes (0):\n")],

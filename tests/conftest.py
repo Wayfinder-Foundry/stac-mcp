@@ -17,7 +17,6 @@ from fastmcp import Client
 
 from stac_mcp import observability
 from stac_mcp.fast_server import app
-from stac_mcp.tools.client import STACClient
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -45,7 +44,9 @@ def prepare_test_data_dir() -> None:
                     "extent": {
                         "spatial": {"bbox": [[-123.3, 49.0, -122.0, 49.5]]},
                         "temporal": {
-                            "interval": [["2020-01-01T00:00:00Z", "2020-02-01T00:00:00Z"]]
+                            "interval": [
+                                ["2020-01-01T00:00:00Z", "2020-02-01T00:00:00Z"]
+                            ]
                         },
                     },
                     "summaries": {},
@@ -232,4 +233,4 @@ def stac_test_server(stac_test_server_process) -> Iterator[dict[str, Any]]:
     """Mock HTTP requests to the test STAC server."""
     api_key = "test-secret-key"
     mcp_client = Client(app)
-    yield {"client": mcp_client, "api_key": api_key}
+    return {"client": mcp_client, "api_key": api_key}

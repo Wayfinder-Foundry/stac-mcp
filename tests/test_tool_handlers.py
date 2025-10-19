@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from stac_mcp.tools.get_aggregations import handle_get_aggregations
 from stac_mcp.tools.get_collection import handle_get_collection
 from stac_mcp.tools.get_conformance import handle_get_conformance
@@ -21,7 +19,8 @@ def test_handle_search_collections():
         {
             "id": "collection1",
             "title": "Test Collection",
-                "description": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. " * 5,
+            "description": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+            * 5,
             "license": "proprietary",
         }
     ]
@@ -100,7 +99,9 @@ def test_handle_get_collection():
     }
 
     # Test text output
-    result_text = handle_get_collection(mock_client, {"collection_id": "test_collection"})
+    result_text = handle_get_collection(
+        mock_client, {"collection_id": "test_collection"}
+    )
     output = result_text[0].text
     assert "Collection: Test Collection" in output
     assert "ID: `test_collection`" in output

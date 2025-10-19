@@ -563,17 +563,18 @@ def test_list_items_local_with_directory(pystac_manager, tmp_path, sample_item):
 
 def test_update_collection_remote(pystac_manager, sample_collection):
     """Test updating a remote collection."""
-    with patch.dict("sys.modules", {"pystac": MagicMock()}), patch(
-        "stac_mcp.tools.pystac_management.urllib.request.urlopen"
-    ) as mock_urlopen:
+    with (
+        patch.dict("sys.modules", {"pystac": MagicMock()}),
+        patch(
+            "stac_mcp.tools.pystac_management.urllib.request.urlopen"
+        ) as mock_urlopen,
+    ):
         mock_coll = MagicMock()
         mock_coll.to_dict.return_value = sample_collection
         sys.modules["pystac"].Collection.from_dict.return_value = mock_coll
 
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps(sample_collection).encode(
-            "utf-8"
-        )
+        mock_response.read.return_value = json.dumps(sample_collection).encode("utf-8")
         mock_response.__enter__.return_value = mock_response
         mock_urlopen.return_value = mock_response
 
@@ -586,9 +587,12 @@ def test_update_collection_remote(pystac_manager, sample_collection):
 
 def test_update_item_remote(pystac_manager, sample_item):
     """Test updating a remote item."""
-    with patch.dict("sys.modules", {"pystac": MagicMock()}), patch(
-        "stac_mcp.tools.pystac_management.urllib.request.urlopen"
-    ) as mock_urlopen:
+    with (
+        patch.dict("sys.modules", {"pystac": MagicMock()}),
+        patch(
+            "stac_mcp.tools.pystac_management.urllib.request.urlopen"
+        ) as mock_urlopen,
+    ):
         mock_item = MagicMock()
         mock_item.to_dict.return_value = sample_item
         sys.modules["pystac"].Item.from_dict.return_value = mock_item

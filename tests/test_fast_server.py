@@ -1,5 +1,5 @@
 import json
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 import pytest
 from fastmcp import Client
@@ -36,8 +36,8 @@ async def test_call_tool(test_app):
     def dummy_get_collection(
         collection_id: str,
         output_format: Literal["text", "json"] = "text",
-        catalog_url: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        catalog_url: str | None = None,
+    ) -> list[dict[str, Any]]:
         # We can add assertions here to check the arguments
         assert collection_id == "test-collection"
         return [{"type": "text", "text": "mocked response"}]

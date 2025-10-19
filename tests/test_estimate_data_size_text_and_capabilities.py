@@ -10,7 +10,6 @@ import pytest
 from fastmcp import Client
 
 from stac_mcp.fast_server import app
-from stac_mcp.tools.client import STACClient
 
 
 class _FakeDataArray:

@@ -13,7 +13,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from stac_mcp.tools.client import (
-    CONFORMANCE_AGGREGATION,
     CONFORMANCE_QUERY,
     CONFORMANCE_QUERYABLES,
     CONFORMANCE_SORT,

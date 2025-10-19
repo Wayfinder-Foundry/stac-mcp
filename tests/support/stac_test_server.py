@@ -57,7 +57,7 @@ async def list_collections():
 
 
 @app.get("/collections/{collection_id}")
-async def get_collection_by_id(collection_id: str):  # noqa: ARG001
+async def get_collection_by_id(collection_id: str):
     # This test server only serves one collection, so ignore the ID check
     try:
         return load_json(COLLECTION_FILE)

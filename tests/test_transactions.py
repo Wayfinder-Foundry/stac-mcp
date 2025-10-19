@@ -1,7 +1,5 @@
 """Tests for transaction tool handlers."""
 
-from typing import Any, Dict, List
-
 import pytest
 from fastmcp.client import Client
 from fastmcp.tools.tool import ToolResult

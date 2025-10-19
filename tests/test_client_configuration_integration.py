@@ -3,7 +3,8 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from requests.exceptions import ConnectionError as RequestsConnectionError, Timeout
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout
 
 from stac_mcp.tools.client import (
     ConnectionFailedError,
@@ -73,21 +74,25 @@ class TestADR0007Integration:
         """ADR 0007: Map timeouts to concise messages."""
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
-        with patch.object(
-            client.client._stac_io.session, "request", side_effect=Timeout
+        with (
+            patch.object(
+                client.client._stac_io.session, "request", side_effect=Timeout
+            ),
+            pytest.raises(STACTimeoutError),
         ):
-            with pytest.raises(STACTimeoutError):
-                client.delete_item("test", "test", timeout=15)
+            client.delete_item("test", "test", timeout=15)
 
     @patch("pystac_client.stac_api_io.StacApiIO.read_json")
     def test_adr_requirement_connection_error_mapping(self, mock_read_json):
         """ADR 0007: Map connection errors to concise messages."""
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
-        with patch.object(
-            client.client._stac_io.session,
-            "request",
-            side_effect=RequestsConnectionError,
+        with (
+            patch.object(
+                client.client._stac_io.session,
+                "request",
+                side_effect=RequestsConnectionError,
+            ),
+            pytest.raises(ConnectionFailedError),
         ):
-            with pytest.raises(ConnectionFailedError):
-                client.delete_item("test", "test")
+            client.delete_item("test", "test")

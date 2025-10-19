@@ -1,15 +1,12 @@
 """Test MCP protocol compliance."""
 
 import json
-from typing import Any, Dict, List, Literal, Optional
-from unittest.mock import patch
+from typing import Any, Literal
 
-import jsonschema
 import pytest
 from fastmcp import Client
 
 from stac_mcp.fast_server import app
-from stac_mcp.tools.definitions import get_tool_definitions
 
 
 @pytest.fixture
@@ -68,8 +65,8 @@ async def test_call_tool_search_collections(test_app):
     def dummy_search_collections(
         output_format: Literal["text", "json"] = "text",
         limit: int = 10,
-        catalog_url: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        catalog_url: str | None = None,
+    ) -> list[dict[str, Any]]:
         return [
             {
                 "id": "test-collection",

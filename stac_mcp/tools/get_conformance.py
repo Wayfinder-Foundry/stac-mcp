@@ -26,5 +26,7 @@ def handle_get_conformance(
     if checks:
         result_text += "\n**Checks**\n"
         for class_uri, satisfied in checks.items():
-            result_text += f"- `{class_uri}`: {'Satisfied' if satisfied else 'Not Satisfied'}\n"
+            result_text += (
+                f"- `{class_uri}`: {'Satisfied' if satisfied else 'Not Satisfied'}\n"
+            )
     return [TextContent(type="text", text=result_text)]

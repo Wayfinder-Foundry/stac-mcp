@@ -11,7 +11,6 @@ import json
 from typing import Any
 
 from mcp.types import CallToolRequest, CallToolRequestParams, CallToolResult
-
 from stac_mcp.server import handle_list_tools, server
 
 

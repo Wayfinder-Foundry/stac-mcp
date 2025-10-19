@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
+from typing import Any
 
 from pystac_client.exceptions import APIError
-from requests.exceptions import ConnectionError as RequestsConnectionError, Timeout
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout
 from shapely.geometry import shape
 
 # HTTP status code constants (avoid magic numbers - PLR2004)
@@ -293,7 +290,10 @@ class STACClient:
         )
 
     def update_item(
-        self, item: dict[str, Any], timeout: int = 30, headers: dict[str, str] | None = None
+        self,
+        item: dict[str, Any],
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
         """Updates an existing STAC Item."""
         collection_id = item.get("collection")
@@ -345,7 +345,10 @@ class STACClient:
         )
 
     def delete_collection(
-        self, collection_id: str, timeout: int = 30, headers: dict[str, str] | None = None
+        self,
+        collection_id: str,
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
         """Deletes a STAC Collection."""
         path = f"/collections/{collection_id}"
@@ -480,7 +483,9 @@ class STACClient:
                 "bbox_used": bbox,
                 "temporal_extent": datetime,
                 "collections": collections or [],
-                "clipped_to_aoi": clipped_to_aoi if 'clipped_to_aoi' in locals() else False,
+                "clipped_to_aoi": clipped_to_aoi
+                if "clipped_to_aoi" in locals()
+                else False,
                 "message": f"Error estimating data size: {exc}",
             }
 

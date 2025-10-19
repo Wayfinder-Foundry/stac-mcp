@@ -4,7 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from pystac_client.exceptions import APIError
-from requests.exceptions import ConnectionError as RequestsConnectionError, Timeout
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout
 
 from stac_mcp.tools.client import ConnectionFailedError, STACClient, STACTimeoutError
 
@@ -63,11 +64,15 @@ def test_http_json_url_error(mock_read_json):
     """Test that a URLError is mapped to a ConnectionFailedError."""
     mock_read_json.return_value = stac_catalog_factory()
     client = STACClient("https://example.com")
-    with patch.object(
-        client.client._stac_io.session, "request", side_effect=RequestsConnectionError
+    with (
+        patch.object(
+            client.client._stac_io.session,
+            "request",
+            side_effect=RequestsConnectionError,
+        ),
+        pytest.raises(ConnectionFailedError),
     ):
-        with pytest.raises(ConnectionFailedError):
-            client.delete_item("test", "test")
+        client.delete_item("test", "test")
 
 
 @patch("pystac_client.stac_api_io.StacApiIO.read_json")
@@ -76,8 +81,10 @@ def test_search_collections_api_error(mock_read_json):
     mock_read_json.return_value = stac_catalog_factory()
     client = STACClient("https://example.com")
 
-    with patch.object(
-        client.client, "get_collections", side_effect=APIError("api failure")
+    with (
+        patch.object(
+            client.client, "get_collections", side_effect=APIError("api failure")
+        ),
+        pytest.raises(APIError, match="api failure"),
     ):
-        with pytest.raises(APIError, match="api failure"):
-            client.search_collections(limit=1)
+        client.search_collections(limit=1)
