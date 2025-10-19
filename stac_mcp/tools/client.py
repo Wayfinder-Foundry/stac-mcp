@@ -237,8 +237,6 @@ class STACClient:
             )
             raise
         else:
-            if item is None:
-                return None
             return {
                 "id": item.id,
                 "collection": item.collection_id,
