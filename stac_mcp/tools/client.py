@@ -472,7 +472,17 @@ class STACClient:
                 exc,
             )
             # We are not covering the fallback estimation method in this PR.
-            return {}
+            return {
+                "item_count": 0,
+                "estimated_size_bytes": 0,
+                "estimated_size_mb": 0,
+                "estimated_size_gb": 0,
+                "bbox_used": bbox,
+                "temporal_extent": datetime,
+                "collections": collections or [],
+                "clipped_to_aoi": clipped_to_aoi if 'clipped_to_aoi' in locals() else False,
+                "message": f"Error estimating data size: {exc}",
+            }
 
     def get_root_document(self) -> dict[str, Any]:
         root = self.client.get_root_document()
