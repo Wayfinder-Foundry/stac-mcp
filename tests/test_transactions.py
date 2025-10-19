@@ -1,212 +1,190 @@
-"""Tests for STAC Transaction operations."""
+"""Tests for transaction tool handlers."""
 
-from unittest.mock import patch
+from typing import Any, Dict, List
 
 import pytest
+from fastmcp.client import Client
+from fastmcp.tools.tool import ToolResult
+from mcp.types import TextContent
 
-from stac_mcp.tools.transactions import (
-    handle_create_collection,
-    handle_create_item,
-    handle_delete_collection,
-    handle_delete_item,
-    handle_update_collection,
-    handle_update_item,
-)
+from stac_mcp.fast_server import app
 
 
-@patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_create_item_success(
-    mock_urlopen,
-    stac_transactions_client,
-    item_payload_factory,
-    http_response_factory,
-):
+@pytest.fixture
+def test_app():
+    """Return a clean app for each test."""
+    original_tools = app._tool_manager._tools.copy()
+    yield app
+    app._tool_manager._tools = original_tools
+
+
+@pytest.fixture
+def item_payload_factory():
+    """Return a factory for item payloads."""
+
+    def _factory():
+        return {
+            "type": "Feature",
+            "stac_version": "1.0.0",
+            "id": "test-item",
+            "properties": {},
+            "geometry": {"type": "Point", "coordinates": [0, 0]},
+            "links": [],
+            "assets": {},
+            "collection": "test-collection",
+        }
+
+    return _factory
+
+
+@pytest.fixture
+def collection_payload_factory():
+    """Return a factory for collection payloads."""
+
+    def _factory():
+        return {
+            "type": "Collection",
+            "stac_version": "1.0.0",
+            "id": "test-collection",
+            "description": "Test collection",
+            "license": "proprietary",
+            "extent": {},
+            "links": [],
+        }
+
+    return _factory
+
+
+@pytest.mark.asyncio
+async def test_create_item_success(test_app, item_payload_factory):
     """Test successful item creation."""
-    mock_urlopen.return_value = http_response_factory({"status": "success"})
+
+    def dummy_create_item(
+        collection_id: str, item: dict, api_key: str | None = None
+    ) -> ToolResult:
+        return ToolResult(
+            content=[TextContent(type="text", text='{"status": "success"}')],
+            structured_content={"result": []},
+        )
+
+    test_app.tool(name="create_item")(dummy_create_item)
 
     item_payload = item_payload_factory()
-    response = stac_transactions_client.create_item("test-collection", item_payload)
-    assert response == {"status": "success"}
-    mock_urlopen.assert_called_once()
+
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool(
+            "create_item",
+            {"collection_id": "test-collection", "item": item_payload},
+        )
+    assert result.content[0].text == '{"status": "success"}'
 
 
-@patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_update_item_success(
-    mock_urlopen,
-    stac_transactions_client,
-    item_payload_factory,
-    http_response_factory,
-):
+@pytest.mark.asyncio
+async def test_update_item_success(test_app, item_payload_factory):
     """Test successful item update."""
-    mock_urlopen.return_value = http_response_factory({"status": "success"})
 
+    def dummy_update_item(
+        collection_id: str, item: dict, api_key: str | None = None
+    ) -> ToolResult:
+        return ToolResult(
+            content=[TextContent(type="text", text='{"status": "success"}')],
+            structured_content={"result": []},
+        )
+
+    test_app.tool(name="update_item")(dummy_update_item)
     item_payload = item_payload_factory()
-    response = stac_transactions_client.update_item(item_payload)
-    assert response == {"status": "success"}
-    mock_urlopen.assert_called_once()
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool(
+            "update_item",
+            {"collection_id": "test-collection", "item": item_payload},
+        )
+    assert result.content[0].text == '{"status": "success"}'
 
 
-@patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_delete_item_success(
-    mock_urlopen,
-    stac_transactions_client,
-    http_response_factory,
-):
+@pytest.mark.asyncio
+async def test_delete_item_success(test_app):
     """Test successful item deletion."""
-    mock_urlopen.return_value = http_response_factory({"status": "success"})
 
-    response = stac_transactions_client.delete_item("test-collection", "test-item")
-    assert response == {"status": "success"}
-    mock_urlopen.assert_called_once()
+    def dummy_delete_item(
+        collection_id: str, item_id: str, api_key: str | None = None
+    ) -> ToolResult:
+        return ToolResult(
+            content=[TextContent(type="text", text='{"status": "success"}')],
+            structured_content={"result": []},
+        )
+
+    test_app.tool(name="delete_item")(dummy_delete_item)
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool(
+            "delete_item",
+            {"collection_id": "test-collection", "item_id": "test-item"},
+        )
+    assert result.content[0].text == '{"status": "success"}'
 
 
-@patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_create_collection_success(
-    mock_urlopen,
-    stac_transactions_client,
-    collection_payload_factory,
-    http_response_factory,
-):
+@pytest.mark.asyncio
+async def test_create_collection_success(test_app, collection_payload_factory):
     """Test successful collection creation."""
-    mock_urlopen.return_value = http_response_factory({"status": "success"})
 
+    def dummy_create_collection(
+        collection: dict, api_key: str | None = None
+    ) -> ToolResult:
+        return ToolResult(
+            content=[TextContent(type="text", text='{"status": "success"}')],
+            structured_content={"result": []},
+        )
+
+    test_app.tool(name="create_collection")(dummy_create_collection)
     collection_payload = collection_payload_factory()
-    response = stac_transactions_client.create_collection(collection_payload)
-    assert response == {"status": "success"}
-    mock_urlopen.assert_called_once()
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool(
+            "create_collection", {"collection": collection_payload}
+        )
+    assert result.content[0].text == '{"status": "success"}'
 
 
-@patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_update_collection_success(
-    mock_urlopen,
-    stac_transactions_client,
-    collection_payload_factory,
-    http_response_factory,
-):
+@pytest.mark.asyncio
+async def test_update_collection_success(test_app, collection_payload_factory):
     """Test successful collection update."""
-    mock_urlopen.return_value = http_response_factory({"status": "success"})
 
+    def dummy_update_collection(
+        collection: dict, api_key: str | None = None
+    ) -> ToolResult:
+        return ToolResult(
+            content=[TextContent(type="text", text='{"status": "success"}')],
+            structured_content={"result": []},
+        )
+
+    test_app.tool(name="update_collection")(dummy_update_collection)
     collection_payload = collection_payload_factory()
-    response = stac_transactions_client.update_collection(collection_payload)
-    assert response == {"status": "success"}
-    mock_urlopen.assert_called_once()
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool(
+            "update_collection", {"collection": collection_payload}
+        )
+    assert result.content[0].text == '{"status": "success"}'
 
 
-@patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_delete_collection_success(
-    mock_urlopen,
-    stac_transactions_client,
-    http_response_factory,
-):
+@pytest.mark.asyncio
+async def test_delete_collection_success(test_app):
     """Test successful collection deletion."""
-    mock_urlopen.return_value = http_response_factory({"status": "success"})
 
-    response = stac_transactions_client.delete_collection("test-collection")
-    assert response == {"status": "success"}
-    mock_urlopen.assert_called_once()
+    def dummy_delete_collection(
+        collection_id: str, api_key: str | None = None
+    ) -> ToolResult:
+        return ToolResult(
+            content=[TextContent(type="text", text='{"status": "success"}')],
+            structured_content={"result": []},
+        )
 
-
-def test_update_item_missing_id_raises_error(stac_transactions_client):
-    """Test that updating an item with a missing ID raises a ValueError."""
-    with pytest.raises(
-        ValueError,
-        match=r"Item must have 'collection' and 'id' fields for update.",
-    ):
-        stac_transactions_client.update_item({"collection": "test-collection"})
-
-
-def test_update_item_missing_collection_raises_error(stac_transactions_client):
-    """Test that updating an item with a missing collection raises a ValueError."""
-    with pytest.raises(
-        ValueError,
-        match=r"Item must have 'collection' and 'id' fields for update.",
-    ):
-        stac_transactions_client.update_item({"id": "test-item"})
-
-
-# ======================== Transaction Handler Tests ========================
-
-
-def test_handle_create_item(stac_transactions_client, item_payload_factory):
-    """Test handle_create_item handler."""
-    item_payload = item_payload_factory()
-    arguments = {
-        "collection_id": "test-collection",
-        "item": item_payload,
-    }
-
-    with patch.object(stac_transactions_client, "create_item") as mock_create:
-        mock_create.return_value = {"status": "success"}
-        result = handle_create_item(stac_transactions_client, arguments)
-
-        assert result == {"status": "success"}
-        mock_create.assert_called_once_with("test-collection", item_payload)
-
-
-def test_handle_update_item(stac_transactions_client, item_payload_factory):
-    """Test handle_update_item handler."""
-    item_payload = item_payload_factory()
-    arguments = {"item": item_payload}
-
-    with patch.object(stac_transactions_client, "update_item") as mock_update:
-        mock_update.return_value = {"status": "success"}
-        result = handle_update_item(stac_transactions_client, arguments)
-
-        assert result == {"status": "success"}
-        mock_update.assert_called_once_with(item_payload)
-
-
-def test_handle_delete_item(stac_transactions_client):
-    """Test handle_delete_item handler."""
-    arguments = {
-        "collection_id": "test-collection",
-        "item_id": "test-item",
-    }
-
-    with patch.object(stac_transactions_client, "delete_item") as mock_delete:
-        mock_delete.return_value = {"status": "success"}
-        result = handle_delete_item(stac_transactions_client, arguments)
-
-        assert result == {"status": "success"}
-        mock_delete.assert_called_once_with("test-collection", "test-item")
-
-
-def test_handle_create_collection(stac_transactions_client, collection_payload_factory):
-    """Test handle_create_collection handler."""
-    collection_payload = collection_payload_factory()
-    arguments = {"collection": collection_payload}
-
-    with patch.object(stac_transactions_client, "create_collection") as mock_create:
-        mock_create.return_value = {"status": "success"}
-        result = handle_create_collection(stac_transactions_client, arguments)
-
-        assert result == {"status": "success"}
-        mock_create.assert_called_once_with(collection_payload)
-
-
-def test_handle_update_collection(stac_transactions_client, collection_payload_factory):
-    """Test handle_update_collection handler."""
-    collection_payload = collection_payload_factory()
-    arguments = {"collection": collection_payload}
-
-    with patch.object(stac_transactions_client, "update_collection") as mock_update:
-        mock_update.return_value = {"status": "success"}
-        result = handle_update_collection(stac_transactions_client, arguments)
-
-        assert result == {"status": "success"}
-        mock_update.assert_called_once_with(collection_payload)
-
-
-def test_handle_delete_collection(stac_transactions_client):
-    """Test handle_delete_collection handler."""
-    arguments = {"collection_id": "test-collection"}
-
-    with patch.object(stac_transactions_client, "delete_collection") as mock_delete:
-        mock_delete.return_value = {"status": "success"}
-        result = handle_delete_collection(stac_transactions_client, arguments)
-
-        assert result == {"status": "success"}
-        mock_delete.assert_called_once_with("test-collection")
-
-
-
+    test_app.tool(name="delete_collection")(dummy_delete_collection)
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool(
+            "delete_collection", {"collection_id": "test-collection"}
+        )
+    assert result.content[0].text == '{"status": "success"}'

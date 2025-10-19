@@ -47,6 +47,26 @@ async def get_collection():
         raise HTTPException(status_code=404, detail="collection not found") from None
 
 
+@app.get("/collections")
+async def list_collections():
+    try:
+        collection = load_json(COLLECTION_FILE)
+        return {"collections": [collection]}
+    except FileNotFoundError:
+        return {"collections": []}
+
+
+@app.get("/collections/{collection_id}")
+async def get_collection_by_id(collection_id: str):  # noqa: ARG001
+    # This test server only serves one collection, so ignore the ID check
+    try:
+        return load_json(COLLECTION_FILE)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"No collection with id '{collection_id}' found!"
+        ) from None
+
+
 @app.get("/collections/{collection_id}/items")
 async def list_items(collection_id: str):  # noqa: ARG001
     # naive listing of items directory

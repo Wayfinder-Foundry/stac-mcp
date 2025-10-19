@@ -6,8 +6,6 @@ and the private `_http_json` helper.
 
 from __future__ import annotations
 
-import ssl as _ssl
-import urllib.error as _ue
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -20,7 +18,6 @@ from stac_mcp.tools.client import (
     CONFORMANCE_QUERYABLES,
     CONFORMANCE_SORT,
     ConformanceError,
-    SSLVerificationError,
     STACClient,
 )
 
@@ -29,8 +26,17 @@ AGG_COUNT = 10
 
 
 @pytest.fixture
-def stac_client():
-    return STACClient("https://example.com/stac/v1")
+def stac_client(request):
+    """Yield a STACClient and clear its conformance cache on teardown."""
+    client = STACClient("https://example.com/stac/v1")
+
+    def teardown():
+        # Clear cached property to ensure test isolation for conformance checks
+        if hasattr(client, "_conformance"):
+            delattr(client, "_conformance")
+
+    request.addfinalizer(teardown)
+    return client
 
 
 def _mk_collection(id_: str):
@@ -103,110 +109,30 @@ def test_get_item(stac_client, monkeypatch):
     assert res["collection"] == "c9"
 
 
-# ---------------- Capability / discovery tests ---------------- #
+def test_get_item_not_found(stac_client, monkeypatch):
+    """Test that get_item returns None when the item is not found."""
+    collection_mock = MagicMock()
+    collection_mock.get_item.return_value = None
+    mock_client = MagicMock()
+    mock_client.get_collection.return_value = collection_mock
+    monkeypatch.setattr(stac_client, "_client", mock_client)
+    item = stac_client.get_item(collection_id="test-collection", item_id="not-found")
+    assert item is None
 
 
-def test_get_root_document_success(stac_client, monkeypatch):
-    monkeypatch.setattr(
-        stac_client,
-        "_http_json",
-        lambda _: {"id": "root1", "title": "R", "links": [], "conformsTo": ["core"]},
-    )
-    root = stac_client.get_root_document()
-    assert root["id"] == "root1"
-    assert "conformsTo" in root
+def test_update_item_missing_id_raises_error(stac_client):
+    """Test that updating an item with a missing ID raises a ValueError."""
+    with pytest.raises(ValueError, match="Item must have 'collection' and 'id'"):
+        stac_client.update_item(item={"collection": "test-collection"})
 
 
-def test_get_root_document_empty(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_http_json", lambda _: None)
-    root = stac_client.get_root_document()
-    assert root["id"] is None
-    assert root["conformsTo"] == []
-
-
-def test_get_conformance_direct(stac_client, monkeypatch):
-    monkeypatch.setattr(
-        stac_client,
-        "_http_json",
-        lambda path: {"conformsTo": ["c1", "c2"]} if path == "/conformance" else None,
-    )
-    res = stac_client.get_conformance(check=["c1", "cX"])
-    assert res["checks"] == {"c1": True, "cX": False}
-
-
-def test_get_conformance_fallback(stac_client, monkeypatch):
-    def _http(path):
-        if path == "/conformance":
-            return None
-        return {"conformsTo": ["core"], "id": "r"}
-
-    monkeypatch.setattr(stac_client, "_http_json", _http)
-    res = stac_client.get_conformance()
-    assert "core" in res["conformsTo"]
-
-
-def test_get_queryables_missing(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_QUERYABLES)
-    monkeypatch.setattr(stac_client, "_http_json", lambda _: None)
-    res = stac_client.get_queryables()
-    assert res["queryables"] == {}
-    assert "message" in res
-
-
-def test_get_queryables_present(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_QUERYABLES)
-    monkeypatch.setattr(
-        stac_client,
-        "_http_json",
-        lambda _: {"properties": {"eo:cloud_cover": {"type": "number"}}},
-    )
-    res = stac_client.get_queryables(collection_id="c1")
-    assert "eo:cloud_cover" in res["queryables"]
-
-
-def test_get_aggregations_supported(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_AGGREGATION)
-
-    def _http(path, *_, **__):
-        if path == "/search":
-            return {"aggregations": {"count": {"value": AGG_COUNT}}}
-        return None
-
-    monkeypatch.setattr(stac_client, "_http_json", _http)
-    res = stac_client.get_aggregations(collections=["c1"], limit=0)
-    assert res["supported"] is True
-    assert res["aggregations"]["count"]["value"] == AGG_COUNT
-
-
-def test_get_aggregations_unsupported(stac_client, monkeypatch):
-    monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_AGGREGATION)
-    monkeypatch.setattr(
-        stac_client,
-        "_http_json",
-        lambda *a, **_: {"aggregations": {}} if a[0] == "/search" else None,
-    )
-    res = stac_client.get_aggregations(collections=["c1"], limit=0)
-    assert res["supported"] is False
-    assert res["aggregations"] == {}
-    assert "parameters" in res
+def test_update_item_missing_collection_raises_error(stac_client):
+    """Test that updating an item with a missing collection raises a ValueError."""
+    with pytest.raises(ValueError, match="Item must have 'collection' and 'id'"):
+        stac_client.update_item(item={"id": "test-item"})
 
 
 # ---------------- Conformance-aware method tests ---------------- #
-
-
-def test_conformance_property_lazy_loads_and_caches(stac_client, monkeypatch):
-    """Check that conformance is fetched once and cached."""
-    http_mock = MagicMock(
-        return_value={"conformsTo": ["core", CONFORMANCE_QUERYABLES[0]]},
-    )
-    monkeypatch.setattr(stac_client, "_http_json", http_mock)
-
-    # Access multiple times
-    assert CONFORMANCE_QUERYABLES[0] in stac_client.conformance
-    assert "core" in stac_client.conformance
-
-    # Should only be called once for /conformance
-    http_mock.assert_called_once_with("/conformance")
 
 
 def test_search_items_with_query_checks_conformance(stac_client, monkeypatch):
@@ -293,100 +219,3 @@ def test_check_conformance_handles_older_uri_versions(stac_client, monkeypatch):
         pytest.fail(
             "Conformance check failed for a valid (older) URI",
         )
-
-
-def test__http_json_ssl_verification_error(monkeypatch):
-    """Simulate an SSL verification error and ensure custom exception raised."""
-    client = STACClient("https://example.com/stac/v1")
-
-    class FakeResp:  # minimal context manager
-        def __enter__(self):  # pragma: no cover - not expected to be used
-            return self
-
-        def __exit__(self, *args):  # pragma: no cover
-            return False
-
-    def fake_urlopen(*_, **__):
-        raise _ue.URLError(_ssl.SSLCertVerificationError("certificate verify failed"))
-
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    with pytest.raises(SSLVerificationError):
-        client._http_json("/conformance")  # noqa: SLF001
-
-
-def test__http_json_disable_ssl(monkeypatch):
-    """Ensure disabling SSL bypasses verification setup path (no exception)."""
-
-    client = STACClient("https://example.com/stac/v1")
-
-    class FakeResp:
-        def __init__(self):
-            self._data = b"{}"
-
-        def read(self):  # pragma: no cover - trivial
-            return self._data
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-    def fake_urlopen(*_, **__):
-        return FakeResp()
-
-    monkeypatch.setenv("STAC_MCP_UNSAFE_DISABLE_SSL", "1")
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    res = client._http_json("/conformance")  # noqa: SLF001
-    assert res == {}
-
-
-def test__http_json_ssl_insecure_fallback_success(monkeypatch):
-    """With fallback env an SSL error on /conformance retries insecurely."""
-    client = STACClient("https://example.com/stac/v1")
-
-    class FakeResp:
-        def __init__(self, payload: bytes):
-            self._data = payload
-
-        def read(self):  # pragma: no cover - trivial
-            return self._data
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):  # pragma: no cover - trivial
-            return False
-
-    calls = {"count": 0}
-
-    def fake_urlopen(*_, **__):
-        calls["count"] += 1
-        # First call raises SSL error, second returns success JSON
-        if calls["count"] == 1:
-            raise _ue.URLError(
-                _ssl.SSLCertVerificationError("certificate verify failed"),
-            )
-        return FakeResp(b'{"conformsTo": ["core"]}')
-
-    monkeypatch.setenv("STAC_MCP_SSL_INSECURE_FALLBACK", "1")
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    res = client._http_json("/conformance")  # noqa: SLF001
-    assert res == {"conformsTo": ["core"]}
-    # Ensure exactly two attempts (one failing secure, one insecure fallback)
-    expected_attempts = 2
-    assert calls["count"] == expected_attempts
-    assert client._last_insecure_ssl is True  # noqa: SLF001
-
-
-def test__http_json_ssl_insecure_fallback_disabled(monkeypatch):
-    """Without env var, SSL verification error raises immediately (no fallback)."""
-    client = STACClient("https://example.com/stac/v1")
-
-    def fake_urlopen(*_, **__):
-        raise _ue.URLError(_ssl.SSLCertVerificationError("certificate verify failed"))
-
-    monkeypatch.delenv("STAC_MCP_SSL_INSECURE_FALLBACK", raising=False)
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    with pytest.raises(SSLVerificationError):
-        client._http_json("/conformance")  # noqa: SLF001

@@ -24,7 +24,7 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "mcp>=1.0.0",
+    "fastmcp>=2.0.0",
     "pydantic>=2.11.0",
     "pystac-client>=0.7.0",
     "pystac>=1.8.0",
@@ -41,14 +41,17 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "fastapi>=0.119.0",
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "ruff>=0.5.0",
+    "fastapi",
+    "httpx",
+    "pytest-cov",
+    "requests"
 ]
 
 [project.scripts]
-stac-mcp = "stac_mcp.server:cli_main"
+stac-mcp = "stac_mcp.__main__:main"
 
 [tool.hatch.build]
 where = ["."]

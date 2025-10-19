@@ -14,7 +14,6 @@ from typing import Any, NoReturn
 
 from mcp.types import TextContent
 
-from stac_mcp import server as _server
 from stac_mcp.observability import instrument_tool_execution, record_tool_result_size
 from stac_mcp.tools.client import STACClient
 from stac_mcp.tools.estimate_data_size import handle_estimate_data_size
@@ -137,9 +136,11 @@ def _as_text_content_list(result: Any) -> list[TextContent]:
 
 async def execute_tool(
     tool_name: str,
+    arguments: dict[str, Any] | None = None,
+    catalog_url: str | None = None,
+    headers: dict[str, str] | None = None,
     handler: Handler | None = None,
     client: STACClient | None = None,
-    arguments: dict[str, Any] | None = None,
 ):
     """Execute a tool handler with optional overrides for tests.
 
@@ -148,21 +149,6 @@ async def execute_tool(
     handler and shared client are used. The return value is always normalized
     to a ``list[TextContent]`` for compatibility with existing tooling.
     """
-
-    # Backward compatibility: legacy callers passed only (tool_name, arguments).
-    if handler is not None and not callable(handler):
-        if arguments is None:
-            arguments = dict(handler)
-        handler = None
-    if (
-        client is not None
-        and not isinstance(client, STACClient)
-        and isinstance(client, dict)
-    ):
-        if arguments is None:
-            arguments = dict(client)
-        client = None
-
     arguments = dict(arguments or {})
 
     # Check if this is a pystac tool
@@ -178,13 +164,11 @@ async def execute_tool(
 
     # PySTAC tools use PySTACManager instead of STACClient
     if is_pystac_tool:
-        api_key = arguments.get("api_key")
-        manager = PySTACManager(api_key=api_key)
+        manager = PySTACManager()
         raw_result = handler(manager, arguments)
     else:
-        catalog_url = arguments.get("catalog_url")
         if client is None:
-            client = STACClient(catalog_url) if catalog_url else _server.stac_client
+            client = STACClient(catalog_url, headers=headers)
         instrumented = instrument_tool_execution(
             tool_name,
             catalog_url,

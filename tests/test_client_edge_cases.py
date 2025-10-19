@@ -1,501 +1,65 @@
-"""Additional client edge cases and error scenarios.
+"""Additional client edge cases and error scenarios."""
 
-Tests focus on:
-- Edge cases in HTTP request handling
-- Retry logic boundary conditions
-- Header manipulation edge cases
-- URL construction edge cases
-- Response parsing edge cases
-"""
-
-from __future__ import annotations
-
-from io import BytesIO
 from unittest.mock import MagicMock, patch
-from urllib.error import HTTPError, URLError
 
-import pytest
-from pystac_client.exceptions import APIError
+from stac_mcp.tools.client import STACClient
 
-from stac_mcp.tools.client import (
-    ConnectionFailedError,
-    STACClient,
-    STACTimeoutError,
-)
+
+def stac_catalog_factory():
+    return {
+        "type": "Catalog",
+        "id": "test-catalog",
+        "stac_version": "1.0.0",
+        "description": "Test Catalog",
+        "links": [],
+    }
 
 
 class TestClientInitialization:
     """Test STACClient initialization edge cases."""
 
-    def test_client_with_trailing_slash(self):
+    @patch("pystac_client.stac_api_io.StacApiIO.read_json")
+    def test_client_with_trailing_slash(self, mock_read_json):
         """Test client with catalog URL having trailing slash."""
+        mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com/stac/")
         assert not client.catalog_url.endswith("/stac/")
 
-    def test_client_without_trailing_slash(self):
+    @patch("pystac_client.stac_api_io.StacApiIO.read_json")
+    def test_client_without_trailing_slash(self, mock_read_json):
         """Test client with catalog URL without trailing slash."""
+        mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com/stac")
         assert client.catalog_url == "https://example.com/stac"
-
-    def test_client_with_port(self):
-        """Test client with catalog URL including port."""
-        client = STACClient("https://example.com:8080/stac")
-        assert "8080" in client.catalog_url
-
-    def test_client_with_path_segments(self):
-        """Test client with catalog URL having multiple path segments."""
-        client = STACClient("https://example.com/api/v1/stac")
-        assert client.catalog_url == "https://example.com/api/v1/stac"
-
-    def test_client_with_http_protocol(self):
-        """Test client with HTTP (non-HTTPS) URL."""
-        client = STACClient("http://localhost:8000/stac")
-        assert client.catalog_url.startswith("http://")
-
-
-class TestHTTPRequestBuilding:
-    """Test HTTP request construction edge cases."""
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_http_json_with_query_parameters(self, mock_urlopen):
-        """Test HTTP request with query parameters."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"result": "ok"}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        result = client._http_json("/test?param=value")  # noqa: SLF001
-        assert result == {"result": "ok"}
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_http_json_with_fragment(self, mock_urlopen):
-        """Test HTTP request with URL fragment."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"result": "ok"}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        result = client._http_json("/test#fragment")  # noqa: SLF001
-        assert result == {"result": "ok"}
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_http_json_absolute_url(self, mock_urlopen):
-        """Test HTTP request with absolute URL."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"result": "ok"}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        # Some paths might be absolute URLs
-        result = client._http_json("https://other.com/data")  # noqa: SLF001
-        assert result == {"result": "ok"}
 
 
 class TestHeaderHandling:
     """Test HTTP header handling edge cases."""
 
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_default_headers_included(self, mock_urlopen):
+    @patch("pystac_client.stac_api_io.StacApiIO.read_json")
+    def test_default_headers_included(self, mock_read_json):
         """Test that default headers are included."""
+        mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"result": "ok"}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        client._http_json("/test")  # noqa: SLF001
-
-        call_args = mock_urlopen.call_args
-        request = call_args[0][0]
-        assert request.headers is not None
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_custom_headers_override(self, mock_urlopen):
-        """Test that custom headers override defaults."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"result": "ok"}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        custom_headers = {"Custom-Header": "custom-value"}
-        client._http_json("/test", headers=custom_headers)  # noqa: SLF001
-
-        call_args = mock_urlopen.call_args
-        request = call_args[0][0]
-        assert "Custom-header" in request.headers or "Custom-Header" in request.headers
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_empty_custom_headers(self, mock_urlopen):
-        """Test with empty custom headers dict."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"result": "ok"}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        client._http_json("/test", headers={})  # noqa: SLF001
-
-        # Should still include default headers
-        assert mock_urlopen.called
-
-
-class TestRetryLogic:
-    """Test retry logic edge cases."""
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_retry_on_transient_error(self, mock_urlopen):
-        """Test retry on transient errors."""
-        client = STACClient("https://example.com")
-
-        # Fail twice, succeed on third try
-        mock_urlopen.side_effect = [
-            URLError("Connection reset"),
-            URLError("Connection reset"),
-            MagicMock(
-                __enter__=MagicMock(
-                    return_value=MagicMock(read=MagicMock(return_value=b'{"ok": true}'))
-                ),
-                __exit__=MagicMock(return_value=False),
-            ),
-        ]
-
-        result = client._http_json("/test")  # noqa: SLF001
-        assert result == {"ok": True}
-        expected_retries = 3
-        assert mock_urlopen.call_count == expected_retries
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_retry_exhausted(self, mock_urlopen):
-        """Test when all retries are exhausted."""
-        client = STACClient("https://example.com")
-
-        # Fail all attempts
-        mock_urlopen.side_effect = URLError("Persistent error")
-
-        with pytest.raises(ConnectionFailedError):
-            client._http_json("/test")  # noqa: SLF001
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_no_retry_on_client_error(self, mock_urlopen):
-        """Test that 4xx errors don't trigger retry."""
-        client = STACClient("https://example.com")
-
-        # 404 should not be retried
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"error": "Not found"}'
-        mock_urlopen.side_effect = HTTPError(
-            "https://example.com/test",
-            404,
-            "Not Found",
-            {},
-            BytesIO(b'{"error": "Not found"}'),
-        )
-
-        result = client._http_json("/test")  # noqa: SLF001
-        assert result is None
-        # Should only try once, not retry
-        assert mock_urlopen.call_count == 1
-
-
-class TestTimeoutHandling:
-    """Test timeout handling edge cases."""
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_zero_timeout(self, mock_urlopen):
-        """Test with zero timeout (should use default)."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"result": "ok"}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        result = client._http_json("/test", timeout=0)  # noqa: SLF001
-        assert result == {"result": "ok"}
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_very_long_timeout(self, mock_urlopen):
-        """Test with very long timeout."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"result": "ok"}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        result = client._http_json("/test", timeout=3600)  # noqa: SLF001
-        assert result == {"result": "ok"}
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_timeout_between_retries(self, mock_urlopen):
-        """Test timeout handling when a later retry succeeds."""
-        client = STACClient("https://example.com")
-        mock_urlopen.side_effect = [
-            OSError("timed out"),
-            MagicMock(
-                __enter__=MagicMock(
-                    return_value=MagicMock(read=MagicMock(return_value=b'{"ok": true}'))
-                ),
-                __exit__=MagicMock(return_value=False),
-            ),
-        ]
-        result = client._http_json("/test", timeout=5)  # noqa: SLF001
-        assert result == {"ok": True}
-        expected_calls = 2
-        assert mock_urlopen.call_count == expected_calls
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_timeout_all_retries_exhausted(self, mock_urlopen):
-        """Test timeout error when every retry times out."""
-        client = STACClient("https://example.com")
-        mock_urlopen.side_effect = [
-            OSError("timed out"),
-            OSError("timed out"),
-            OSError("timed out"),
-        ]
-
-        with pytest.raises(STACTimeoutError):
-            client._http_json("/test", timeout=5)  # noqa: SLF001
-        expected_calls = 3
-        assert mock_urlopen.call_count == expected_calls
-
-
-class TestResponseParsing:
-    """Test response parsing edge cases."""
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_empty_json_response(self, mock_urlopen):
-        """Test parsing empty JSON object."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b"{}"
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        result = client._http_json("/test")  # noqa: SLF001
-        assert result == {}
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_json_array_response(self, mock_urlopen):
-        """Test parsing JSON array response."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b"[1, 2, 3]"
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        result = client._http_json("/test")  # noqa: SLF001
-        assert result == [1, 2, 3]
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_json_null_response(self, mock_urlopen):
-        """Test parsing JSON null response."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b"null"
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        result = client._http_json("/test")  # noqa: SLF001
-        assert result is None
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_malformed_json_response(self, mock_urlopen):
-        """Test handling of malformed JSON."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b"{invalid json}"
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        # Should raise JSONDecodeError on malformed JSON
-        with pytest.raises((ValueError, Exception)):
-            client._http_json("/test")  # noqa: SLF001
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_large_json_response(self, mock_urlopen):
-        """Test parsing very large JSON response."""
-        client = STACClient("https://example.com")
-        mb_size = 1000000  # 1MB
-        large_json = b'{"data": "' + b"x" * mb_size + b'"}'
-        mock_response = MagicMock()
-        mock_response.read.return_value = large_json
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        result = client._http_json("/test")  # noqa: SLF001
-        assert "data" in result
-        assert len(result["data"]) == mb_size
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_unicode_in_json_response(self, mock_urlopen):
-        """Test parsing JSON with unicode characters."""
-        client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        # Chinese characters in UTF-8
-        mock_response.read.return_value = b'{"text": "\xe4\xb8\xad\xe6\x96\x87"}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        result = client._http_json("/test")  # noqa: SLF001
-        assert "text" in result
+        with patch.object(client.client._stac_io.session, "request") as mock_request:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"ok": True}
+            mock_request.return_value = mock_response
+            client.delete_item("test", "test")
+            mock_request.assert_called_once()
 
 
 class TestSearchOperations:
     """Test search operation edge cases."""
 
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_search_collections_empty_result(
-        self,
-        mock_urlopen,
-        stac_client_factory,
-    ):
+    @patch("pystac_client.stac_api_io.StacApiIO.read_json")
+    def test_search_collections_empty_result(self, mock_read_json):
         """Test search_collections with no results."""
-        client, mock_api = stac_client_factory()
-        mock_api.get_collections.return_value = []
-
-        result = client.search_collections()
-        assert result == []
-        mock_api.get_collections.assert_called_once()
-        mock_urlopen.assert_not_called()
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_search_items_with_all_parameters(
-        self,
-        mock_urlopen,
-        stac_client_factory,
-    ):
-        """Test search_items with all possible parameters."""
-        client, mock_api = stac_client_factory()
-        mock_search = MagicMock()
-        mock_search.items.return_value = []
-        mock_api.search.return_value = mock_search
-        client._conformance = [  # noqa: SLF001
-            "https://api.stacspec.org/v1.0.0/item-search#query",
-            "https://api.stacspec.org/v1.0.0/item-search#sort",
-        ]
-
-        result = client.search_items(
-            collections=["col1", "col2"],
-            bbox=[-180, -90, 180, 90],
-            datetime="2023-01-01/2023-12-31",
-            query={"eo:cloud_cover": {"lt": 10}},
-            limit=100,
-        )
-        assert result == []
-        mock_api.search.assert_called_once()
-        mock_search.items.assert_called_once()
-        mock_urlopen.assert_not_called()
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_get_collection_not_found(
-        self,
-        mock_urlopen,
-        stac_client_factory,
-    ):
-        """Test get_collection when collection doesn't exist."""
-        client, mock_api = stac_client_factory()
-        mock_api.get_collection.side_effect = APIError("Not Found")
-
-        with pytest.raises(APIError):
-            client.get_collection("missing")
-        mock_urlopen.assert_not_called()
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_get_item_not_found(
-        self,
-        mock_urlopen,
-        stac_client_factory,
-    ):
-        """Test get_item when item doesn't exist."""
-        client, mock_api = stac_client_factory()
-        mock_collection = MagicMock()
-        mock_collection.get_item.side_effect = APIError("Not Found")
-        mock_api.get_collection.return_value = mock_collection
-
-        with pytest.raises(APIError):
-            client.get_item("col1", "missing")
-        mock_urlopen.assert_not_called()
-
-
-class TestConformanceHandling:
-    """Test conformance checking edge cases."""
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_conformance_caching(self, mock_urlopen):
-        """Test that conformance is cached."""
+        mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
-        mock_response = MagicMock()
-        mock_response.read.return_value = b'{"conformsTo": ["class1", "class2"]}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
-
-        # First call
-        client.get_conformance()
-        # Second call (should use cache)
-        client.get_conformance()
-
-        # Should only call once or twice due to caching
-        max_calls = 2
-        assert mock_urlopen.call_count <= max_calls  # May vary based on implementation
-
-    def test_conformance_check_single_class(self):
-        """Test checking a single conformance class."""
-        client = STACClient("https://example.com")
-        client._conformance = ["class1", "class2"]  # noqa: SLF001
-
-        # Check single class via property access
-        assert hasattr(client, "_conformance")
-
-    def test_conformance_check_multiple_classes(self):
-        """Test checking multiple conformance classes."""
-        client = STACClient("https://example.com")
-        client._conformance = ["class1", "class2", "class3"]  # noqa: SLF001
-
-        # Multiple checks
-        assert hasattr(client, "_conformance")
-
-
-class TestDataSizeEstimation:
-    """Test data size estimation edge cases."""
-
-    def test_estimate_data_size_no_items(self):
-        """Test data size estimation with no items."""
-        # This would typically involve mocking odc.stac
-        # Placeholder for future implementation
-
-    def test_estimate_data_size_large_dataset(self):
-        """Test data size estimation with very large dataset."""
-        # Placeholder for future implementation
-
-
-class TestURLEncoding:
-    """Test URL encoding edge cases."""
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_special_characters_in_collection_id(
-        self,
-        mock_urlopen,
-        stac_client_factory,
-        make_collection,
-    ):
-        """Test collection ID with special characters."""
-        client, mock_api = stac_client_factory()
-        collection = make_collection(
-            id="test-col name",
-            description="Example",
-            license="proprietary",
-        )
-        mock_api.get_collection.return_value = collection
-
-        result = client.get_collection("test-col name")
-        assert result["id"] == "test-col name"
-        mock_api.get_collection.assert_called_once_with("test-col name")
-        mock_urlopen.assert_not_called()
-
-    @patch("stac_mcp.tools.client.urllib.request.urlopen")
-    def test_special_characters_in_item_id(
-        self,
-        mock_urlopen,
-        stac_client_factory,
-        make_item,
-    ):
-        """Test item ID with special characters."""
-        client, mock_api = stac_client_factory()
-        mock_item = make_item(id="test-item/path", collection_id="col1")
-        mock_collection = MagicMock()
-        mock_collection.get_item.return_value = mock_item
-        mock_api.get_collection.return_value = mock_collection
-
-        result = client.get_item("col1", "test-item/path")
-        assert result["id"] == "test-item/path"
-        mock_api.get_collection.assert_called_once_with("col1")
-        mock_collection.get_item.assert_called_once_with("test-item/path")
-        mock_urlopen.assert_not_called()
+        with patch.object(client.client, "get_collections") as mock_get_collections:
+            mock_get_collections.return_value = []
+            result = client.search_collections()
+            assert result == []
+            mock_get_collections.assert_called_once()

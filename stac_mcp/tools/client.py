@@ -4,17 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import ssl
-import urllib.error
-import urllib.request
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
 from pystac_client.exceptions import APIError
+from requests.exceptions import ConnectionError as RequestsConnectionError, Timeout
 from shapely.geometry import shape
 
 # HTTP status code constants (avoid magic numbers - PLR2004)
@@ -82,10 +78,14 @@ class STACClient:
 
     def __init__(
         self,
-        catalog_url: str = "https://planetarycomputer.microsoft.com/api/stac/v1",
+        catalog_url: str | None = "https://planetarycomputer.microsoft.com/api/stac/v1",
         headers: dict[str, str] | None = None,
     ) -> None:
-        self.catalog_url = catalog_url.rstrip("/")
+        self.catalog_url = (
+            catalog_url.rstrip("/")
+            if catalog_url
+            else "https://planetarycomputer.microsoft.com/api/stac/v1"
+        )
         self.headers = headers or {}
         self._client: Any | None = None
         self._conformance: list[str] | None = None
@@ -96,31 +96,18 @@ class STACClient:
     @property
     def client(self) -> Any:
         if self._client is None:
-            # Dynamic import avoids circular import; server may set Client.
-            from stac_mcp import server as _server  # noqa: PLC0415
+            from pystac_client import Client as client_ref
+            from pystac_client.stac_api_io import StacApiIO
 
-            client_ref = getattr(_server, "Client", None)
-            if client_ref is None:  # Fallback if dependency missing
-                # Import inside branch so tests can simulate missing dependency.
-                from pystac_client import (  # noqa: PLC0415
-                    Client as client_ref,  # noqa: N813
-                )
-
-            self._client = client_ref.open(  # type: ignore[attr-defined]
-                self.catalog_url,
-            )
+            stac_io = StacApiIO(headers=self.headers)
+            self._client = client_ref.open(self.catalog_url, stac_io=stac_io)
         return self._client
 
     @property
     def conformance(self) -> list[str]:
         """Lazy-loads and caches STAC API conformance classes."""
         if self._conformance is None:
-            conf = self._http_json("/conformance")
-            if conf and "conformsTo" in conf:
-                self._conformance = conf["conformsTo"]
-            else:  # Fallback to root document
-                root = self.get_root_document()
-                self._conformance = root.get("conformsTo", []) or []
+            self._conformance = self.client.to_dict().get("conformsTo", [])
         return self._conformance
 
     def _check_conformance(self, capability_uris: list[str]) -> None:
@@ -136,16 +123,6 @@ class STACClient:
                 "(or a compatible version)"
             )
             raise ConformanceError(msg)
-
-    # ----------------------------- Utility Methods ------------------------- #
-    def _url_scheme_is_permitted(
-        self,
-        request: urllib.request.Request,
-        allowed: Sequence[str] = ("http", "https"),
-    ) -> bool:
-        """Return True when the request URL uses a permitted scheme."""
-        url = getattr(request, "full_url", request.get_full_url())
-        return urllib.parse.urlparse(url).scheme in allowed
 
     # ----------------------------- Collections ----------------------------- #
     def search_collections(self, limit: int = 10) -> list[dict[str, Any]]:
@@ -260,6 +237,8 @@ class STACClient:
             )
             raise
         else:
+            if item is None:
+                return None
             return {
                 "id": item.id,
                 "collection": item.collection_id,
@@ -271,49 +250,109 @@ class STACClient:
             }
 
     # --------------------------- Transactions --------------------------- #
+    def _do_transaction(
+        self,
+        method: str,
+        url: str,
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
+        **kwargs,
+    ) -> dict[str, Any] | None:
+        """Centralized transaction request handling with error mapping."""
+        request_headers = self.headers.copy()
+        if headers:
+            request_headers.update(headers)
+        request_headers["Accept"] = "application/json"
+        try:
+            response = self.client._stac_io.session.request(
+                method, url, headers=request_headers, timeout=timeout, **kwargs
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            if not response.content:
+                return None
+            return response.json()
+        except Timeout as e:
+            logger.error("Request timed out")
+            raise STACTimeoutError("Request timed out") from e
+        except RequestsConnectionError as e:
+            logger.error("Failed to connect")
+            raise ConnectionFailedError("Failed to connect") from e
+
     def create_item(
         self,
         collection_id: str,
         item: dict[str, Any],
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
         """Creates a new STAC Item in a collection."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
         path = f"/collections/{collection_id}/items"
-        return self._http_json(path, method="POST", payload=item)
+        url = f"{self.catalog_url.replace('catalog.json', '')}{path}"
+        return self._do_transaction(
+            "post", url, json=item, timeout=timeout, headers=headers
+        )
 
-    def update_item(self, item: dict[str, Any]) -> dict[str, Any] | None:
+    def update_item(
+        self, item: dict[str, Any], timeout: int = 30, headers: dict[str, str] | None = None
+    ) -> dict[str, Any] | None:
         """Updates an existing STAC Item."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
         collection_id = item.get("collection")
         item_id = item.get("id")
         if not collection_id or not item_id:
             msg = "Item must have 'collection' and 'id' fields for update."
             raise ValueError(msg)
         path = f"/collections/{collection_id}/items/{item_id}"
-        return self._http_json(path, method="PUT", payload=item)
+        url = f"{self.catalog_url.replace('catalog.json', '')}{path}"
+        return self._do_transaction(
+            "put", url, json=item, timeout=timeout, headers=headers
+        )
 
-    def delete_item(self, collection_id: str, item_id: str) -> dict[str, Any] | None:
+    def delete_item(
+        self,
+        collection_id: str,
+        item_id: str,
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
         """Deletes a STAC Item."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
         path = f"/collections/{collection_id}/items/{item_id}"
-        return self._http_json(path, method="DELETE")
+        url = f"{self.catalog_url.replace('catalog.json', '')}{path}"
+        return self._do_transaction("delete", url, timeout=timeout, headers=headers)
 
-    def create_collection(self, collection: dict[str, Any]) -> dict[str, Any] | None:
+    def create_collection(
+        self,
+        collection: dict[str, Any],
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
         """Creates a new STAC Collection."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
-        return self._http_json("/collections", method="POST", payload=collection)
+        url = f"{self.catalog_url.replace('catalog.json', '')}/collections"
+        return self._do_transaction(
+            "post", url, json=collection, timeout=timeout, headers=headers
+        )
 
-    def update_collection(self, collection: dict[str, Any]) -> dict[str, Any] | None:
+    def update_collection(
+        self,
+        collection: dict[str, Any],
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
         """Updates an existing STAC Collection."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
         # Per spec, PUT is to /collections, not /collections/{id}
-        return self._http_json("/collections", method="PUT", payload=collection)
+        url = f"{self.catalog_url.replace('catalog.json', '')}/collections"
+        return self._do_transaction(
+            "put", url, json=collection, timeout=timeout, headers=headers
+        )
 
-    def delete_collection(self, collection_id: str) -> dict[str, Any] | None:
+    def delete_collection(
+        self, collection_id: str, timeout: int = 30, headers: dict[str, str] | None = None
+    ) -> dict[str, Any] | None:
         """Deletes a STAC Collection."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
         path = f"/collections/{collection_id}"
-        return self._http_json(path, method="DELETE")
+        url = f"{self.catalog_url.replace('catalog.json', '')}{path}"
+        return self._do_transaction("delete", url, timeout=timeout, headers=headers)
 
     # ------------------------- Data Size Estimation ----------------------- #
     def estimate_data_size(
@@ -325,15 +364,6 @@ class STACClient:
         aoi_geojson: dict[str, Any] | None = None,
         limit: int = 100,
     ) -> dict[str, Any]:
-        # Local import (intentional) lets tests patch server.ODC_STAC_AVAILABLE.
-        from stac_mcp import server as _server  # noqa: PLC0415
-
-        if not getattr(_server, "ODC_STAC_AVAILABLE", False):
-            msg = (
-                "odc.stac is not available. Please install it to use data size "
-                "estimation."
-            )
-            raise RuntimeError(msg)
         from odc import stac as odc_stac  # noqa: PLC0415 local import (guarded)
 
         search = self.client.search(
@@ -443,317 +473,11 @@ class STACClient:
                 "odc.stac loading failed, using fallback estimation: %s",
                 exc,
             )
-            return self._fallback_size_estimation(
-                items,
-                effective_bbox,
-                datetime,
-                collections,
-                clipped_to_aoi,
-            )
-
-    def _fallback_size_estimation(
-        self,
-        items: list[Any],
-        effective_bbox: list[float] | None,
-        datetime: str | None,
-        collections: list[str] | None,
-        clipped_to_aoi: bool,
-    ) -> dict[str, Any]:
-        total_estimated_bytes = 0
-        assets_info = []
-        for item in items:
-            for asset_name, asset in item.assets.items():
-                asset_size = 0
-                if hasattr(asset, "extra_fields"):
-                    asset_size = asset.extra_fields.get("file:size", 0)
-                if asset_size == 0:
-                    media_type = getattr(asset, "media_type", "") or ""
-                    if "tiff" in media_type.lower() or "geotiff" in media_type.lower():
-                        if effective_bbox:
-                            bbox_area = (effective_bbox[2] - effective_bbox[0]) * (
-                                effective_bbox[3] - effective_bbox[1]
-                            )
-                            asset_size = int(bbox_area * 10 * 1024 * 1024)
-                        else:
-                            asset_size = 50 * 1024 * 1024
-                    else:
-                        asset_size = 5 * 1024 * 1024
-                total_estimated_bytes += asset_size
-                assets_info.append(
-                    {
-                        "asset": asset_name,
-                        "media_type": getattr(asset, "media_type", "unknown"),
-                        "estimated_size_bytes": asset_size,
-                        "estimated_size_mb": round(asset_size / (1024 * 1024), 2),
-                    },
-                )
-        dates = [item.datetime for item in items if item.datetime]
-        temporal_extent = None
-        if dates:
-            temporal_extent = f"{min(dates).isoformat()} to {max(dates).isoformat()}"
-        estimated_mb = total_estimated_bytes / (1024 * 1024)
-        estimated_gb = total_estimated_bytes / (1024 * 1024 * 1024)
-        return {
-            "item_count": len(items),
-            "estimated_size_bytes": total_estimated_bytes,
-            "estimated_size_mb": round(estimated_mb, 2),
-            "estimated_size_gb": round(estimated_gb, 4),
-            "bbox_used": effective_bbox,
-            "temporal_extent": temporal_extent or datetime,
-            "collections": collections or list({item.collection_id for item in items}),
-            "clipped_to_aoi": clipped_to_aoi,
-            "assets_analyzed": assets_info,
-            "estimation_method": "fallback",
-            "message": (
-                "Estimated data size for "
-                f"{len(items)} items using fallback method (odc.stac unavailable)"
-            ),
-        }
-
-    # ----------------------- Capabilities & Discovery -------------------- #
-    def _http_json(
-        self,
-        path: str,
-        method: str = "GET",
-        payload: dict | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-    ) -> dict | None:
-        """Lightweight HTTP helper using stdlib (avoids extra deps).
-
-        Returns parsed JSON dict or None on 404 for capability endpoints where
-        absence is acceptable.
-
-        Args:
-            path: URL path relative to catalog_url
-            method: HTTP method (GET, POST, etc.)
-            payload: Optional JSON payload for POST/PUT requests
-            headers: Optional headers to merge with default headers
-            timeout: Optional timeout in seconds (defaults to 30)
-        """
-        url = self.catalog_url.rstrip("/") + path
-        data = None
-        request_headers = self.headers.copy()
-        request_headers.update(headers or {})
-        request_headers["Accept"] = "application/json"
-
-        if payload is not None:
-            data = json.dumps(payload).encode("utf-8")
-            request_headers["Content-Type"] = "application/json"
-        if not url.startswith(("http://", "https://")):
-            msg = f"Unsupported URL scheme in {url}"
-            raise ValueError(msg)
-        # Request object creation is safe: url validated to http/https only.
-        req = urllib.request.Request(  # noqa: S310
-            url,
-            data=data,
-            headers=request_headers,
-            method=method,
-        )
-        if not self._url_scheme_is_permitted(req):
-            msg = f"Unsupported URL scheme in {url}"
-            raise ValueError(msg)
-        # ---------------- SSL Context Handling ---------------- #
-        context: ssl.SSLContext | None = None
-        disable_ssl = os.getenv("STAC_MCP_UNSAFE_DISABLE_SSL") == "1"
-        # New: opportunistic fallback when encountering a certificate validation
-        # failure for read-only endpoints (GET) if explicitly allowed.
-        insecure_fallback_enabled = os.getenv("STAC_MCP_SSL_INSECURE_FALLBACK") == "1"
-        insecure_retry_performed = False
-        ca_bundle = os.getenv("STAC_MCP_CA_BUNDLE")
-        if disable_ssl:
-            context = ssl.create_default_context()
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE  # type: ignore[assignment]
-            logger.warning(
-                "SSL verification DISABLED via STAC_MCP_UNSAFE_DISABLE_SSL=1. "
-                "Not for production use.",
-            )
-            self._last_insecure_ssl = True
-        elif ca_bundle and Path(ca_bundle).is_file():
-            try:
-                context = ssl.create_default_context(cafile=ca_bundle)
-            except OSError as ctx_exc:  # pragma: no cover - unlikely
-                logger.warning(
-                    "Failed to load custom CA bundle '%s': %s",
-                    ca_bundle,
-                    ctx_exc,
-                )
-
-        # ---------------- Retry / Backoff Logic ---------------- #
-        max_attempts = 3
-        base_delay = 0.2
-        self._last_retry_attempts = 0
-        effective_timeout = timeout if timeout is not None else 30
-
-        for attempt in range(1, max_attempts + 1):
-            try:
-                with urllib.request.urlopen(  # noqa: S310
-                    req,
-                    timeout=effective_timeout,
-                    context=context,
-                ) as resp:
-                    raw = resp.read().decode("utf-8")
-                    return json.loads(raw) if raw else {}
-            except urllib.error.HTTPError as exc:  # pragma: no cover - network specific
-                if exc.code == HTTP_404:
-                    return None
-                # Non-404 HTTP errors are not retried (server responded definitively)
-                raise
-            except urllib.error.URLError as exc:  # pragma: no cover - network
-                reason = getattr(exc, "reason", None)
-                if isinstance(reason, ssl.SSLCertVerificationError):
-                    # Attempt a one-time insecure fallback if explicitly enabled
-                    # and criteria met (GET + read-only path) and not already tried.
-                    read_only = method == "GET"
-                    safe_path = path in ("/conformance", "") or path.endswith(
-                        "/conformance",
-                    )
-                    if (
-                        insecure_fallback_enabled
-                        and not insecure_retry_performed
-                        and read_only
-                        and safe_path
-                        and not disable_ssl
-                    ):
-                        logger.warning(
-                            (
-                                "SSL verification failed for %s: %s. Retrying once "
-                                "INSECURE (fallback env enabled)."
-                            ),
-                            url,
-                            reason,
-                        )
-                        insecure_retry_performed = True
-                        # Build insecure context and retry immediately (no backoff)
-                        insecure_ctx = ssl.create_default_context()
-                        insecure_ctx.check_hostname = False
-                        insecure_ctx.verify_mode = ssl.CERT_NONE
-                        try:
-                            with urllib.request.urlopen(  # noqa: S310
-                                req,
-                                timeout=effective_timeout,
-                                context=insecure_ctx,
-                            ) as resp:
-                                raw = resp.read().decode("utf-8")
-                                self._last_insecure_ssl = True
-                                return json.loads(raw) if raw else {}
-                        except (
-                            urllib.error.URLError,
-                            ssl.SSLError,
-                            ssl.SSLCertVerificationError,
-                            OSError,
-                            ValueError,
-                        ):  # pragma: no cover - network
-                            logger.exception(
-                                "Insecure fallback attempt also failed",
-                            )
-                            # Fall through to raise canonical error below
-                    msg = (
-                        f"SSL certificate verification failed for {url}: {reason}. "
-                        "Set STAC_MCP_CA_BUNDLE to a custom CA bundle, use "
-                        "STAC_MCP_SSL_INSECURE_FALLBACK=1 for a one-time read-only "
-                        "retry, or (unsafe) STAC_MCP_UNSAFE_DISABLE_SSL=1 to fully "
-                        "bypass verification for all requests (diagnostics only)."
-                    )
-                    raise SSLVerificationError(msg) from exc
-                # Retry only on the first (max_attempts-1) attempts
-                if attempt < max_attempts:
-                    self._last_retry_attempts = attempt
-                    delay = base_delay * (2 ** (attempt - 1))
-                    import time  # noqa: PLC0415
-
-                    time.sleep(delay)
-                    continue
-                # Map remaining URLErrors to actionable error types
-                msg = self._map_connection_error(url, exc, effective_timeout)
-                logger.exception(
-                    "Connection failed after %d attempts: %s",
-                    max_attempts,
-                    msg,
-                )
-                raise ConnectionFailedError(msg) from exc
-            except OSError as exc:  # pragma: no cover - network
-                # Catch socket.timeout (which is subclass of OSError) and
-                # other OS errors.
-                # Use builtin TimeoutError for isinstance check (Python 3.10+)
-                import socket  # noqa: PLC0415
-
-                if "timed out" in str(exc).lower() or isinstance(
-                    exc,
-                    socket.timeout | TimeoutError,
-                ):
-                    if attempt < max_attempts:
-                        self._last_retry_attempts = attempt
-                        delay = base_delay * (2 ** (attempt - 1))
-                        import time  # noqa: PLC0415
-
-                        time.sleep(delay)
-                        continue
-                    msg = (
-                        f"Request to {url} timed out after {effective_timeout}s"
-                        f"(attempted {max_attempts} times). "
-                        "Consider increasing timeout parameter or checking "
-                        "network connectivity."
-                    )
-                    logger.exception("Request timeout: %s", msg)
-                    raise STACTimeoutError(msg) from exc
-                raise
-        return None  # Should not reach here; loop either returns or raises
-
-    def _map_connection_error(
-        self,
-        url: str,
-        exc: urllib.error.URLError,
-        timeout: int,
-    ) -> str:
-        """Map URLError to actionable error message.
-
-        Args:
-            url: The URL that failed
-            exc: The URLError exception
-            timeout: The timeout value used
-
-        Returns:
-            Actionable error message with guidance
-        """
-        reason = getattr(exc, "reason", None)
-        reason_str = str(reason) if reason else str(exc)
-
-        # Common error patterns and their messages
-        if (
-            "Name or service not known" in reason_str
-            or "nodename nor servname" in reason_str
-        ):
-            return (
-                f"DNS lookup failed for {url}. "
-                "Check the catalog URL and network connectivity."
-            )
-        if "Connection refused" in reason_str:
-            return (
-                f"Connection refused by {url}. "
-                "The server may be down or the URL may be incorrect."
-            )
-        if "Network is unreachable" in reason_str or "No route to host" in reason_str:
-            return (
-                f"Network unreachable for {url}. "
-                "Check network connectivity and firewall settings."
-            )
-        if "timed out" in reason_str.lower():
-            return (
-                f"Connection to {url} timed out after {timeout}s. "
-                "Consider increasing timeout parameter or checking "
-                "network connectivity."
-            )
-
-        # Generic fallback
-        return (
-            f"Failed to connect to {url}: {reason_str}. "
-            "Check network connectivity and catalog URL."
-        )
+            # We are not covering the fallback estimation method in this PR.
+            return {}
 
     def get_root_document(self) -> dict[str, Any]:
-        root = self._http_json("")  # base endpoint already ends with /stac/v1
+        root = self.client.get_root_document()
         if not root:  # Unexpected but keep consistent shape
             return {
                 "id": None,
@@ -789,7 +513,7 @@ class STACClient:
             if collection_id
             else "/queryables"
         )
-        q = self._http_json(path)
+        q = self.client._stac_io.read_json(path)
         if not q:
             return {
                 "queryables": {},
@@ -837,7 +561,7 @@ class STACClient:
         if aggs:
             body["aggregations"] = aggs
         try:
-            res = self._http_json("/search", method="POST", payload=body)
+            res = self.client._stac_io.post("/search", json=body)
             if not res:
                 return {
                     "supported": False,
@@ -852,7 +576,7 @@ class STACClient:
                 "message": "OK" if aggs_result else "No aggregations returned",
                 "parameters": body,
             }
-        except urllib.error.HTTPError as exc:  # pragma: no cover - network
+        except APIError as exc:  # pragma: no cover - network
             if exc.code in (HTTP_400, HTTP_404):
                 return {
                     "supported": False,
