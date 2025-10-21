@@ -30,9 +30,9 @@ jobs:
           # Use uv to sync project dependencies (dev + optional extras)
           uv sync --all-extras --dev
           # Ensure `requests` is available for the example/test scripts
-          uv pip install requests
+          uv add requests
           # Ensure `pytest` is available for running tests
-          uv pip install pytest pytest-asyncio
+          uv add pytest pytest-asyncio
 
       - name: Start docker-compose stack
         run: |
@@ -49,7 +49,7 @@ jobs:
 
       - name: Load test data
         run: |
-          python scripts/load_test_data.py
+          uv run python scripts/load_test_data.py
 
       - name: Run stac-api-validator
         run: |
@@ -57,7 +57,7 @@ jobs:
 
       - name: Run integration tests
         run: |
-          pytest -q tests/integration -k "stac_server"
+          uv run pytest -q tests/integration -k "stac_server"
 
       - name: Tear down stack
         if: always()
