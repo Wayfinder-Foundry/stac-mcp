@@ -8,6 +8,7 @@ on:
       - "test-data/**"
       - "tests/**"
       - "docker-compose.stac.yml"
+      - ".github/workflows/stac-integration.yml"
 
 jobs:
   integration:
