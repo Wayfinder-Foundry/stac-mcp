@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - "stac_mcp/**"
       - "test-data/**"
       - "tests/**"
       - "docker-compose.stac.yml"
