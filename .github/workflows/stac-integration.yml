@@ -53,7 +53,7 @@ jobs:
 
       - name: Run stac-api-validator
         run: |
-          docker run --rm stacutils/stac-api-validator --url http://localhost:8080 || true
+          docker run --rm stacutils/stac-api-validator --url http://localhost:8081 || true
 
       - name: Run integration tests
         run: |
