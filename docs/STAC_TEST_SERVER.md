@@ -7,18 +7,18 @@ This project provides two approaches for testing STAC interactions:
 
 ## 1) Run the in-repo test server (dev)
 
-Start the server with uvicorn (port 8081 recommended):
+Start the server with uvicorn (port 8080 recommended):
 
 ```bash
 pip install -e ".[dev]"
-python -m uvicorn tests.support.stac_test_server:app --reload --port 8081
+python -m uvicorn tests.support.stac_test_server:app --reload --port 8080
 ```
 
 Example usage:
 
 ```bash
 # POST an empty FeatureCollection (requires X-API-Key)
-curl -X POST "http://localhost:8081/collections/vancouver-subaoi-collection/items" \
+curl -X POST "http://localhost:8080/collections/vancouver-subaoi-collection/items" \
   -H "X-API-Key: test-secret-key" \
   -H "Content-Type: application/json" \
   -d '{"type":"FeatureCollection","features":[]}'

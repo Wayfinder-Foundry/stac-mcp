@@ -5,7 +5,7 @@ import requests
 
 import os
 
-BASE_URL = os.environ.get("STAC_API_BASE_URL", "http://localhost:8081")
+BASE_URL = os.environ.get("STAC_API_BASE_URL", "http://localhost:8080")
 COLLECTION_ID = os.environ.get("STAC_API_COLLECTION_ID", "vancouver-subaoi-collection")
 API_KEY = os.environ.get("STAC_API_KEY", "test-secret-key")
 ITEMS_DIR = Path(__file__).resolve().parents[1] / "test-data" / "vancouver_subaoi_catalog" / "items"

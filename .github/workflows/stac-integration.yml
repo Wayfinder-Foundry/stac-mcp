@@ -41,7 +41,7 @@ jobs:
       - name: Wait for stac-api
         run: |
           for i in {1..30}; do
-            if curl -fsS http://localhost:8081/ >/dev/null; then
+            if curl -fsS http://localhost:8080/ >/dev/null; then
               echo "stac-api up" && break
             fi
             sleep 2
@@ -53,7 +53,7 @@ jobs:
 
       - name: Run stac-api-validator
         run: |
-          docker run --rm stacutils/stac-api-validator --url http://localhost:8081 || true
+          docker run --rm stacutils/stac-api-validator --url http://localhost:8080 || true
 
       - name: Run integration tests
         run: |
