@@ -3,8 +3,11 @@ import json
 from pathlib import Path
 import requests
 
-BASE_URL = "http://localhost:8080"
-COLLECTION_ID = "vancouver-subaoi-collection"
+import os
+
+BASE_URL = os.environ.get("STAC_API_BASE_URL", "http://localhost:8081")
+COLLECTION_ID = os.environ.get("STAC_API_COLLECTION_ID", "vancouver-subaoi-collection")
+API_KEY = os.environ.get("STAC_API_KEY", "test-secret-key")
 ITEMS_DIR = Path(__file__).resolve().parents[1] / "test-data" / "vancouver_subaoi_catalog" / "items"
 
 
@@ -33,5 +36,9 @@ if __name__ == "__main__":
 
     # fallback: POST FeatureCollection to collection items endpoint
     items_url = f"{BASE_URL}/collections/{COLLECTION_ID}/items"
-    r = requests.post(items_url, json=fc, timeout=30)
-    print(r.status_code, r.text)
+    headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+    try:
+        r = requests.post(items_url, json=fc, timeout=30, headers=headers)
+        print(r.status_code, r.text)
+    except Exception as exc:  # pragma: no cover - best-effort script used in CI
+        print("Failed to POST items to collection endpoint", exc)

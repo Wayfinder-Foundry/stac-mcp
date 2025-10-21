@@ -39,6 +39,7 @@ dependencies = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "fastapi>=0.119.0",
+    "viewtif>=0.2.4",
 ]
 
 [project.optional-dependencies]
