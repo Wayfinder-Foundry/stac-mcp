@@ -30,11 +30,9 @@ jobs:
           # Use uv to sync project dependencies (dev + optional extras)
           uv sync --all-extras --dev
           # Ensure `requests` is available for the example/test scripts
-          uv add requests
+          uv pip install requests
           # Ensure `pytest` is available for running tests
-          uv add pytest pytest-asyncio
-          # Ensure environment
-          uv sync
+          uv pip install pytest pytest-asyncio
 
       - name: Start docker-compose stack
         run: |
@@ -43,7 +41,7 @@ jobs:
       - name: Wait for stac-api
         run: |
           for i in {1..30}; do
-            if curl -fsS http://localhost:8080/ >/dev/null; then
+            if curl -fsS http://localhost:8081/ >/dev/null; then
               echo "stac-api up" && break
             fi
             sleep 2
