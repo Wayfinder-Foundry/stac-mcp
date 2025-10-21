@@ -31,10 +31,10 @@ jobs:
           uv sync --all-extras --dev
           # Ensure `requests` is available for the example/test scripts
           uv add requests
-
-      - name: Install pytest
-        run: |
-          uv add pytest
+          # Ensure `pytest` is available for running tests
+          uv add pytest pytest-asyncio
+          # Ensure environment
+          uv sync
 
       - name: Start docker-compose stack
         run: |
