@@ -28,7 +28,11 @@ jobs:
           # Use uv to sync project dependencies (dev + optional extras)
           uv sync --all-extras --dev
           # Ensure `requests` is available for the example/test scripts
-          uv run pip install requests
+          uv add requests
+
+      - name: Install pytest
+        run: |
+          uv add pytest
 
       - name: Start docker-compose stack
         run: |
