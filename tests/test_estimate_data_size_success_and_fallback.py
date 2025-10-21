@@ -12,6 +12,8 @@ from fastmcp import Client
 
 from stac_mcp.fast_server import app
 
+from . import ITEM_COUNT_TWO
+
 
 class FakeDataArray:
     def __init__(self, nbytes, shape=(4, 4), dtype="uint16", encoding=None):
@@ -51,7 +53,7 @@ class FakeItem:
 
 
 @pytest.mark.asyncio
-async def test_estimate_data_size_success(monkeypatch):
+async def test_estimate_data_size_success(monkeypatch):  # noqa: ARG001
     """Test the data size estimation tool succeeds."""
     # Fake odc.stac module
     fake_odc = types.ModuleType("odc")
@@ -84,5 +86,5 @@ async def test_estimate_data_size_success(monkeypatch):
             assert "data" in response_data
             assert "estimate" in response_data["data"]
             assert "item_count" in response_data["data"]["estimate"]
-            assert response_data["data"]["estimate"]["item_count"] == 2
+            assert response_data["data"]["estimate"]["item_count"] == ITEM_COUNT_TWO
             assert "spatial_dims" in response_data["data"]["estimate"]

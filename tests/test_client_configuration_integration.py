@@ -11,6 +11,7 @@ from stac_mcp.tools.client import (
     STACClient,
     STACTimeoutError,
 )
+from tests import HTTP_OK
 
 
 def stac_catalog_factory():
@@ -31,9 +32,9 @@ class TestADR0007Integration:
         """ADR 0007: Add optional client configuration at call level (timeout)."""
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
-        with patch.object(client.client._stac_io.session, "request") as mock_request:
+        with patch.object(client.client._stac_io.session, "request") as mock_request:  # noqa: SLF001
             mock_response = MagicMock()
-            mock_response.status_code = 200
+            mock_response.status_code = HTTP_OK
             mock_response.json.return_value = {"ok": True}
             mock_request.return_value = mock_response
             client.delete_item("test", "test", timeout=120)
@@ -52,9 +53,9 @@ class TestADR0007Integration:
             "https://example.com",
             headers={"X-Instance": "value1"},
         )
-        with patch.object(client.client._stac_io.session, "request") as mock_request:
+        with patch.object(client.client._stac_io.session, "request") as mock_request:  # noqa: SLF001
             mock_response = MagicMock()
-            mock_response.status_code = 200
+            mock_response.status_code = HTTP_OK
             mock_response.json.return_value = {"ok": True}
             mock_request.return_value = mock_response
             client.delete_item("test", "test", headers={"X-Override": "value2"})
@@ -76,7 +77,9 @@ class TestADR0007Integration:
         client = STACClient("https://example.com")
         with (
             patch.object(
-                client.client._stac_io.session, "request", side_effect=Timeout
+                client.client._stac_io.session,  # noqa: SLF001
+                "request",
+                side_effect=Timeout,
             ),
             pytest.raises(STACTimeoutError),
         ):
@@ -89,7 +92,7 @@ class TestADR0007Integration:
         client = STACClient("https://example.com")
         with (
             patch.object(
-                client.client._stac_io.session,
+                client.client._stac_io.session,  # noqa: SLF001
                 "request",
                 side_effect=RequestsConnectionError,
             ),

@@ -34,7 +34,7 @@ def stac_client(request):
         if hasattr(client, "_conformance"):
             delattr(client, "_conformance")
 
-    request.addfinalizer(teardown)
+    request.addfinalizer(teardown)  # noqa: PT021
     return client
 
 

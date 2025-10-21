@@ -37,6 +37,8 @@ dependencies = [
     "coverage>=7.10.7",
     "certifi>=2025.10.5",
     "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "fastapi>=0.119.0",
 ]
 
 [project.optional-dependencies]

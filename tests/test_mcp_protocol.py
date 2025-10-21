@@ -12,9 +12,9 @@ from stac_mcp.fast_server import app
 @pytest.fixture
 def test_app():
     """Return a clean app for each test."""
-    original_tools = app._tool_manager._tools.copy()
+    original_tools = app._tool_manager._tools.copy()  # noqa: SLF001
     yield app
-    app._tool_manager._tools = original_tools
+    app._tool_manager._tools = original_tools  # noqa: SLF001
 
 
 @pytest.mark.asyncio
@@ -63,9 +63,9 @@ async def test_call_tool_search_collections(test_app):
     """Test calling search_collections tool."""
 
     def dummy_search_collections(
-        output_format: Literal["text", "json"] = "text",
-        limit: int = 10,
-        catalog_url: str | None = None,
+        output_format: Literal["text", "json"] = "text",  # noqa: ARG001
+        limit: int = 10,  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
     ) -> list[dict[str, Any]]:
         return [
             {

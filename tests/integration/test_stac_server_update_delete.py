@@ -2,6 +2,26 @@ import pytest
 
 
 @pytest.mark.asyncio
+async def test_create_item(stac_test_server, default_catalog_url):
+    api_key = stac_test_server["api_key"]
+    client = stac_test_server["client"]
+
+    async with client:
+        payload = {"id": "test-create-1", "type": "Feature", "properties": {}}
+        result = await client.call_tool(
+            "create_item",
+            {
+                "collection_id": "vancouver-subaoi-collection",
+                "item": payload,
+                "api_key": api_key,
+                "catalog_url": default_catalog_url,
+            },
+        )
+        assert result.is_error is False
+        assert "test-create-1" in result.content[0].text
+
+
+@pytest.mark.asyncio
 async def test_update_and_delete_item(stac_test_server, default_catalog_url):
     api_key = stac_test_server["api_key"]
     client = stac_test_server["client"]

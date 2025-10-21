@@ -4,6 +4,7 @@ import json
 import logging
 import subprocess
 import time
+import urllib.request
 from collections.abc import Callable, Iterator
 from io import BytesIO
 from pathlib import Path
@@ -17,6 +18,7 @@ from fastmcp import Client
 
 from stac_mcp import observability
 from stac_mcp.fast_server import app
+from tests import HTTP_OK
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -92,7 +94,7 @@ def reset_observability_logger(monkeypatch) -> Iterator[logging.Logger]:
     existing_handlers = list(logger.handlers)
     for handler in existing_handlers:
         logger.removeHandler(handler)
-    monkeypatch.setitem(observability._logger_state, "initialized", False)
+    monkeypatch.setitem(observability._logger_state, "initialized", False)  # noqa: SLF001
     monkeypatch.setattr(observability, "_logger_initialized", False, raising=False)
     yield logger
     for handler in list(logger.handlers):
@@ -211,25 +213,43 @@ def http_error_factory() -> Callable[[int, str | None], HTTPError]:
 def stac_test_server_process() -> Iterator[subprocess.Popen]:
     """Run the test STAC server in a background process."""
     process = subprocess.Popen(
-        [
+        [  # noqa: S607
             "uv",
             "run",
             "uvicorn",
             "tests.support.stac_test_server:app",
             "--host",
-            "0.0.0.0",
+            "127.0.0.1",
             "--port",
             "8888",
         ]
     )
-    time.sleep(2)  # Give the server a moment to start
+
+    # Loop until the server is ready
+    timeout = 10  # seconds
+    start_time = time.time()
+    server_ready = False
+    while time.time() - start_time < timeout:
+        try:
+            with urllib.request.urlopen("http://localhost:8888/catalog.json") as resp:
+                if resp.status == HTTP_OK:
+                    server_ready = True
+                    break
+        except Exception:  # noqa: BLE001
+            time.sleep(0.5)
+    if not server_ready:
+        process.terminate()
+        process.wait()
+        err = "STAC test server failed to start within timeout period."
+        raise RuntimeError(err)
+
     yield process
     process.terminate()
     process.wait()
 
 
 @pytest.fixture
-def stac_test_server(stac_test_server_process) -> Iterator[dict[str, Any]]:
+def stac_test_server(stac_test_server_process) -> Iterator[dict[str, Any]]:  # noqa: ARG001
     """Mock HTTP requests to the test STAC server."""
     api_key = "test-secret-key"
     mcp_client = Client(app)

@@ -11,9 +11,9 @@ from stac_mcp.fast_server import app
 @pytest.fixture
 def test_app():
     """Return a clean app for each test."""
-    original_tools = app._tool_manager._tools.copy()
+    original_tools = app._tool_manager._tools.copy()  # noqa: SLF001
     yield app
-    app._tool_manager._tools = original_tools
+    app._tool_manager._tools = original_tools  # noqa: SLF001
 
 
 @pytest.fixture
@@ -58,7 +58,9 @@ async def test_create_item_success(test_app, item_payload_factory):
     """Test successful item creation."""
 
     def dummy_create_item(
-        collection_id: str, item: dict, api_key: str | None = None
+        collection_id: str,  # noqa: ARG001
+        item: dict,  # noqa: ARG001
+        api_key: str | None = None,  # noqa: ARG001
     ) -> ToolResult:
         return ToolResult(
             content=[TextContent(type="text", text='{"status": "success"}')],
@@ -83,7 +85,9 @@ async def test_update_item_success(test_app, item_payload_factory):
     """Test successful item update."""
 
     def dummy_update_item(
-        collection_id: str, item: dict, api_key: str | None = None
+        collection_id: str,  # noqa: ARG001
+        item: dict,  # noqa: ARG001
+        api_key: str | None = None,  # noqa: ARG001
     ) -> ToolResult:
         return ToolResult(
             content=[TextContent(type="text", text='{"status": "success"}')],
@@ -106,7 +110,9 @@ async def test_delete_item_success(test_app):
     """Test successful item deletion."""
 
     def dummy_delete_item(
-        collection_id: str, item_id: str, api_key: str | None = None
+        collection_id: str,  # noqa: ARG001
+        item_id: str,  # noqa: ARG001
+        api_key: str | None = None,  # noqa: ARG001
     ) -> ToolResult:
         return ToolResult(
             content=[TextContent(type="text", text='{"status": "success"}')],
@@ -128,7 +134,8 @@ async def test_create_collection_success(test_app, collection_payload_factory):
     """Test successful collection creation."""
 
     def dummy_create_collection(
-        collection: dict, api_key: str | None = None
+        collection: dict,  # noqa: ARG001
+        api_key: str | None = None,  # noqa: ARG001
     ) -> ToolResult:
         return ToolResult(
             content=[TextContent(type="text", text='{"status": "success"}')],
@@ -150,7 +157,8 @@ async def test_update_collection_success(test_app, collection_payload_factory):
     """Test successful collection update."""
 
     def dummy_update_collection(
-        collection: dict, api_key: str | None = None
+        collection: dict,  # noqa: ARG001
+        api_key: str | None = None,  # noqa: ARG001
     ) -> ToolResult:
         return ToolResult(
             content=[TextContent(type="text", text='{"status": "success"}')],
@@ -172,7 +180,8 @@ async def test_delete_collection_success(test_app):
     """Test successful collection deletion."""
 
     def dummy_delete_collection(
-        collection_id: str, api_key: str | None = None
+        collection_id: str,  # noqa: ARG001
+        api_key: str | None = None,  # noqa: ARG001
     ) -> ToolResult:
         return ToolResult(
             content=[TextContent(type="text", text='{"status": "success"}')],

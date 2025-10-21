@@ -47,7 +47,9 @@ class TestTimeoutConfiguration:
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
         with patch.object(
-            client.client._stac_io.session, "request", side_effect=Timeout
+            client.client._stac_io.session,  # noqa: SLF001
+            "request",
+            side_effect=Timeout,
         ) as mock_request:
             with pytest.raises(STACTimeoutError):
                 client.delete_item("test", "test")
@@ -80,7 +82,9 @@ class TestTimeoutErrorMapping:
         client = STACClient("https://example.com")
         with (
             patch.object(
-                client.client._stac_io.session, "request", side_effect=Timeout
+                client.client._stac_io.session,  # noqa: SLF001
+                "request",
+                side_effect=Timeout,
             ),
             pytest.raises(STACTimeoutError),
         ):
@@ -97,7 +101,7 @@ class TestConnectionErrorMapping:
         client = STACClient("https://example.com")
         with (
             patch.object(
-                client.client._stac_io.session,
+                client.client._stac_io.session,  # noqa: SLF001
                 "request",
                 side_effect=RequestsConnectionError,
             ),
@@ -127,18 +131,19 @@ class TestErrorLogging:
         logger.addHandler(handler)
         with (
             patch.object(
-                client.client._stac_io.session,
+                client.client._stac_io.session,  # noqa: SLF001
                 "request",
                 side_effect=RequestsConnectionError,
             ),
             pytest.raises(ConnectionFailedError),
         ):
             client.delete_item("test", "test")
-        assert any(
+        target_error_msg = [
             "Failed to connect" in record.message
             for record in handler.records
             if record.levelname == "ERROR"
-        )
+        ]
+        assert any(target_error_msg)
 
     @patch("pystac_client.stac_api_io.StacApiIO.read_json")
     def test_timeout_error_logged(self, mock_read_json):
@@ -150,7 +155,9 @@ class TestErrorLogging:
         logger.addHandler(handler)
         with (
             patch.object(
-                client.client._stac_io.session, "request", side_effect=Timeout
+                client.client._stac_io.session,  # noqa: SLF001
+                "request",
+                side_effect=Timeout,
             ),
             pytest.raises(STACTimeoutError),
         ):
@@ -170,7 +177,7 @@ class TestBackwardCompatibility:
         """Test that 404 responses still return None (existing behavior)."""
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
-        with patch.object(client.client._stac_io.session, "request") as mock_request:
+        with patch.object(client.client._stac_io.session, "request") as mock_request:  # noqa: SLF001
             mock_response = MagicMock()
             mock_response.status_code = 404
             mock_request.return_value = mock_response
@@ -181,10 +188,10 @@ class TestBackwardCompatibility:
         """Test that non-404 HTTP errors are still raised (existing behavior)."""
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
-        with patch.object(client.client._stac_io.session, "request") as mock_request:
+        with patch.object(client.client._stac_io.session, "request") as mock_request:  # noqa: SLF001
             mock_response = MagicMock()
             mock_response.status_code = HTTP_INTERNAL_SERVER_ERROR
             mock_response.raise_for_status.side_effect = Exception("test")
             mock_request.return_value = mock_response
-            with pytest.raises(Exception):
+            with pytest.raises(Exception):  # noqa: PT011 B017
                 client.delete_item("test", "test")

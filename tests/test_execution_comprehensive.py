@@ -23,7 +23,7 @@ def mock_tool(monkeypatch):
     """Fixture to temporarily register a mock tool handler."""
 
     def _register(name, handler):
-        monkeypatch.setitem(execution._TOOL_HANDLERS, name, handler)
+        monkeypatch.setitem(execution._TOOL_HANDLERS, name, handler)  # noqa: SLF001
 
     return _register
 

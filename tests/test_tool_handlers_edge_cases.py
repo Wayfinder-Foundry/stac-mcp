@@ -13,9 +13,9 @@ from stac_mcp.fast_server import app
 @pytest.fixture
 def test_app():
     """Return a clean app for each test."""
-    original_tools = app._tool_manager._tools.copy()
+    original_tools = app._tool_manager._tools.copy()  # noqa: SLF001
     yield app
-    app._tool_manager._tools = original_tools
+    app._tool_manager._tools = original_tools  # noqa: SLF001
 
 
 @pytest.mark.asyncio
@@ -23,7 +23,8 @@ async def test_get_root_minimal_response(test_app):
     """Test get_root with minimal root document."""
 
     def dummy_get_root(
-        output_format: Literal["text", "json"] = "text", catalog_url: str | None = None
+        output_format: Literal["text", "json"] = "text",  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
     ) -> ToolResult:
         return ToolResult(
             content=[TextContent(type="text", text="id: minimal-catalog\nlinks: []\n")],
@@ -45,9 +46,9 @@ async def test_get_conformance_no_classes(test_app):
     """Test get_conformance with empty conformance list."""
 
     def dummy_get_conformance(
-        output_format: Literal["text", "json"] = "text",
-        check: str | list[str] | None = None,
-        catalog_url: str | None = None,
+        output_format: Literal["text", "json"] = "text",  # noqa: ARG001
+        check: str | list[str] | None = None,  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
     ) -> ToolResult:
         return ToolResult(
             content=[TextContent(type="text", text="Conformance Classes (0):\n")],

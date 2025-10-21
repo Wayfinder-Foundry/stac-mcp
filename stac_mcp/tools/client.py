@@ -10,6 +10,8 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import Timeout
 from shapely.geometry import shape
 
+from tests import HTTP_NOT_FOUND_ERROR
+
 # HTTP status code constants (avoid magic numbers - PLR2004)
 HTTP_400 = 400
 HTTP_404 = 404
@@ -93,11 +95,15 @@ class STACClient:
     @property
     def client(self) -> Any:
         if self._client is None:
-            from pystac_client import Client as client_ref
-            from pystac_client.stac_api_io import StacApiIO
+            from pystac_client import (  # noqa: PLC0415 local import (guarded)
+                Client as _client,  # noqa: N813
+            )
+            from pystac_client.stac_api_io import (  # noqa: PLC0415 local import (guarded)
+                StacApiIO,
+            )
 
             stac_io = StacApiIO(headers=self.headers)
-            self._client = client_ref.open(self.catalog_url, stac_io=stac_io)
+            self._client = _client.open(self.catalog_url, stac_io=stac_io)
         return self._client
 
     @property
@@ -234,6 +240,8 @@ class STACClient:
             )
             raise
         else:
+            if item is None:
+                return None
             return {
                 "id": item.id,
                 "collection": item.collection_id,
@@ -258,22 +266,30 @@ class STACClient:
         if headers:
             request_headers.update(headers)
         request_headers["Accept"] = "application/json"
+        if not self.client:
+            client_not_initialized = (
+                "STACClient 'client' property not initialized before transaction."
+            )
+            raise RuntimeError(client_not_initialized)
         try:
-            response = self.client._stac_io.session.request(
+            # TODO: Replace internal pystac_client call with public API when available
+            response = self.client._stac_io.session.request(  # noqa: SLF001
                 method, url, headers=request_headers, timeout=timeout, **kwargs
             )
-            if response.status_code == 404:
+            if response.status_code == HTTP_NOT_FOUND_ERROR:
                 return None
             response.raise_for_status()
             if not response.content:
                 return None
             return response.json()
         except Timeout as e:
-            logger.error("Request timed out")
-            raise STACTimeoutError("Request timed out") from e
+            err_msg = f"Request timed out to {url} after {timeout} seconds"
+            logger.exception(err_msg)
+            raise STACTimeoutError(err_msg) from e
         except RequestsConnectionError as e:
-            logger.error("Failed to connect")
-            raise ConnectionFailedError("Failed to connect") from e
+            err_msg = f"Failed to connect to {self.catalog_url}"
+            logger.exception(err_msg)
+            raise ConnectionFailedError(err_msg) from e
 
     def create_item(
         self,
@@ -283,7 +299,8 @@ class STACClient:
         headers: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
         """Creates a new STAC Item in a collection."""
-        path = f"/collections/{collection_id}/items"
+        # Remove any double slashes from URL after http:// or https://
+        path = f"collections/{collection_id}/items"
         url = f"{self.catalog_url.replace('catalog.json', '')}{path}"
         return self._do_transaction(
             "post", url, json=item, timeout=timeout, headers=headers
@@ -526,7 +543,8 @@ class STACClient:
             if collection_id
             else "/queryables"
         )
-        q = self.client._stac_io.read_json(path)
+        # TODO: Replace internal pystac_client call with public API when available
+        q = self.client._stac_io.read_json(path)  # noqa: SLF001
         if not q:
             return {
                 "queryables": {},
@@ -574,7 +592,8 @@ class STACClient:
         if aggs:
             body["aggregations"] = aggs
         try:
-            res = self.client._stac_io.post("/search", json=body)
+            # TODO: Replace internal pystac_client call with public API when available
+            res = self.client._stac_io.post("/search", json=body)  # noqa: SLF001
             if not res:
                 return {
                     "supported": False,

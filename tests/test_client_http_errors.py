@@ -8,6 +8,7 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import Timeout
 
 from stac_mcp.tools.client import ConnectionFailedError, STACClient, STACTimeoutError
+from tests import HTTP_INTERNAL_SERVER_ERROR, HTTP_NOT_FOUND_ERROR
 
 
 def stac_catalog_factory():
@@ -25,9 +26,9 @@ def test_http_json_404_returns_none(mock_read_json):
     """Test that a 404 returns None."""
     mock_read_json.return_value = stac_catalog_factory()
     client = STACClient("https://example.com")
-    with patch.object(client.client._stac_io.session, "request") as mock_request:
+    with patch.object(client.client._stac_io.session, "request") as mock_request:  # noqa: SLF001
         mock_response = MagicMock()
-        mock_response.status_code = 404
+        mock_response.status_code = HTTP_NOT_FOUND_ERROR
         mock_request.return_value = mock_response
         assert client.delete_item("test", "test") is None
 
@@ -37,12 +38,12 @@ def test_http_json_500_raises(mock_read_json):
     """Test that a 500 raises an HTTPError."""
     mock_read_json.return_value = stac_catalog_factory()
     client = STACClient("https://example.com")
-    with patch.object(client.client._stac_io.session, "request") as mock_request:
+    with patch.object(client.client._stac_io.session, "request") as mock_request:  # noqa: SLF001
         mock_response = MagicMock()
-        mock_response.status_code = 500
+        mock_response.status_code = HTTP_INTERNAL_SERVER_ERROR
         mock_response.raise_for_status.side_effect = Exception("test")
         mock_request.return_value = mock_response
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: PT011 B017
             client.delete_item("test", "test")
 
 
@@ -52,7 +53,9 @@ def test_http_json_url_error_retries(mock_read_json):
     mock_read_json.return_value = stac_catalog_factory()
     client = STACClient("https://example.com")
     with patch.object(
-        client.client._stac_io.session, "request", side_effect=Timeout
+        client.client._stac_io.session,  # noqa: SLF001
+        "request",
+        side_effect=Timeout,
     ) as mock_request:
         with pytest.raises(STACTimeoutError):
             client.delete_item("test", "test")
@@ -66,7 +69,7 @@ def test_http_json_url_error(mock_read_json):
     client = STACClient("https://example.com")
     with (
         patch.object(
-            client.client._stac_io.session,
+            client.client._stac_io.session,  # noqa: SLF001
             "request",
             side_effect=RequestsConnectionError,
         ),

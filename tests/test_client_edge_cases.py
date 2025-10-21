@@ -41,7 +41,7 @@ class TestHeaderHandling:
         """Test that default headers are included."""
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com")
-        with patch.object(client.client._stac_io.session, "request") as mock_request:
+        with patch.object(client.client._stac_io.session, "request") as mock_request:  # noqa: SLF001
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {"ok": True}

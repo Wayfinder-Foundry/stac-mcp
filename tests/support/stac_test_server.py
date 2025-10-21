@@ -51,7 +51,7 @@ async def get_collection():
 async def list_collections():
     try:
         collection = load_json(COLLECTION_FILE)
-        return {"collections": [collection]}
+        return {"collections": [collection]}  # noqa: TRY300
     except FileNotFoundError:
         return {"collections": []}
 
