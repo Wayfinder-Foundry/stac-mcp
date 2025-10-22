@@ -7,6 +7,7 @@ can hook here centrally.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Callable, Iterable
@@ -163,13 +164,27 @@ async def execute_tool(
             _raise_unknown_tool(tool_name)
 
     # PySTAC tools use PySTACManager instead of STACClient
+    # Offload handler execution to a thread to avoid blocking the async event loop
+    # (handlers may perform network I/O or heavy CPU work like odc.stac.load).
+
     if is_pystac_tool:
         manager = PySTACManager()
-        raw_result = handler(manager, arguments)
+        # Run the handler under the instrumented wrapper in a thread
+        instrumented = await asyncio.to_thread(
+            instrument_tool_execution,
+            tool_name,
+            catalog_url,
+            handler,
+            manager,
+            arguments,
+        )
+        raw_result = instrumented.value
     else:
         if client is None:
             client = STACClient(catalog_url, headers=headers)
-        instrumented = instrument_tool_execution(
+        # Run the handler under the instrumented wrapper in a thread
+        instrumented = await asyncio.to_thread(
+            instrument_tool_execution,
             tool_name,
             catalog_url,
             handler,

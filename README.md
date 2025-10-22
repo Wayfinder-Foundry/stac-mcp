@@ -92,126 +92,15 @@ The `estimate_data_size` tool provides accurate size estimates for geospatial da
 - **Detailed Metadata**: Returns information about data variables, spatial dimensions, and individual assets
 - **Batch Support**: Retains structured metadata for efficient batch processing
 
-Example usage:
-```json
-{
-  "collections": ["landsat-c2l2-sr"],
-  "bbox": [-122.5, 37.7, -122.3, 37.8],
-  "datetime": "2023-01-01/2023-01-31",
-  "aoi_geojson": {
-    "type": "Polygon",
-    "coordinates": [[...]]
-  },
-  "limit": 50
-}
-```
+## Usage
 
-### Supported STAC Catalogs
+### Command Line
 
-By default, the server connects to Microsoft Planetary Computer STAC API, but it can be configured to work with any STAC-compliant catalog.
-
-## Installation
-
-### PyPI Package
+#### Native Installation
 
 ```bash
 pip install stac-mcp
 ```
-
-### Development Installation
-
-```bash
-git clone https://github.com/BnJam/stac-mcp.git
-cd stac-mcp
-pip install -e .
-```
-
-### Container
-
-The STAC MCP server publishes multi-arch container images (linux/amd64, linux/arm64) via GitHub Actions workflow (`.github/workflows/container.yml`). The current build uses a Python 3.12 slim Debian base (not distroless) with GDAL-related libs for raster IO and odc-stac compatibility.
-
-```bash
-# Pull the latest stable version
-docker pull ghcr.io/bnjam/stac-mcp:latest
-
-# Pull a specific version (recommended for production)
-docker pull ghcr.io/bnjam/stac-mcp:0.2.0
-
-# Run the container (uses stdio transport for MCP)
-docker run --rm -i ghcr.io/bnjam/stac-mcp:latest
-```
-
-Container images are tagged with semantic versions when version bumps occur on `main`:
-- `ghcr.io/bnjam/stac-mcp:X.Y.Z` (exact version)
-- `ghcr.io/bnjam/stac-mcp:X.Y` (major.minor convenience tag)
-- `ghcr.io/bnjam/stac-mcp:X` (major convenience tag)
-- `ghcr.io/bnjam/stac-mcp:latest` (points at current main version)
-Pull request builds (without version bump) also produce ephemeral PR/ref tags via the metadata action.
-
-#### Building the Container
-
-To build the container locally using the provided Containerfile:
-
-```bash
-# Build with Docker
-docker build -f Containerfile -t stac-mcp .
-
-# Or build with Podman  
-podman build -f Containerfile -t stac-mcp .
-```
-
-The Containerfile currently performs a single-stage build based on `python:3.12-slim` (future optimization could reintroduce a distroless runtime stage). It installs system GDAL/PROJ dependencies and then installs the package.
-
-## Usage
-
-### As an MCP Server
-
-#### Native Installation
-
-Configure your MCP client to connect to this server:
-
-```json
-{
-  "mcpServers": {
-    "stac": {
-      "command": "stac-mcp"
-    }
-  }
-}
-```
-
-#### Container Usage
-
-To use the containerized version with an MCP client:
-
-```json
-{
-  "mcpServers": {
-    "stac": {
-      "command": "docker",
-      "args": ["run", "--rm", "-i", "ghcr.io/bnjam/stac-mcp:latest"]
-    }
-  }
-}
-```
-
-Or with Podman:
-
-```json
-{
-  "mcpServers": {
-    "stac": {
-      "command": "podman", 
-      "args": ["run", "--rm", "-i", "ghcr.io/bnjam/stac-mcp:latest"]
-    }
-  }
-}
-```
-
-docker run --rm -i ghcr.io/bnjam/stac-mcp:latest
-### Command Line
-
-#### Native Installation
 
 ```bash
 stac-mcp
@@ -219,7 +108,25 @@ stac-mcp
 
 Each invocation starts an MCP stdio server; it waits for protocol messages (see `examples/example_usage.py`).
 
+### Repository Usage
+
+```bash
+pip install -e .
+```
+
 #### Container Usage
+
+##### Local
+
+```bash
+docker build -t stac-mcp .
+```
+
+```bash
+docker run --rm -i stac-mcp
+```
+
+##### Published Image
 
 ```bash
 # With Docker
@@ -601,6 +508,25 @@ result = client._http_json("/search", headers={"X-API-Key": "different-key"})
 **Behavior**: Per-call headers are merged with instance headers, with per-call values taking precedence for duplicate keys. The `Accept: application/json` header is always set automatically.
 
 **Note**: These configuration options are for programmatic use. MCP tool calls use the default client configuration.
+### HEAD request tuning (estimate_data_size fallback)
+
+The `estimate_data_size` tool uses metadata-first heuristics but will fall back to HTTP HEAD requests to collect `Content-Length` when metadata is missing. These HEAD requests are timeboxed and parallelized; tune the behavior with the following environment variables:
+
+- `STAC_MCP_HEAD_TIMEOUT_SECONDS` (default: 20)
+  - Per-request timeout (in seconds) used for HTTP HEAD requests during fallback estimation.
+  - Lower this value to fail fast against unresponsive hosts (for example, `5`).
+- `STAC_MCP_HEAD_MAX_WORKERS` (default: 4)
+  - Number of concurrent HEAD requests used when the estimator needs to probe multiple asset HREFs.
+  - Raising this value reduces wall-clock time for estimation at the cost of more concurrent connections.
+
+Agent tuning guidance:
+
+- For short-running agent chains that need quick, best-effort estimates, set `STAC_MCP_HEAD_TIMEOUT_SECONDS=5` and `STAC_MCP_HEAD_MAX_WORKERS=8`.
+- For conservative workloads (avoid load on remote catalogs), keep `STAC_MCP_HEAD_MAX_WORKERS` small (1-4) and use a moderate timeout (10-20s).
+
+You can also force metadata-only estimation from clients by passing `force_metadata_only=True` to `estimate_data_size`, which avoids HEAD/zarr inspection entirely.
+
+These knobs let agent orchestrators choose the right balance between responsiveness and thoroughness.
 
 ### Error Handling
 

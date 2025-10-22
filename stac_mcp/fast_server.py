@@ -91,6 +91,7 @@ async def estimate_data_size(
     query: dict[str, Any] | None = None,
     aoi_geojson: dict[str, Any] | None = None,
     limit: int | None = 100,
+    force_metadata_only: bool | None = False,
     output_format: str | None = "text",
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -104,6 +105,7 @@ async def estimate_data_size(
             "query": query,
             "aoi_geojson": aoi_geojson,
             "limit": limit,
+            "force_metadata_only": force_metadata_only,
             "output_format": output_format,
         },
         catalog_url=catalog_url,
