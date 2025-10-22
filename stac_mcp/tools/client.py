@@ -512,7 +512,9 @@ class STACClient:
         # fallback and normalize the keys we care about.
         try:
             raw = self.client.to_dict() if hasattr(self.client, "to_dict") else {}
-        except Exception:
+        except (AttributeError, APIError):
+            # to_dict() may not be available or the underlying client raised an
+            # APIError; swallow those specific errors and return an empty dict.
             raw = {}
         if not raw:  # Unexpected but keep consistent shape
             return {

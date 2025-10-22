@@ -3,6 +3,7 @@
 from typing import Any
 
 from mcp.types import TextContent
+from pystac_client.exceptions import APIError
 
 from stac_mcp.tools.client import STACClient
 
@@ -19,24 +20,27 @@ def handle_get_root(
     try:
         # Prefer calling get_root_document() if the client provides it (covers
         # STACClient wrapper, FakeClientRoot, MagicMock, and similar objects).
-        if hasattr(client, "get_root_document") and callable(getattr(client, "get_root_document")):
+        if hasattr(client, "get_root_document") and callable(client.get_root_document):
             try:
                 doc = client.get_root_document()
-            except Exception:
-                # If that fails, fall through to try to_dict() based fallbacks
+            except (AttributeError, APIError):
+                # If that fails with a known client error, fall through and
+                # try to_dict() based fallbacks.
                 doc = None
         else:
             doc = None
 
         if not doc:
-            # Try a few to_dict() fallbacks: client.to_dict(), or client.client.to_dict()
+            # Try a couple of to_dict() fallbacks.
+            # Prefer client.to_dict(), then client.client.to_dict().
             raw = {}
             try:
-                if hasattr(client, "to_dict") and callable(getattr(client, "to_dict")):
+                if hasattr(client, "to_dict") and callable(client.to_dict):
                     raw = client.to_dict() or {}
                 elif hasattr(client, "client") and hasattr(client.client, "to_dict"):
                     raw = client.client.to_dict() or {}
-            except Exception:
+            except (AttributeError, APIError, RuntimeError, TypeError, ValueError):
+                # to_dict() may be missing or fail; treat as empty mapping.
                 raw = {}
             doc = {
                 "id": raw.get("id"),
@@ -45,8 +49,8 @@ def handle_get_root(
                 "links": raw.get("links", []),
                 "conformsTo": raw.get("conformsTo", raw.get("conforms_to", [])),
             }
-    except Exception as exc:  # Defensive catch-all so tool never bubbles internal errors
-        # Return a minimal root-like doc along with an explanatory message
+    except (AttributeError, APIError, RuntimeError, TypeError, ValueError) as exc:
+        # Return a minimal root-like doc along with an explanatory message.
         doc = {
             "id": None,
             "title": None,
