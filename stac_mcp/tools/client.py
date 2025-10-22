@@ -507,8 +507,14 @@ class STACClient:
             }
 
     def get_root_document(self) -> dict[str, Any]:
-        root = self.client.get_root_document()
-        if not root:  # Unexpected but keep consistent shape
+        # Some underlying client implementations do not provide a
+        # get_root_document() convenience. Use to_dict() as a stable
+        # fallback and normalize the keys we care about.
+        try:
+            raw = self.client.to_dict() if hasattr(self.client, "to_dict") else {}
+        except Exception:
+            raw = {}
+        if not raw:  # Unexpected but keep consistent shape
             return {
                 "id": None,
                 "title": None,
@@ -518,11 +524,11 @@ class STACClient:
             }
         # Normalize subset we care about
         return {
-            "id": root.get("id"),
-            "title": root.get("title"),
-            "description": root.get("description"),
-            "links": root.get("links", []),
-            "conformsTo": root.get("conformsTo", root.get("conforms_to", [])),
+            "id": raw.get("id"),
+            "title": raw.get("title"),
+            "description": raw.get("description"),
+            "links": raw.get("links", []),
+            "conformsTo": raw.get("conformsTo", raw.get("conforms_to", [])),
         }
 
     def get_conformance(
