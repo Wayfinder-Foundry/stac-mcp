@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
 from typing import Any
 
+import requests
 from pystac_client.exceptions import APIError
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import Timeout
@@ -384,6 +387,8 @@ class STACClient:
     ) -> dict[str, Any]:
         from odc import stac as odc_stac  # noqa: PLC0415 local import (guarded)
 
+        logger.debug("odc_stac.load before call: %r", getattr(odc_stac, "load", None))
+
         search = self.client.search(
             collections=collections,
             bbox=bbox,
@@ -420,6 +425,214 @@ class STACClient:
             else:
                 effective_bbox = list(aoi_bounds)
             clipped_to_aoi = True
+
+        def _fallback_estimate() -> dict[str, Any]:
+            # Reuse the fallback logic implemented in the except block.
+            assets_info: list[dict[str, Any]] = []
+            total_bytes = 0
+
+            def _size_from_metadata(asset_obj: Any) -> int | None:
+                keys = [
+                    "file:size",
+                    "file:bytes",
+                    "bytes",
+                    "size",
+                    "byte_size",
+                    "content_length",
+                ]
+                if isinstance(asset_obj, dict):
+                    extra = asset_obj.get("extra_fields") or {}
+                else:
+                    extra = getattr(asset_obj, "extra_fields", None) or {}
+                for k in keys:
+                    v = extra.get(k)
+                    if v is not None:
+                        try:
+                            return int(v)
+                        except (TypeError, ValueError):
+                            continue
+                try:
+                    for k in keys:
+                        v = asset_obj.get(k)  # type: ignore[attr-defined]
+                        if v is not None:
+                            try:
+                                return int(v)
+                            except (TypeError, ValueError):
+                                continue
+                except AttributeError:
+                    pass
+                return None
+
+            def _head_content_length(href: str) -> int | None:
+                try:
+                    session = requests.Session()
+                    resp = session.request(
+                        "HEAD", href, headers=self.headers or {}, timeout=20
+                    )
+                    if resp is None or not resp.headers:
+                        return None
+                    cl = resp.headers.get("Content-Length") or resp.headers.get(
+                        "content-length"
+                    )
+                    if cl:
+                        try:
+                            return int(cl)
+                        except (TypeError, ValueError):
+                            return None
+                except (requests.RequestException, ValueError, TypeError):
+                    return None
+                return None
+
+            for item in items:
+                assets = getattr(item, "assets", {})
+                for name, asset in assets.items() if assets else []:
+                    if isinstance(asset, dict):
+                        href = asset.get("href")
+                        media = asset.get("media_type") or asset.get("type") or ""
+                    else:
+                        href = getattr(asset, "href", None)
+                        media = (
+                            getattr(asset, "media_type", None)
+                            or getattr(asset, "type", "")
+                            or ""
+                        )
+
+                    bytes_found: int | None = _size_from_metadata(asset)
+                    method_used = "metadata"
+                    if bytes_found is None and "parquet" in str(media).lower():
+                        bytes_found = _head_content_length(href) if href else None
+                        method_used = "head"
+                    elif "zarr" in str(media).lower() or (
+                        isinstance(href, str) and str(href).endswith(".zarr")
+                    ):
+                        try:
+                            import fsspec as _fsspec  # noqa: PLC0415
+                            import numpy as np  # noqa: PLC0415
+                            import xarray as _xr  # noqa: PLC0415
+
+                            mapper = _fsspec.get_mapper(href) if href else None
+                            if mapper is not None:
+                                ds = _xr.open_zarr(mapper, consolidated=False)
+                                z_bytes = 0
+                                for v in ds.data_vars:
+                                    var = ds[v]
+                                    try:
+                                        dtype = np.dtype(var.dtype)
+                                        count = 1
+                                        for d in var.shape:
+                                            count *= int(d)
+                                        z_bytes += int(dtype.itemsize) * int(count)
+                                    except (TypeError, ValueError):
+                                        continue
+                                if z_bytes:
+                                    bytes_found = z_bytes
+                                    method_used = "zarr-inspect"
+                                with contextlib.suppress(Exception):
+                                    ds.close()
+                        except (ImportError, RuntimeError, OSError):
+                            bytes_found = None
+
+                    if bytes_found is None and href:
+                        bytes_found = _head_content_length(href)
+                        method_used = "head"
+
+                    if bytes_found is None:
+                        assets_info.append(
+                            {
+                                "asset": name,
+                                "media_type": media,
+                                "href": href,
+                                "estimated_size_bytes": 0,
+                                "estimated_size_mb": 0,
+                                "method": "unknown",
+                            }
+                        )
+                    else:
+                        total_bytes += bytes_found
+                        # Debug logging to help diagnose test-order dependent failures
+                        if os.getenv("STAC_MCP_DEBUG"):
+                            try:
+                                extra = (
+                                    asset.get("extra_fields")
+                                    if isinstance(asset, dict)
+                                    else getattr(asset, "extra_fields", None)
+                                )
+                            except (AttributeError, TypeError):
+                                extra = None
+                            logger.debug(
+                                "fallback asset=%s media=%s href=%s extra=%s",
+                                name,
+                                media,
+                                href,
+                                extra,
+                            )
+                            logger.debug(
+                                "fallback bytes=%s method=%s",
+                                bytes_found,
+                                method_used,
+                            )
+                        assets_info.append(
+                            {
+                                "asset": name,
+                                "media_type": media,
+                                "href": href,
+                                "estimated_size_bytes": int(bytes_found),
+                                "estimated_size_mb": round(
+                                    bytes_found / (1024 * 1024), 2
+                                ),
+                                "method": method_used,
+                            }
+                        )
+
+            estimated_mb = total_bytes / (1024 * 1024)
+            estimated_gb = total_bytes / (1024 * 1024 * 1024)
+            return {
+                "item_count": len(items),
+                "estimated_size_bytes": int(total_bytes),
+                "estimated_size_mb": round(estimated_mb, 2),
+                "estimated_size_gb": round(estimated_gb, 4),
+                "bbox_used": effective_bbox,
+                "temporal_extent": datetime,
+                "collections": collections
+                or list({item.collection_id for item in items}),
+                "clipped_to_aoi": clipped_to_aoi
+                if "clipped_to_aoi" in locals()
+                else False,
+                "assets_analyzed": assets_info,
+                "message": (
+                    "Successfully estimated data size using fallback heuristics"
+                    if total_bytes
+                    else "Error estimating data size"
+                ),
+            }
+
+        # If any item contains non-raster asset types (parquet/zarr), use fallback
+        def _needs_fallback(items_list: list[Any]) -> bool:
+            for it in items_list:
+                assets = getattr(it, "assets", {})
+                for _n, a in assets.items() if assets else []:
+                    media = (
+                        a.get("media_type")
+                        if isinstance(a, dict)
+                        else getattr(a, "media_type", None)
+                    )
+                    href = (
+                        a.get("href")
+                        if isinstance(a, dict)
+                        else getattr(a, "href", None)
+                    )
+                    if media and (
+                        "parquet" in str(media).lower() or "zarr" in str(media).lower()
+                    ):
+                        return True
+                    if href and (
+                        str(href).endswith(".zarr") or str(href).endswith(".parquet")
+                    ):
+                        return True
+            return False
+
+        if _needs_fallback(items):
+            return _fallback_estimate()
 
         try:
             ds = odc_stac.load(items, bbox=effective_bbox, chunks={})
@@ -491,19 +704,182 @@ class STACClient:
                 "odc.stac loading failed, using fallback estimation: %s",
                 exc,
             )
-            # We are not covering the fallback estimation method in this PR.
+            # Implement fallback estimation for non-raster assets and zarr.
+            assets_info: list[dict[str, Any]] = []
+            total_bytes = 0
+
+            def _size_from_metadata(asset_obj: Any) -> int | None:
+                keys = [
+                    "file:size",
+                    "file:bytes",
+                    "bytes",
+                    "size",
+                    "byte_size",
+                    "content_length",
+                ]
+                if isinstance(asset_obj, dict):
+                    extra = asset_obj.get("extra_fields") or {}
+                else:
+                    extra = getattr(asset_obj, "extra_fields", None) or {}
+                for k in keys:
+                    v = extra.get(k)
+                    if v is not None:
+                        try:
+                            return int(v)
+                        except (TypeError, ValueError):
+                            continue
+                try:
+                    for k in keys:
+                        v = asset_obj.get(k)  # type: ignore[attr-defined]
+                        if v is not None:
+                            try:
+                                return int(v)
+                            except (TypeError, ValueError):
+                                continue
+                except AttributeError:
+                    pass
+                return None
+
+            def _head_content_length(href: str) -> int | None:
+                try:
+                    session = requests.Session()
+                    resp = session.request(
+                        "HEAD", href, headers=self.headers or {}, timeout=20
+                    )
+                    if resp is None or not resp.headers:
+                        return None
+                    cl = resp.headers.get("Content-Length") or resp.headers.get(
+                        "content-length"
+                    )
+                    if cl:
+                        try:
+                            return int(cl)
+                        except (TypeError, ValueError):
+                            return None
+                except (requests.RequestException, ValueError, TypeError):
+                    return None
+                return None
+
+            for item in items:
+                assets = getattr(item, "assets", {})
+                for name, asset in assets.items() if assets else []:
+                    if isinstance(asset, dict):
+                        href = asset.get("href")
+                        media = asset.get("media_type") or asset.get("type") or ""
+                    else:
+                        href = getattr(asset, "href", None)
+                        media = (
+                            getattr(asset, "media_type", None)
+                            or getattr(asset, "type", "")
+                            or ""
+                        )
+
+                    bytes_found: int | None = _size_from_metadata(asset)
+                    method_used = "metadata"
+                    if bytes_found is None and "parquet" in str(media).lower():
+                        bytes_found = _head_content_length(href) if href else None
+                        method_used = "head"
+                    elif "zarr" in str(media).lower() or (
+                        isinstance(href, str) and str(href).endswith(".zarr")
+                    ):
+                        # attempt a simple zarr inspect using xarray if available
+                        try:
+                            import fsspec as _fsspec  # noqa: PLC0415
+                            import numpy as np  # noqa: PLC0415
+                            import xarray as _xr  # noqa: PLC0415
+
+                            mapper = _fsspec.get_mapper(href) if href else None
+                            if mapper is not None:
+                                ds = _xr.open_zarr(mapper, consolidated=False)
+                                z_bytes = 0
+                                for v in ds.data_vars:
+                                    var = ds[v]
+                                    try:
+                                        dtype = np.dtype(var.dtype)
+                                        count = 1
+                                        for d in var.shape:
+                                            count *= int(d)
+                                        z_bytes += int(dtype.itemsize) * int(count)
+                                    except (TypeError, ValueError):
+                                        continue
+                                if z_bytes:
+                                    bytes_found = z_bytes
+                                    method_used = "zarr-inspect"
+                                with contextlib.suppress(Exception):
+                                    ds.close()
+                        except (ImportError, RuntimeError, OSError):
+                            bytes_found = None
+
+                    if bytes_found is None and href:
+                        bytes_found = _head_content_length(href)
+                        method_used = "head"
+
+                    if bytes_found is None:
+                        assets_info.append(
+                            {
+                                "asset": name,
+                                "media_type": media,
+                                "href": href,
+                                "estimated_size_bytes": 0,
+                                "estimated_size_mb": 0,
+                                "method": "unknown",
+                            }
+                        )
+                    else:
+                        total_bytes += bytes_found
+                    # Debug logging to help diagnose test-order dependent failures
+                    if os.getenv("STAC_MCP_DEBUG"):
+                        try:
+                            extra = (
+                                asset.get("extra_fields")
+                                if isinstance(asset, dict)
+                                else getattr(asset, "extra_fields", None)
+                            )
+                        except (AttributeError, TypeError):
+                            extra = None
+                        logger.debug(
+                            "fallback asset=%s media=%s href=%s extra=%s",
+                            name,
+                            media,
+                            href,
+                            extra,
+                        )
+                        logger.debug(
+                            "fallback bytes=%s method=%s",
+                            bytes_found,
+                            method_used,
+                        )
+                    assets_info.append(
+                        {
+                            "asset": name,
+                            "media_type": media,
+                            "href": href,
+                            "estimated_size_bytes": int(bytes_found),
+                            "estimated_size_mb": round(bytes_found / (1024 * 1024), 2),
+                            "method": method_used,
+                        }
+                    )
+
+            estimated_mb = total_bytes / (1024 * 1024)
+            estimated_gb = total_bytes / (1024 * 1024 * 1024)
             return {
-                "item_count": 0,
-                "estimated_size_bytes": 0,
-                "estimated_size_mb": 0,
-                "estimated_size_gb": 0,
-                "bbox_used": bbox,
+                "item_count": len(items),
+                "estimated_size_bytes": int(total_bytes),
+                "estimated_size_mb": round(estimated_mb, 2),
+                "estimated_size_gb": round(estimated_gb, 4),
+                "bbox_used": effective_bbox,
                 "temporal_extent": datetime,
-                "collections": collections or [],
+                "collections": collections
+                or list({item.collection_id for item in items}),
                 "clipped_to_aoi": clipped_to_aoi
                 if "clipped_to_aoi" in locals()
                 else False,
-                "message": f"Error estimating data size: {exc}",
+                "assets_analyzed": assets_info,
+                "message": (
+                    "Successfully estimated data size using fallback heuristics"
+                    if total_bytes
+                    else f"Error estimating data size: {exc}"
+                ),
             }
 
     def get_root_document(self) -> dict[str, Any]:

@@ -11,13 +11,12 @@ Core principles
 - Always import generics from the `typing` module (List, Dict, Optional, Union, Tuple, Set, Iterable, Callable, etc.) instead of using builtin collection annotations like `list[str]` unless an ADR supersedes this rule. This maintains consistency across the codebase and clarifies intent for contributors and automated agents.
 - Keep functions small and single-responsibility. Favor composition over inheritance when appropriate.
 
-Formatting & linting
-- Use Ruff for both formatting (`ruff format`) and linting (`ruff check`); resolve any outstanding issues manually.
-- Commands:
-  - pip install -e ".[dev]"
-  - ruff format stac_mcp/ tests/ examples/
-  - ruff check stac_mcp/ tests/ examples/ --fix
-- After ANY code edit (even small), re-run Ruff format and check locally before committing to keep diffs clean and surface issues early.
+Formatting & Linting - required commands before any commit/push:
+- `uv run ruff format stac-mcp/ test/ examples/`
+- `uv run ruff check stac-mcp/ tests/ examples/ --fix --no-cache`
+- `uv run pytest -v`
+All checks must pass - run `uv run ruff format ...` and `uv run ruff check...` multiple times to ensure the 
+formatting does not break the linting and vice-versa (because of --fix).
 
 Testing & validation
 - Write tests for behavior, not implementation; prefer parametrized tests for similar cases.
