@@ -606,9 +606,96 @@ class STACClient:
                     original_dtype if original_dtype is not None else data_array.dtype
                 )
 
-                # Calculate bytes using original dtype to avoid overestimation
-                dtype_obj = np.dtype(effective_dtype)
-                var_nbytes = dtype_obj.itemsize * data_array.size
+                # Conservative downcast heuristic: when odc.stac doesn't provide
+                # an original dtype and the loaded dtype is a float, attempt a
+                # tiny-sample check to see if values are integer-valued and have
+                # no NaNs. If so, estimate using a compact integer dtype (uint8,
+                # uint16, int16, int32) based on the sampled range. This is a
+                # best-effort optimization that may underestimate if the sample is
+                # not representative; it's intentionally conservative (small
+                # sample) to avoid heavy computation.
+                try:
+                    dtype_obj = np.dtype(effective_dtype)
+                    # Only attempt sampling-based downcast for float dtypes when
+                    # no explicit original dtype is provided by encoding.
+                    # Additionally, avoid sampling/downcasting if the
+                    # DataArray or encoding declares a nodata/_FillValue since
+                    # that often forces dtype upcasts and sampling may be
+                    # misleading (NaNs or fill values present).
+                    has_nodata = False
+                    try:
+                        # xarray DataArray may expose .nodata (rasterio-like)
+                        nod = getattr(data_array, "nodata", None)
+                        if nod is not None:
+                            has_nodata = True
+                        # Check common attrs and encoding keys
+                        if not has_nodata and isinstance(getattr(data_array, "attrs", None), dict):
+                            if "_FillValue" in data_array.attrs:
+                                has_nodata = True
+                        if not has_nodata and hasattr(data_array, "encoding"):
+                            enc = getattr(data_array, "encoding") or {}
+                            if isinstance(enc, dict) and (
+                                "nodata" in enc or "_FillValue" in enc
+                            ):
+                                has_nodata = True
+
+                    except Exception:
+                        # Be conservative on any attribute access error
+                        has_nodata = True
+
+                    if (
+                        original_dtype is None
+                        and not has_nodata
+                        and np.issubdtype(dtype_obj, np.floating)
+                        and hasattr(data_array, "sizes")
+                    ):
+                        # Build a tiny indexer selecting up to 2 elements along
+                        # each dimension to form a very small sample block.
+                        indexer: dict[str, slice] = {}
+                        for d, s in data_array.sizes.items():
+                            take = 1 if s == 0 else min(2, int(s))
+                            indexer[d] = slice(0, take)
+
+                        # Try to extract the tiny sample; fall back silently on
+                        # any failure (e.g., remote IO or compute errors).
+                        try:
+                            sample = data_array.isel(indexer).values
+                        except Exception:
+                            sample = None
+
+                        if sample is not None:
+                            # Flatten and ensure it's a numpy array
+                            arr = np.asarray(sample).ravel()
+                            # If any NaNs present, don't downcast
+                            if not np.isnan(arr).any() and arr.size > 0:
+                                # Check integer-valuedness on the sample
+                                if np.allclose(arr, np.round(arr)):
+                                    vmin = int(arr.min())
+                                    vmax = int(arr.max())
+                                    # Choose smallest safe integer dtype
+                                    chosen = None
+                                    if vmin >= 0:
+                                        if vmax <= 0xFF:
+                                            chosen = np.dtype("uint8")
+                                        elif vmax <= 0xFFFF:
+                                            chosen = np.dtype("uint16")
+                                        elif vmax <= 0xFFFFFFFF:
+                                            chosen = np.dtype("uint32")
+                                    else:
+                                        if vmin >= -0x8000 and vmax <= 0x7FFF:
+                                            chosen = np.dtype("int16")
+                                        elif vmin >= -0x80000000 and vmax <= 0x7FFFFFFF:
+                                            chosen = np.dtype("int32")
+
+                                    if chosen is not None:
+                                        dtype_obj = chosen
+                    # Compute bytes using chosen dtype_obj
+                    var_nbytes = dtype_obj.itemsize * data_array.size
+                except Exception:
+                    # If anything goes wrong, fall back to conservative
+                    # estimation using data_array.dtype
+                    dtype_obj = np.dtype(data_array.dtype)
+                    var_nbytes = dtype_obj.itemsize * data_array.size
 
                 estimated_bytes += var_nbytes
                 data_vars_info.append(

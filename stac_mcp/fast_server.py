@@ -6,8 +6,29 @@ from fastmcp.server.server import FastMCP
 
 from stac_mcp.tools import execution
 
+from stac_mcp.fastmcp_prompts.dtype_preferences import dtype_size_preferences
+
 app = FastMCP()
 
+try:
+    from stac_mcp.fastmcp_prompts.dtype_preferences import dtype_size_preferences
+
+    # Register the imported callable as a prompt on the app. Use the public
+    # API `add_prompt` which accepts an existing function and registers it.
+    # This avoids decorator/callable confusion when registering functions
+    # imported from other modules.
+    if hasattr(app, "add_prompt"):
+        app.add_prompt(dtype_size_preferences)
+    else:
+        # Fallback: try the prompt decorator if add_prompt isn't available.
+        try:
+            app.prompt(name="dtype_size_preferences")(dtype_size_preferences)
+        except Exception:
+            pass
+except Exception:
+    # Best-effort: failure to register should not prevent server startup or
+    # tests from running in environments without fastmcp prompt support.
+    pass
 
 @app.tool
 async def get_root() -> list[dict[str, Any]]:

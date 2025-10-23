@@ -28,6 +28,7 @@ Testing & validation
   - All tests pass.
 - Validate MCP server functionality (example usage):
   - python examples/example_usage.py
+  - Debug runners and short scripts were moved into the `debug/` directory; use those when present (e.g., `python debug/debug_estimate_run_pc.py`).
 
 Logging & errors
 - Use the standard logging module; configure logging at entrypoints only.

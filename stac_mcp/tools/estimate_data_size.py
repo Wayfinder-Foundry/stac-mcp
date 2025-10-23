@@ -9,6 +9,15 @@ from stac_mcp.tools import MAX_ASSET_LIST
 from stac_mcp.tools.client import STACClient
 from stac_mcp.utils.today import get_today_date
 
+# Import advisory prompt text if available. Keep import optional so this module
+# remains usable in environments without the prompts module or fastmcp.
+try:
+    from stac_mcp.fastmcp_prompts.dtype_preferences import (
+        dtype_size_preferences,
+    )
+except Exception:
+    dtype_size_preferences = None
+
 try:
     ODC_STAC_AVAILABLE = (
         importlib.util.find_spec("odc.stac") is not None
@@ -68,7 +77,6 @@ def _validate_aoi_geojson_argument(
 ) -> dict[str, Any] | None:
     """AOI GeoJSON is optional; return as-is (may be None)."""
     return aoi_geojson
-
 
 def handle_estimate_data_size(
     client: STACClient,
@@ -140,4 +148,16 @@ def handle_estimate_data_size(
         if remaining > 0:
             result_text += f"  ... and {remaining} more assets\n"
     result_text += f"\n{size_estimate['message']}\n"
+    # Append advisory guidance from the dtype prompt if available. This helps
+    # agents and human users understand how to prefer compact dtypes and avoid
+    # overestimation when NaN nodata forces float upcasts.
+    if callable(dtype_size_preferences):
+        try:
+            advisory = dtype_size_preferences()
+            if advisory:
+                result_text += "\n**Estimator Advisory (dtype preferences)**\n"
+                result_text += advisory + "\n"
+        except Exception:
+            # Non-fatal: don't let advisory generation break the tool
+            pass
     return [TextContent(type="text", text=result_text)]
