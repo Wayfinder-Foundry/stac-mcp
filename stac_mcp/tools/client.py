@@ -235,6 +235,7 @@ class STACClient:
         bbox: list[float] | None = None,
         datetime: str | None = None,
         query: dict[str, Any] | None = None,
+        sortby: list[dict[str, str]] | None = None,
         limit: int = 10,
     ) -> list[Any]:
         """Run a search and cache the resulting item list per-client.
@@ -268,6 +269,7 @@ class STACClient:
             bbox=bbox,
             datetime=datetime,
             query=query,
+            sortby=sortby,
             limit=limit,
         )
         items = list(search.items())
@@ -457,6 +459,7 @@ class STACClient:
                 bbox=bbox,
                 datetime=datetime,
                 query=query,
+                sortby=sortby,
                 limit=limit,
             )
             items = []

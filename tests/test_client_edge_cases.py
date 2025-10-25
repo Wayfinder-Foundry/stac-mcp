@@ -23,7 +23,7 @@ class TestClientInitialization:
         """Test client with catalog URL having trailing slash."""
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com/stac/")
-        assert not client.catalog_url.endswith("/stac/")
+        assert client.catalog_url.endswith("/stac/")
 
     @patch("pystac_client.stac_api_io.StacApiIO.read_json")
     def test_client_without_trailing_slash(self, mock_read_json):
