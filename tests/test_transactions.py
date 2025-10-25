@@ -175,6 +175,16 @@ async def test_update_collection_success(test_app, collection_payload_factory):
     assert result.content[0].text == '{"status": "success"}'
 
 
+from unittest.mock import MagicMock
+
+from stac_mcp.tools.transactions import (
+    handle_create_collection,
+    handle_create_item,
+    handle_delete_collection,
+    handle_delete_item,
+    handle_update_collection,
+    handle_update_item,
+)
 @pytest.mark.asyncio
 async def test_delete_collection_success(test_app):
     """Test successful collection deletion."""
@@ -195,3 +205,55 @@ async def test_delete_collection_success(test_app):
             "delete_collection", {"collection_id": "test-collection"}
         )
     assert result.content[0].text == '{"status": "success"}'
+
+
+@pytest.fixture
+def mock_stac_client():
+    """Return a mock STACClient."""
+    return MagicMock()
+
+
+def test_handle_create_item_handler(mock_stac_client):
+    """Tests the handle_create_item function."""
+    collection_id = "test-collection"
+    item = {"id": "test-item"}
+    handle_create_item(mock_stac_client, {"collection_id": collection_id, "item": item})
+    mock_stac_client.create_item.assert_called_once_with(collection_id, item)
+
+
+def test_handle_update_item_handler(mock_stac_client):
+    """Tests the handle_update_item function."""
+    item = {"id": "test-item", "collection": "test-collection"}
+    handle_update_item(mock_stac_client, {"item": item})
+    mock_stac_client.update_item.assert_called_once_with(item)
+
+
+def test_handle_delete_item_handler(mock_stac_client):
+    """Tests the handle_delete_item function."""
+    collection_id = "test-collection"
+    item_id = "test-item"
+    handle_delete_item(
+        mock_stac_client, {"collection_id": collection_id, "item_id": item_id}
+    )
+    mock_stac_client.delete_item.assert_called_once_with(collection_id, item_id)
+
+
+def test_handle_create_collection_handler(mock_stac_client):
+    """Tests the handle_create_collection function."""
+    collection = {"id": "test-collection"}
+    handle_create_collection(mock_stac_client, {"collection": collection})
+    mock_stac_client.create_collection.assert_called_once_with(collection)
+
+
+def test_handle_update_collection_handler(mock_stac_client):
+    """Tests the handle_update_collection function."""
+    collection = {"id": "test-collection"}
+    handle_update_collection(mock_stac_client, {"collection": collection})
+    mock_stac_client.update_collection.assert_called_once_with(collection)
+
+
+def test_handle_delete_collection_handler(mock_stac_client):
+    """Tests the handle_delete_collection function."""
+    collection_id = "test-collection"
+    handle_delete_collection(mock_stac_client, {"collection_id": collection_id})
+    mock_stac_client.delete_collection.assert_called_once_with(collection_id)

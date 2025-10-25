@@ -634,6 +634,9 @@ def test_delete_item_remote(pystac_manager):
 # ======================== Error Handling Tests ========================
 
 
+import urllib.error
+
+
 def test_import_error_on_missing_pystac(pystac_manager, monkeypatch):
     """Test error handling when pystac is not installed."""
 
@@ -647,3 +650,73 @@ def test_import_error_on_missing_pystac(pystac_manager, monkeypatch):
 
     with pytest.raises(ImportError, match="pystac is required"):
         pystac_manager.create_catalog("/path/to/catalog.json", "test", "Test catalog")
+    with pytest.raises(ImportError, match="pystac is required"):
+        pystac_manager.read_catalog("/path/to/catalog.json")
+    with pytest.raises(ImportError, match="pystac is required"):
+        pystac_manager.update_catalog("/path/to/catalog.json", {})
+    with pytest.raises(ImportError, match="pystac is required"):
+        pystac_manager.create_collection("/path/to/collection.json", {})
+    with pytest.raises(ImportError, match="pystac is required"):
+        pystac_manager.read_collection("/path/to/collection.json")
+    with pytest.raises(ImportError, match="pystac is required"):
+        pystac_manager.update_collection("/path/to/collection.json", {})
+    with pytest.raises(ImportError, match="pystac is required"):
+        pystac_manager.create_item("/path/to/item.json", {})
+    with pytest.raises(ImportError, match="pystac is required"):
+        pystac_manager.read_item("/path/to/item.json")
+    with pytest.raises(ImportError, match="pystac is required"):
+        pystac_manager.update_item("/path/to/item.json", {})
+
+
+@patch("stac_mcp.tools.pystac_management.urllib.request.urlopen")
+def test_remote_read_write_delete_errors(mock_urlopen):
+    """Tests error handling for remote file operations."""
+    manager = PySTACManager()
+    url = "https://example.com/resource.json"
+
+    mock_urlopen.side_effect = urllib.error.URLError("Request failed")
+
+    with pytest.raises(urllib.error.URLError):
+        manager._read_json_file(url)
+
+    with pytest.raises(urllib.error.URLError):
+        manager._write_json_file(url, {})
+
+    with pytest.raises(urllib.error.URLError):
+        manager._delete_file(url)
+
+
+def test_list_collections_local_with_error(pystac_manager, tmp_path):
+    """Test listing collections with a read error."""
+    # Create a collection file with invalid content
+    subdir = tmp_path / "collection1"
+    subdir.mkdir()
+    coll_file = subdir / "collection.json"
+    coll_file.write_text("{invalid json}")
+
+    with patch.dict("sys.modules", {"pystac": MagicMock()}):
+        # Make from_file raise an exception
+        sys.modules["pystac"].Collection.from_file.side_effect = Exception(
+            "Invalid JSON"
+        )
+        with patch("stac_mcp.tools.pystac_management.logger") as mock_logger:
+            result = pystac_manager.list_collections(str(tmp_path))
+            assert result == []
+            mock_logger.warning.assert_called_once()
+
+
+def test_list_items_local_with_error(pystac_manager, tmp_path):
+    """Test listing items with a read error."""
+    # Create an item file with invalid content
+    subdir = tmp_path / "items"
+    subdir.mkdir()
+    item_file = subdir / "item.json"
+    item_file.write_text("{invalid json}")
+
+    with patch.dict("sys.modules", {"pystac": MagicMock()}):
+        # Make from_file raise an exception
+        sys.modules["pystac"].Item.from_file.side_effect = Exception("Invalid JSON")
+        with patch("stac_mcp.tools.pystac_management.logger") as mock_logger:
+            result = pystac_manager.list_items(str(tmp_path))
+            assert result == []
+            mock_logger.warning.assert_called_once()
