@@ -6,51 +6,66 @@ import pytest
 
 from stac_mcp.tools.client import STACClient
 
+DEFAULT_TIMEOUT = 20
+DEFAULT_MAX_WORKERS = 4
+DEFAULT_RETRIES = 1
+DEFAULT_BACKOFF_BASE = 0.05
+ENV_TIMEOUT = 30
+ENV_MAX_WORKERS = 8
+ENV_RETRIES = 3
+ENV_BACKOFF_BASE = 0.1
+
+
+@pytest.fixture
+def _mock_request():
+    with patch("stac_mcp.tools.client.requests.Session.request") as mock_request:
+        yield mock_request
+
 
 def test_client_initialization_defaults():
     """Tests that the STACClient is initialized with default values."""
     client = STACClient()
     assert client.catalog_url == "https://planetarycomputer.microsoft.com/api/stac/v1"
-    assert client.headers == {}
-    assert client.head_timeout_seconds == 20
-    assert client.head_max_workers == 4
-    assert client.head_retries == 1
-    assert client.head_backoff_base == 0.05
-    assert client.head_backoff_jitter is True
+    assert not client.headers
+    assert client.head_timeout_seconds == DEFAULT_TIMEOUT
+    assert client.head_max_workers == DEFAULT_MAX_WORKERS
+    assert client.head_retries == DEFAULT_RETRIES
+    assert client.head_backoff_base == DEFAULT_BACKOFF_BASE
+    assert client.head_backoff_jitter
 
 
 def test_client_initialization_with_env_vars(monkeypatch):
-    """Tests that the STACClient is initialized with values from environment variables."""
-    monkeypatch.setenv("STAC_MCP_HEAD_TIMEOUT_SECONDS", "30")
-    monkeypatch.setenv("STAC_MCP_HEAD_MAX_WORKERS", "8")
-    monkeypatch.setenv("STAC_MCP_HEAD_RETRIES", "3")
-    monkeypatch.setenv("STAC_MCP_HEAD_BACKOFF_BASE", "0.1")
+    """Tests that STACClient is initialized with values from environment variables."""
+    monkeypatch.setenv("STAC_MCP_HEAD_TIMEOUT_SECONDS", str(ENV_TIMEOUT))
+    monkeypatch.setenv("STAC_MCP_HEAD_MAX_WORKERS", str(ENV_MAX_WORKERS))
+    monkeypatch.setenv("STAC_MCP_HEAD_RETRIES", str(ENV_RETRIES))
+    monkeypatch.setenv("STAC_MCP_HEAD_BACKOFF_BASE", str(ENV_BACKOFF_BASE))
     monkeypatch.setenv("STAC_MCP_HEAD_JITTER", "0")
 
     client = STACClient()
-    assert client.head_timeout_seconds == 30
-    assert client.head_max_workers == 8
-    assert client.head_retries == 3
-    assert client.head_backoff_base == 0.1
-    assert client.head_backoff_jitter is False
+    assert client.head_timeout_seconds == ENV_TIMEOUT
+    assert client.head_max_workers == ENV_MAX_WORKERS
+    assert client.head_retries == ENV_RETRIES
+    assert client.head_backoff_base == ENV_BACKOFF_BASE
+    assert not client.head_backoff_jitter
 
 
 def test_client_initialization_with_invalid_env_vars(monkeypatch):
-    """Tests that the STACClient handles invalid environment variable values gracefully."""
+    """Tests that STACClient handles invalid environment variables gracefully."""
     monkeypatch.setenv("STAC_MCP_HEAD_TIMEOUT_SECONDS", "invalid")
     monkeypatch.setenv("STAC_MCP_HEAD_MAX_WORKERS", "invalid")
     monkeypatch.setenv("STAC_MCP_HEAD_RETRIES", "invalid")
     monkeypatch.setenv("STAC_MCP_HEAD_BACKOFF_BASE", "invalid")
 
     client = STACClient()
-    assert client.head_timeout_seconds == 20
-    assert client.head_max_workers == 4
-    assert client.head_retries == 1
-    assert client.head_backoff_base == 0.05
+    assert client.head_timeout_seconds == DEFAULT_TIMEOUT
+    assert client.head_max_workers == DEFAULT_MAX_WORKERS
+    assert client.head_retries == DEFAULT_RETRIES
+    assert client.head_backoff_base == DEFAULT_BACKOFF_BASE
 
 
-@patch("stac_mcp.tools.client.requests.Session.request")
-def test_session_request_with_default_timeout(mock_request):
+@pytest.mark.usefixtures("_mock_request")
+def test_session_request_with_default_timeout():
     """Tests that the session request wrapper applies a default timeout."""
     client = STACClient()
     # This will trigger the creation of the client and the monkey-patching
@@ -62,7 +77,7 @@ def test_session_request_with_default_timeout(mock_request):
     # The actual test of the wrapper's logic is tricky without a real session object.
     # We will assume that if the code runs, the patch is in place.
     # A better test would be to have a real session and check the timeout.
-    assert hasattr(client.client._stac_io.session, "request")
+    assert hasattr(client.client._stac_io.session, "request")  # noqa: SLF001
 
     # To actually test the timeout, we would need to call the request method.
     # We can do this by calling a method on the client that makes a request.
@@ -70,7 +85,9 @@ def test_session_request_with_default_timeout(mock_request):
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {"conformsTo": []}
-    client.client._stac_io.session.request.return_value = mock_response
+    client.client._stac_io.session.request.return_value = (  # noqa: SLF001
+        mock_response
+    )
 
     # get_conformance makes a request
     client.get_conformance()
@@ -113,6 +130,7 @@ def test_search_cache_logic(mock_stac_client, mock_time):
     mock_search = MagicMock()
     mock_stac_client.search.return_value = mock_search
     mock_search.items.return_value = [{"id": "test-item"}]
+    expected_call_count = 2
 
     # First call, should cache the result
     mock_time.return_value = 1000
@@ -129,7 +147,11 @@ def test_search_cache_logic(mock_stac_client, mock_time):
     mock_time.return_value = 2000
     result3 = client._cached_search(collections=["test"], limit=1)  # noqa: SLF001
     assert result3 == [{"id": "test-item"}]
-    assert mock_stac_client.search.call_count == 2
+    assert mock_stac_client.search.call_count == expected_call_count
+
+
+class CustomTestError(Exception):
+    pass
 
 
 @patch("stac_mcp.tools.client.STACClient._invalidate_cache")
@@ -174,18 +196,23 @@ def test_do_transaction_cache_invalidation(mock_request, mock_invalidate_cache):
 def test_estimate_data_size_fallback(mock_cached_search, mock_fallback_estimate):
     """Tests that estimate_data_size calls the fallback estimator when needed."""
     client = STACClient()
+    asset_size = 1024
     mock_cached_search.return_value = [MagicMock()]
-    mock_fallback_estimate.return_value = {"estimated_size_bytes": 1024}
+    mock_fallback_estimate.return_value = {"estimated_size_bytes": asset_size}
 
     # Simulate a case where the primary estimation finds no GeoTIFF assets
-    with patch(
-        "stac_mcp.tools.client.STACClient._size_from_metadata", return_value=None  # noqa: SLF001
-    ), patch(
-        "stac_mcp.tools.client.STACClient._head_content_length",  # noqa: SLF001
-        return_value=None,
+    with (
+        patch(
+            "stac_mcp.tools.client.STACClient._size_from_metadata",
+            return_value=None,
+        ),
+        patch(
+            "stac_mcp.tools.client.STACClient._head_content_length",
+            return_value=None,
+        ),
     ):
         result = client.estimate_data_size()
-        assert result == {"estimated_size_bytes": 1024}
+        assert result == {"estimated_size_bytes": asset_size}
         mock_fallback_estimate.assert_called_once()
 
 
@@ -194,6 +221,7 @@ def test_fallback_estimate_with_force(mock_cached_search):
     """Tests the fallback estimator with the force parameter."""
     client = STACClient()
     mock_item = MagicMock()
+    asset_size = 1024
     mock_item.assets = {
         "asset1": {
             "href": "http://test.com/asset1.tif",
@@ -206,7 +234,7 @@ def test_fallback_estimate_with_force(mock_cached_search):
     with patch.object(
         client._head_session,  # noqa: SLF001
         "request",
-        return_value=MagicMock(headers={"Content-Length": "1024"}),
+        return_value=MagicMock(headers={"Content-Length": str(asset_size)}),
     ) as mock_head:
         # Simulate a HEAD request failure
         mock_head.side_effect = Exception("test error")
@@ -223,7 +251,7 @@ def test_fallback_estimate_with_force(mock_cached_search):
 
         # When not forcing, the message should be different
         mock_head.side_effect = None
-        mock_head.return_value = MagicMock(headers={"Content-Length": "1024"})
+        mock_head.return_value = MagicMock(headers={"Content-Length": str(asset_size)})
         result = client._fallback_estimate(  # noqa: SLF001
             items=[mock_item],
             bbox=None,
@@ -232,7 +260,7 @@ def test_fallback_estimate_with_force(mock_cached_search):
             clipped_to_aoi=False,
             force=False,
         )
-        assert result["estimated_size_bytes"] == 1024
+        assert result["estimated_size_bytes"] == asset_size
         assert "Fallback estimate computed" in result["message"]
 
 
@@ -241,6 +269,8 @@ def test_fallback_estimate_zarr_and_parquet(mock_cached_search):
     """Tests the fallback estimator with zarr and parquet assets."""
     client = STACClient()
     mock_item = MagicMock()
+    zarr_asset_size = 512
+    parquet_asset_size = 1024
     mock_item.assets = {
         "zarr_asset": {
             "href": "http://test.com/asset.zarr",
@@ -254,15 +284,18 @@ def test_fallback_estimate_zarr_and_parquet(mock_cached_search):
     mock_cached_search.return_value = [mock_item]
 
     # Mock HEAD requests to return a size
-    with patch.object(
-        client._head_session,  # noqa: SLF001
-        "request",
-        return_value=MagicMock(headers={"Content-Length": "1024"}),
-    ), patch.dict("sys.modules", {"xarray": MagicMock()}) as mock_modules:
+    with (
+        patch.object(
+            client._head_session,  # noqa: SLF001
+            "request",
+            return_value=MagicMock(headers={"Content-Length": str(parquet_asset_size)}),
+        ),
+        patch.dict("sys.modules", {"xarray": MagicMock()}) as mock_modules,
+    ):
         mock_xr = mock_modules["xarray"]
         mock_ds = MagicMock()
         mock_ds.variables.values.return_value = [
-            MagicMock(data=MagicMock(nbytes=512))
+            MagicMock(data=MagicMock(nbytes=zarr_asset_size))
         ]
         mock_xr.open_zarr.return_value = mock_ds
 
@@ -274,7 +307,7 @@ def test_fallback_estimate_zarr_and_parquet(mock_cached_search):
             clipped_to_aoi=False,
             force=False,
         )
-        assert result["estimated_size_bytes"] == 512 + 1024
+        assert result["estimated_size_bytes"] == zarr_asset_size + parquet_asset_size
 
         zarr_asset_info = next(
             a for a in result["assets_analyzed"] if a["asset"] == "zarr_asset"
@@ -285,10 +318,6 @@ def test_fallback_estimate_zarr_and_parquet(mock_cached_search):
 
         assert zarr_asset_info["method"] == "zarr-inspect"
         assert parquet_asset_info["method"] == "head"
-
-
-class CustomTestException(Exception):
-    pass
 
 
 def test_asset_to_dict():
@@ -320,7 +349,7 @@ def test_asset_to_dict():
     class AssetWithFailingToDict:
         def to_dict(self):
             msg = "test"
-            raise CustomTestException(msg)
+            raise CustomTestError(msg)
 
     assert client._asset_to_dict(AssetWithFailingToDict()) == {}  # noqa: SLF001
 

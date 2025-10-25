@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import urllib.error
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -634,9 +635,6 @@ def test_delete_item_remote(pystac_manager):
 # ======================== Error Handling Tests ========================
 
 
-import urllib.error
-
-
 def test_import_error_on_missing_pystac(pystac_manager, monkeypatch):
     """Test error handling when pystac is not installed."""
 
@@ -677,13 +675,13 @@ def test_remote_read_write_delete_errors(mock_urlopen):
     mock_urlopen.side_effect = urllib.error.URLError("Request failed")
 
     with pytest.raises(urllib.error.URLError):
-        manager._read_json_file(url)
+        manager._read_json_file(url)  # noqa: SLF001
 
     with pytest.raises(urllib.error.URLError):
-        manager._write_json_file(url, {})
+        manager._write_json_file(url, {})  # noqa: SLF001
 
     with pytest.raises(urllib.error.URLError):
-        manager._delete_file(url)
+        manager._delete_file(url)  # noqa: SLF001
 
 
 def test_list_collections_local_with_error(pystac_manager, tmp_path):

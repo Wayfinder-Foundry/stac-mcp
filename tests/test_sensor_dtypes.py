@@ -18,16 +18,16 @@ def test_sensor_info_get_dtype_for_asset():
 
 
 def test_sensor_info_should_ignore_asset():
-    """Tests that SensorInfo.should_ignore_asset correctly identifies assets to ignore."""
+    """Tests that SensorInfo.should_ignore_asset identifies assets to ignore."""
     sensor_info = SensorInfo(default_dtype=np.dtype("uint16"))
-    assert sensor_info.should_ignore_asset("preview") is True
-    assert sensor_info.should_ignore_asset("thumbnail") is True
-    assert sensor_info.should_ignore_asset("browse") is True
-    assert sensor_info.should_ignore_asset("rgb") is True
-    assert sensor_info.should_ignore_asset("B02") is False
-    assert sensor_info.should_ignore_asset(None, "image/jpeg") is True
-    assert sensor_info.should_ignore_asset(None, "image/png") is True
-    assert sensor_info.should_ignore_asset(None, "image/tiff") is False
+    assert sensor_info.should_ignore_asset("preview")
+    assert sensor_info.should_ignore_asset("thumbnail")
+    assert sensor_info.should_ignore_asset("browse")
+    assert sensor_info.should_ignore_asset("rgb")
+    assert not sensor_info.should_ignore_asset("B02")
+    assert sensor_info.should_ignore_asset(None, "image/jpeg")
+    assert sensor_info.should_ignore_asset(None, "image/png")
+    assert not sensor_info.should_ignore_asset(None, "image/tiff")
 
 
 def test_sensor_dtype_registry_get_info():
@@ -42,7 +42,7 @@ def test_sensor_dtype_registry_get_info():
 
 
 def test_sensor_dtype_registry_get_dtype_for_collection():
-    """Tests that SensorDtypeRegistry.get_dtype_for_collection returns the correct dtype."""
+    """Tests SensorDtypeRegistry.get_dtype_for_collection returns the correct dtype."""
     assert SensorDtypeRegistry.get_dtype_for_collection("sentinel-2-l2a") == np.dtype(
         "uint16"
     )
