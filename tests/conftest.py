@@ -1,71 +1,95 @@
 """Shared pytest fixtures for STAC MCP test suite."""
 
-from __future__ import annotations
-
 import json
 import logging
-from collections.abc import Callable, Iterator  # noqa: TC003
+import subprocess
+import time
+import urllib.request
+from collections.abc import Callable, Iterator
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 from urllib.error import HTTPError
 
 import pytest
+from fastmcp import Client
 
 from stac_mcp import observability
-from stac_mcp.tools.client import STACClient
+from stac_mcp.fast_server import app
+from tests import HTTP_OK
 
 
-@pytest.fixture
+@pytest.fixture(scope="session", autouse=True)
+def prepare_test_data_dir() -> None:
+    """Ensure test data directory and files exist before any tests run."""
+    base_dir = (
+        Path(__file__).resolve().parent.parent
+        / "test-data"
+        / "vancouver_subaoi_catalog"
+    )
+    items_dir = base_dir / "items"
+    items_dir.mkdir(exist_ok=True, parents=True)
+
+    collection_file = base_dir / "collection.json"
+    if not collection_file.exists():
+        collection_file.write_text(
+            json.dumps(
+                {
+                    "id": "vancouver-subaoi-collection",
+                    "type": "Collection",
+                    "stac_version": "1.0.0",
+                    "description": "Test collection for integration tests.",
+                    "license": "proprietary",
+                    "links": [{"rel": "items", "href": "./items"}],
+                    "extent": {
+                        "spatial": {"bbox": [[-123.3, 49.0, -122.0, 49.5]]},
+                        "temporal": {
+                            "interval": [
+                                ["2020-01-01T00:00:00Z", "2020-02-01T00:00:00Z"]
+                            ]
+                        },
+                    },
+                    "summaries": {},
+                }
+            )
+        )
+
+    catalog_file = base_dir / "catalog.json"
+    if not catalog_file.exists():
+        catalog_file.write_text(
+            json.dumps(
+                {
+                    "id": "vancouver-subaoi-catalog",
+                    "type": "Catalog",
+                    "stac_version": "1.0.0",
+                    "description": "Test catalog for integration tests.",
+                    "links": [{"rel": "child", "href": "./collection.json"}],
+                    "conformsTo": [
+                        "https://api.stacspec.org/v1.0.0/core",
+                        "https://api.stacspec.org/v1.0.0/collections",
+                        "https://api.stacspec.org/v1.0.0/item-search",
+                        "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/core",
+                        "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/oas30",
+                        "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/html",
+                        "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/geojson",
+                        "https://api.stacspec.org/v1.0.0/collections#transaction",
+                    ],
+                }
+            )
+        )
+
+
+@pytest.fixture(scope="session")
 def default_catalog_url() -> str:
     """Return the default STAC catalog URL used in tests."""
-
-    return "https://example.com"
-
-
-@pytest.fixture
-def stac_client_factory(
-    default_catalog_url: str,
-) -> Callable[
-    [str | None, dict[str, str] | None, list[str] | None],
-    tuple[STACClient, MagicMock],
-]:
-    """Factory creating a ``STACClient`` with a mocked underlying client."""
-
-    def _factory(
-        url: str | None = None,
-        headers: dict[str, str] | None = None,
-        conformance: list[str] | None = None,
-    ) -> tuple[STACClient, MagicMock]:
-        client = STACClient(url or default_catalog_url, headers=headers)
-        inner_client = MagicMock()
-        client._client = inner_client  # noqa: SLF001 - tests intentionally inject mocks
-        if conformance is not None:
-            client._conformance = list(conformance)  # noqa: SLF001 - tests control cache
-        return client, inner_client
-
-    return _factory
-
-
-@pytest.fixture
-def stac_transactions_client(
-    stac_client_factory: Callable[
-        [str | None, dict[str, str] | None, list[str] | None],
-        tuple[STACClient, MagicMock],
-    ],
-) -> STACClient:
-    """Return a ``STACClient`` pre-configured for transaction operations."""
-
-    conformance = ["https://api.stacspec.org/v1.0.0/collections#transaction"]
-    client, _ = stac_client_factory(conformance=conformance)
-    return client
+    return "http://localhost:8888/catalog.json"
 
 
 @pytest.fixture
 def reset_observability_logger(monkeypatch) -> Iterator[logging.Logger]:
     """Reset observability logger state and return the logger for assertions."""
-
     logger = logging.getLogger("stac_mcp")
     existing_handlers = list(logger.handlers)
     for handler in existing_handlers:
@@ -82,7 +106,6 @@ def reset_observability_logger(monkeypatch) -> Iterator[logging.Logger]:
 @pytest.fixture
 def fresh_metrics_registry(monkeypatch):
     """Provide an isolated metrics registry for observability tests."""
-
     registry = observability.MetricsRegistry()
     monkeypatch.setattr(observability, "metrics", registry)
     return registry
@@ -187,35 +210,47 @@ def http_error_factory() -> Callable[[int, str | None], HTTPError]:
 
 
 @pytest.fixture(scope="session")
-def stac_test_server() -> Iterator[dict[str, str]]:
-    """Start the lightweight FastAPI test STAC server and return connection info.
+def stac_test_server_process() -> Iterator[subprocess.Popen]:
+    """Run the test STAC server in a background process."""
+    process = subprocess.Popen(
+        [  # noqa: S607
+            "uv",
+            "run",
+            "uvicorn",
+            "tests.support.stac_test_server:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8888",
+        ]
+    )
 
-    Yields a dict with keys:
-      - url: base URL to the test server e.g. http://testserver
-      - api_key: the API key string to authenticate (X-API-Key)
-    """
-    # Import locally to avoid test-time import errors when FastAPI isn't installed
-    try:
-        from fastapi.testclient import TestClient  # noqa: PLC0415
+    # Loop until the server is ready
+    timeout = 10  # seconds
+    start_time = time.time()
+    server_ready = False
+    while time.time() - start_time < timeout:
+        try:
+            with urllib.request.urlopen("http://localhost:8888/catalog.json") as resp:
+                if resp.status == HTTP_OK:
+                    server_ready = True
+                    break
+        except Exception:  # noqa: BLE001
+            time.sleep(0.5)
+    if not server_ready:
+        process.terminate()
+        process.wait()
+        err = "STAC test server failed to start within timeout period."
+        raise RuntimeError(err)
 
-        from tests.support.stac_test_server import (  # noqa: PLC0415
-            API_KEY,
-            ITEMS_DIR,
-            app,
-        )
-    except (ImportError, ModuleNotFoundError):
-        # If fastapi or the support server aren't available, provide a noop fixture
-        yield {"client": None, "url": "http://example.com", "api_key": ""}
-        return
+    yield process
+    process.terminate()
+    process.wait()
 
-    # a folder for items to be created in
-    ITEMS_DIR.mkdir(parents=True, exist_ok=True)
 
-    client = TestClient(app)
-    # yield the TestClient instance and api key for tests to call directly
-    yield {"client": client, "api_key": API_KEY}
-    # no explicit teardown needed for TestClient
-
-    # teardown: remove any created items
-    for p in ITEMS_DIR.glob("*.json"):
-        p.unlink()
+@pytest.fixture
+def stac_test_server(stac_test_server_process) -> Iterator[dict[str, Any]]:  # noqa: ARG001
+    """Mock HTTP requests to the test STAC server."""
+    api_key = "test-secret-key"
+    mcp_client = Client(app)
+    return {"client": mcp_client, "api_key": api_key}

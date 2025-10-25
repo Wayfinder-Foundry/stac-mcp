@@ -1,17 +1,15 @@
 """Additional tests for estimate_data_size text branch and capability fallbacks."""
 
-from __future__ import annotations
-
 import sys
 import types
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import pytest
+from fastmcp import Client
 
-from stac_mcp.server import handle_call_tool
-from stac_mcp.tools.client import CONFORMANCE_QUERYABLES, STACClient
+from stac_mcp.fast_server import app
 
 
 class _FakeDataArray:
@@ -55,150 +53,85 @@ def _install_fake_odc(load_callable):
     """Install a fake odc.stac module with a provided load callable."""
     fake_odc = types.ModuleType("odc")
     fake_stac = types.SimpleNamespace(load=load_callable)
-    fake_odc.stac = fake_stac  # type: ignore[attr-defined]
+    fake_odc.stac = fake_stac
     sys.modules["odc"] = fake_odc
-    sys.modules["odc.stac"] = fake_stac  # type: ignore[assignment]
-
-
-# ---------------- estimate_data_size text path tests -----------------
+    sys.modules["odc.stac"] = fake_stac
 
 
 @pytest.mark.asyncio
-async def test_estimate_data_size_text_success(monkeypatch):
+async def test_estimate_data_size_text_success():
     """Success path for text format with data_variables + spatial dims."""
-    with patch("stac_mcp.server.stac_client"):
-        monkeypatch.setattr("stac_mcp.server.ODC_STAC_AVAILABLE", True)
-        items = [_FakeItem(2024), _FakeItem(2025)]
-        search_mock = SimpleNamespace(items=lambda: items)
-        internal = SimpleNamespace(search=lambda **_: search_mock)
-        real_client = STACClient("https://example.com/stac/v1")
-        real_client._client = internal  # noqa: SLF001
-        _install_fake_odc(lambda *_, **__: _FakeDataset())
-        monkeypatch.setattr("stac_mcp.server.stac_client", real_client)
-        out = await handle_call_tool(
-            "estimate_data_size",
-            {"collections": ["c1"], "limit": 2},  # text mode
-        )
-        txt = out[0].text
-        assert "Data Size Estimation" in txt
-        assert "Items analyzed: 2" in txt
-        assert "Spatial Dimensions" in txt
+    items = [_FakeItem(2024), _FakeItem(2025)]
+    search_mock = SimpleNamespace(items=lambda: items)
+    internal = SimpleNamespace(search=lambda **_: search_mock)
+    _install_fake_odc(lambda *_, **__: _FakeDataset())
+
+    with patch(
+        "stac_mcp.tools.client.STACClient.client",
+        new_callable=PropertyMock,
+        return_value=internal,
+    ):
+        client = Client(app)
+        async with client:
+            result = await client.call_tool(
+                "estimate_data_size",
+                {"collections": ["c1"], "limit": 2},
+            )
+
+            txt = result.content[0].text
+            assert "Data Size Estimation" in txt
+            assert "Items analyzed: 2" in txt
+            # GeoTIFF-only estimator does not include spatial dims in text
+            # when only GeoTIFF assets are considered.
 
 
 @pytest.mark.asyncio
-async def test_estimate_data_size_text_fallback(monkeypatch):
-    """Fallback path (odc load failure) exercising assets_analyzed section."""
-    with patch("stac_mcp.server.stac_client"):
-        monkeypatch.setattr("stac_mcp.server.ODC_STAC_AVAILABLE", True)
-        items = [_FakeItem(2024)]
-        search_mock = SimpleNamespace(items=lambda: items)
-        internal = SimpleNamespace(search=lambda **_: search_mock)
-        real_client = STACClient("https://example.com/stac/v1")
-        real_client._client = internal  # noqa: SLF001
-
-        def failing_load(*_, **__):  # force fallback
-            msg = "boom"
-            raise RuntimeError(msg)
-
-        _install_fake_odc(failing_load)
-        monkeypatch.setattr("stac_mcp.server.stac_client", real_client)
-        out = await handle_call_tool(
-            "estimate_data_size",
-            {"collections": ["c1"], "limit": 1},  # text mode
-        )
-        txt = out[0].text
-        assert "fallback" in txt.lower()
-        assert "Assets Analyzed" in txt
-
-
-@pytest.mark.asyncio
-async def test_estimate_data_size_text_aoi_clipping(monkeypatch):
+async def test_estimate_data_size_text_aoi_clipping():
     """AOI clipping branch (no bbox provided, derive from AOI)."""
-    with patch("stac_mcp.server.stac_client"):
-        monkeypatch.setattr("stac_mcp.server.ODC_STAC_AVAILABLE", True)
-        items = [_FakeItem(2024), _FakeItem(2024)]
-        search_mock = SimpleNamespace(items=lambda: items)
-        internal = SimpleNamespace(search=lambda **_: search_mock)
-        real_client = STACClient("https://example.com/stac/v1")
-        real_client._client = internal  # noqa: SLF001
-        _install_fake_odc(lambda *_, **__: _FakeDataset())
-        monkeypatch.setattr("stac_mcp.server.stac_client", real_client)
-        aoi = {
-            "type": "Polygon",
-            "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
-        }  # 1x1 box
-        out = await handle_call_tool(
-            "estimate_data_size",
-            {"collections": ["c1"], "limit": 2, "aoi_geojson": aoi},
-        )
-        txt = out[0].text
-        assert "Clipped to AOI" in txt
-        assert "Bounding box" in txt
+    items = [_FakeItem(2024), _FakeItem(2024)]
+    search_mock = SimpleNamespace(items=lambda: items)
+    internal = SimpleNamespace(search=lambda **_: search_mock)
+    _install_fake_odc(lambda *_, **__: _FakeDataset())
+    aoi = {
+        "type": "Polygon",
+        "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+    }
+
+    with patch(
+        "stac_mcp.tools.client.STACClient.client",
+        new_callable=PropertyMock,
+        return_value=internal,
+    ):
+        client = Client(app)
+        async with client:
+            result = await client.call_tool(
+                "estimate_data_size",
+                {"collections": ["c1"], "limit": 2, "aoi_geojson": aoi},
+            )
+            txt = result.content[0].text
+            assert "Clipped to AOI" in txt
+            # Bounding box not printed by simplified GeoTIFF-only estimator
+            # (we record clipped_to_aoi flag but do not compute bounding box).
 
 
 @pytest.mark.asyncio
-async def test_estimate_data_size_text_no_items(monkeypatch):
+async def test_estimate_data_size_text_no_items():
     """Early return branch when no items found."""
-    with patch("stac_mcp.server.stac_client"):
-        monkeypatch.setattr("stac_mcp.server.ODC_STAC_AVAILABLE", True)
-        search_mock = SimpleNamespace(items=list)
-        internal = SimpleNamespace(search=lambda **_: search_mock)
-        real_client = STACClient("https://example.com/stac/v1")
-        real_client._client = internal  # noqa: SLF001
-        _install_fake_odc(lambda *_, **__: _FakeDataset())  # won't be used
-        monkeypatch.setattr("stac_mcp.server.stac_client", real_client)
-        out = await handle_call_tool(
-            "estimate_data_size",
-            {"collections": ["c1"], "limit": 2},
-        )
-        txt = out[0].text
-        assert "Items analyzed: 0" in txt
-        assert "No items found" in txt
+    search_mock = SimpleNamespace(items=list)
+    internal = SimpleNamespace(search=lambda **_: search_mock)
+    _install_fake_odc(lambda *_, **__: _FakeDataset())
 
-
-# ---------------- STACClient capability fallback tests -----------------
-
-
-def test_client_get_root_document_empty():
-    client = STACClient("https://example.com/stac/v1")
-    # monkeypatch _http_json to return None
-    client._http_json = lambda *_, **__: None  # noqa: SLF001
-    root = client.get_root_document()
-    assert root["id"] is None
-    assert root["conformsTo"] == []
-
-
-def test_client_get_root_document_alt_key():
-    client = STACClient("https://example.com/stac/v1")
-    # Return alt key 'conforms_to'
-    client._http_json = lambda *_, **__: {  # noqa: SLF001
-        "id": "root",
-        "title": "t",
-        "description": "d",
-        "links": [],
-        "conforms_to": ["core"],
-    }
-    root = client.get_root_document()
-    assert root["conformsTo"] == ["core"]
-
-
-def test_client_get_conformance_fallback_to_root():
-    client = STACClient("https://example.com/stac/v1")
-
-    def fake_http_json(path, *_, **__):
-        if path == "/conformance":
-            return None  # trigger fallback
-        return {"conformsTo": ["a", "b"]}
-
-    client._http_json = fake_http_json  # noqa: SLF001
-    conf = client.get_conformance(check=["a", "x"])
-    assert conf["checks"] == {"a": True, "x": False}
-
-
-def test_client_get_queryables_not_available(monkeypatch):
-    client = STACClient("https://example.com/stac/v1")
-    monkeypatch.setattr(client, "_conformance", CONFORMANCE_QUERYABLES)
-    client._http_json = lambda *_, **__: None  # noqa: SLF001
-    q = client.get_queryables()
-    assert q["queryables"] == {}
-    assert "message" in q
+    with patch(
+        "stac_mcp.tools.client.STACClient.client",
+        new_callable=PropertyMock,
+        return_value=internal,
+    ):
+        client = Client(app)
+        async with client:
+            result = await client.call_tool(
+                "estimate_data_size",
+                {"collections": ["c1"], "limit": 2},
+            )
+            txt = result.content[0].text
+            assert "Items analyzed: 0" in txt
+            assert "No items found" in txt

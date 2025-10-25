@@ -10,11 +10,10 @@ from stac_mcp.__main__ import main
 
 
 def test_main_entry_point():
-    """Test that __main__.main() calls cli_main from server."""
-    with patch("stac_mcp.__main__.cli_main") as mock_cli_main:
+    """Test that __main__.main() calls app.run from fast_server."""
+    with patch("stac_mcp.fast_server.app.run") as mock_run:
         main()
-
-        mock_cli_main.assert_called_once()
+        mock_run.assert_called_once()
 
 
 def test_main_module_execution():

@@ -7,6 +7,7 @@ can hook here centrally.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Callable, Iterable
@@ -14,7 +15,6 @@ from typing import Any, NoReturn
 
 from mcp.types import TextContent
 
-from stac_mcp import server as _server
 from stac_mcp.observability import instrument_tool_execution, record_tool_result_size
 from stac_mcp.tools.client import STACClient
 from stac_mcp.tools.estimate_data_size import handle_estimate_data_size
@@ -107,6 +107,32 @@ def _raise_unknown_tool(name: str) -> NoReturn:
     raise ValueError(msg)
 
 
+# Simple cache of STACClient instances keyed by (catalog_url, headers)
+# This enables a lightweight session/context reuse across tool calls so
+# handlers share connection/session state instead of creating a new
+# client per tool invocation.
+_CLIENT_CACHE: dict[tuple[str | None, tuple[tuple[str, str], ...]], STACClient] = {}
+
+
+def _client_cache_key(catalog_url: str | None, headers: dict[str, str] | None):
+    headers_tuple: tuple[tuple[str, str], ...] = ()
+    if headers:
+        # Sort items for deterministic key
+        headers_tuple = tuple(sorted((str(k), str(v)) for k, v in headers.items()))
+    return (catalog_url, headers_tuple)
+
+
+def _get_cached_client(
+    catalog_url: str | None, headers: dict[str, str] | None
+) -> STACClient:
+    key = _client_cache_key(catalog_url, headers)
+    client = _CLIENT_CACHE.get(key)
+    if client is None:
+        client = STACClient(catalog_url, headers=headers)
+        _CLIENT_CACHE[key] = client
+    return client
+
+
 def _as_text_content_list(result: Any) -> list[TextContent]:
     """Normalize arbitrary handler results into a list of TextContent."""
 
@@ -137,9 +163,11 @@ def _as_text_content_list(result: Any) -> list[TextContent]:
 
 async def execute_tool(
     tool_name: str,
+    arguments: dict[str, Any] | None = None,
+    catalog_url: str | None = None,
+    headers: dict[str, str] | None = None,
     handler: Handler | None = None,
     client: STACClient | None = None,
-    arguments: dict[str, Any] | None = None,
 ):
     """Execute a tool handler with optional overrides for tests.
 
@@ -148,21 +176,6 @@ async def execute_tool(
     handler and shared client are used. The return value is always normalized
     to a ``list[TextContent]`` for compatibility with existing tooling.
     """
-
-    # Backward compatibility: legacy callers passed only (tool_name, arguments).
-    if handler is not None and not callable(handler):
-        if arguments is None:
-            arguments = dict(handler)
-        handler = None
-    if (
-        client is not None
-        and not isinstance(client, STACClient)
-        and isinstance(client, dict)
-    ):
-        if arguments is None:
-            arguments = dict(client)
-        client = None
-
     arguments = dict(arguments or {})
 
     # Check if this is a pystac tool
@@ -177,15 +190,31 @@ async def execute_tool(
             _raise_unknown_tool(tool_name)
 
     # PySTAC tools use PySTACManager instead of STACClient
+    # Offload handler execution to a thread to avoid blocking the async event loop
+    # (handlers may perform network I/O or heavy CPU work like odc.stac.load).
+
     if is_pystac_tool:
-        api_key = arguments.get("api_key")
-        manager = PySTACManager(api_key=api_key)
-        raw_result = handler(manager, arguments)
+        manager = PySTACManager()
+        # Run the handler under the instrumented wrapper in a thread
+        instrumented = await asyncio.to_thread(
+            instrument_tool_execution,
+            tool_name,
+            catalog_url,
+            handler,
+            manager,
+            arguments,
+        )
+        raw_result = instrumented.value
     else:
-        catalog_url = arguments.get("catalog_url")
         if client is None:
-            client = STACClient(catalog_url) if catalog_url else _server.stac_client
-        instrumented = instrument_tool_execution(
+            # Reuse a cached STACClient when possible so multiple tool calls
+            # within the same session/context share connection and session
+            # state (HTTP sessions, timeout wrappers, etc.). This keeps
+            # tools lightweight and consistent across invocations.
+            client = _get_cached_client(catalog_url, headers)
+        # Run the handler under the instrumented wrapper in a thread
+        instrumented = await asyncio.to_thread(
+            instrument_tool_execution,
             tool_name,
             catalog_url,
             handler,

@@ -2,9 +2,9 @@
 
 Usage (dev):
 
-python -m uvicorn tests.support.stac_test_server:app --reload --port 8081
+python -m uvicorn tests.support.stac_test_server:app --reload --port 8080
 
-Then POST to http://localhost:8081/collections/vancouver-subaoi-collection/items
+Then POST to http://localhost:8080/collections/vancouver-subaoi-collection/items
 with X-API-Key: test-secret-key and a FeatureCollection JSON body.
 """
 
@@ -12,7 +12,7 @@ import json
 
 import requests
 
-BASE = "http://localhost:8081"
+BASE = "http://localhost:8080"
 API_KEY = "test-secret-key"
 
 EXAMPLE_COLLECTION_ID = "vancouver-subaoi-collection"
@@ -28,7 +28,7 @@ if __name__ == "__main__":
         print("Could not reach test server. Start it with:")
         print(
             "  python -m uvicorn tests.support.stac_test_server:app "
-            "--reload --port 8081"
+            "--reload --port 8080"
         )
         raise
 

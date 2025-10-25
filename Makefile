@@ -53,8 +53,8 @@ run-package:
 	$(PYTHON) -m stac_mcp
 
 stac-run:
-	@echo "Starting lightweight in-repo STAC test server on http://localhost:8081"
-	$(UVICORN) tests.support.stac_test_server:app --reload --port 8081
+	@echo "Starting lightweight in-repo STAC test server on http://localhost:8080"
+	$(UVICORN) tests.support.stac_test_server:app --reload --port 8080
 
 stac-up:
 	@echo "Bringing up integration stack (PostGIS + stac-fastapi)"
@@ -157,8 +157,8 @@ run-package:
 	$(PYTHON) -m stac_mcp
 
 stac-run:
-	@echo "Starting lightweight in-repo STAC test server on http://localhost:8081"
-	$(PYTHON) -m uvicorn tests.support.stac_test_server:app --reload --port 8081
+	@echo "Starting lightweight in-repo STAC test server on http://localhost:8080"
+	$(PYTHON) -m uvicorn tests.support.stac_test_server:app --reload --port 8080
 
 stac-up:
 	@echo "Bringing up integration stack (PostGIS + stac-fastapi)"

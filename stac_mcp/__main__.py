@@ -1,15 +1,12 @@
 """Entry point for running the STAC MCP server as ``python -m stac_mcp``."""
 
-from __future__ import annotations
-
-from .server import cli_main
+from stac_mcp.fast_server import app
 
 
 def main() -> None:
     """Launch the STAC MCP server CLI."""
+    app.run()
 
-    cli_main()
 
-
-if __name__ == "__main__":  # pragma: no cover - exercised via python -m
+if __name__ == "__main__":
     main()
