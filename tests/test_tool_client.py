@@ -1,19 +1,16 @@
 """Tests for the STAC client wrapper."""
 
-import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
+
 from stac_mcp.tools.client import STACClient
 
 
 def test_client_initialization_defaults():
     """Tests that the STACClient is initialized with default values."""
     client = STACClient()
-    assert (
-        client.catalog_url
-        == "https://planetarycomputer.microsoft.com/api/stac/v1"
-    )
+    assert client.catalog_url == "https://planetarycomputer.microsoft.com/api/stac/v1"
     assert client.headers == {}
     assert client.head_timeout_seconds == 20
     assert client.head_max_workers == 4
@@ -82,9 +79,6 @@ def test_session_request_with_default_timeout(mock_request):
     # without more complex mocking. However, we have covered the code path.
 
 
-from unittest.mock import PropertyMock
-
-
 def test_search_cache_key_exception():
     """Tests that _search_cache_key handles exceptions when accessing the client."""
     client = STACClient()
@@ -92,7 +86,7 @@ def test_search_cache_key_exception():
         STACClient, "client", new_callable=PropertyMock
     ) as mock_client_property:
         mock_client_property.side_effect = Exception("test")
-        key = client._search_cache_key(None, None, None, None, 10)
+        key = client._search_cache_key(None, None, None, None, 10)  # noqa: SLF001
         assert '"client_id": 0' in key
 
 
@@ -100,11 +94,13 @@ def test_update_item_missing_collection_and_id():
     """Tests that update_item raises a ValueError if 'collection' or 'id' is missing."""
     client = STACClient()
     with pytest.raises(
-        ValueError, match="Item must have 'collection' and 'id' fields for update."
+        ValueError,
+        match=r"Item must have 'collection' and 'id' fields for update.",
     ):
         client.update_item({"id": "test-item"})
     with pytest.raises(
-        ValueError, match="Item must have 'collection' and 'id' fields for update."
+        ValueError,
+        match=r"Item must have 'collection' and 'id' fields for update.",
     ):
         client.update_item({"collection": "test-collection"})
 
@@ -120,18 +116,18 @@ def test_search_cache_logic(mock_stac_client, mock_time):
 
     # First call, should cache the result
     mock_time.return_value = 1000
-    result1 = client._cached_search(collections=["test"], limit=1)
+    result1 = client._cached_search(collections=["test"], limit=1)  # noqa: SLF001
     assert result1 == [{"id": "test-item"}]
     assert mock_stac_client.search.call_count == 1
 
     # Second call, should hit the cache
-    result2 = client._cached_search(collections=["test"], limit=1)
+    result2 = client._cached_search(collections=["test"], limit=1)  # noqa: SLF001
     assert result2 == [{"id": "test-item"}]
     assert mock_stac_client.search.call_count == 1
 
     # Advance time to expire the cache
     mock_time.return_value = 2000
-    result3 = client._cached_search(collections=["test"], limit=1)
+    result3 = client._cached_search(collections=["test"], limit=1)  # noqa: SLF001
     assert result3 == [{"id": "test-item"}]
     assert mock_stac_client.search.call_count == 2
 
@@ -147,23 +143,29 @@ def test_do_transaction_cache_invalidation(mock_request, mock_invalidate_cache):
     mock_request.return_value = mock_response
 
     # Mock the client to avoid initialization
-    client._client = MagicMock()
+    client._client = MagicMock()  # noqa: SLF001
 
     # Test with a POST request
-    client._do_transaction("post", "http://test.com/collections/test/items")
+    client._do_transaction(  # noqa: SLF001
+        "post", "http://test.com/collections/test/items"
+    )
     mock_invalidate_cache.assert_called_with(["test"])
 
     # Test with a PUT request
-    client._do_transaction("put", "http://test.com/collections/test/items/123")
+    client._do_transaction(  # noqa: SLF001
+        "put", "http://test.com/collections/test/items/123"
+    )
     mock_invalidate_cache.assert_called_with(["test"])
 
     # Test with a DELETE request
-    client._do_transaction("delete", "http://test.com/collections/test/items/123")
+    client._do_transaction(  # noqa: SLF001
+        "delete", "http://test.com/collections/test/items/123"
+    )
     mock_invalidate_cache.assert_called_with(["test"])
 
     # Test with a GET request (should not invalidate)
     mock_invalidate_cache.reset_mock()
-    client._do_transaction("get", "http://test.com/collections")
+    client._do_transaction("get", "http://test.com/collections")  # noqa: SLF001
     mock_invalidate_cache.assert_not_called()
 
 
@@ -177,15 +179,14 @@ def test_estimate_data_size_fallback(mock_cached_search, mock_fallback_estimate)
 
     # Simulate a case where the primary estimation finds no GeoTIFF assets
     with patch(
-        "stac_mcp.tools.client.STACClient._size_from_metadata", return_value=None
+        "stac_mcp.tools.client.STACClient._size_from_metadata", return_value=None  # noqa: SLF001
+    ), patch(
+        "stac_mcp.tools.client.STACClient._head_content_length",  # noqa: SLF001
+        return_value=None,
     ):
-        with patch(
-            "stac_mcp.tools.client.STACClient._head_content_length",
-            return_value=None,
-        ):
-            result = client.estimate_data_size()
-            assert result == {"estimated_size_bytes": 1024}
-            mock_fallback_estimate.assert_called_once()
+        result = client.estimate_data_size()
+        assert result == {"estimated_size_bytes": 1024}
+        mock_fallback_estimate.assert_called_once()
 
 
 @patch("stac_mcp.tools.client.STACClient._cached_search")
@@ -203,11 +204,13 @@ def test_fallback_estimate_with_force(mock_cached_search):
 
     # Mock HEAD requests to return a size
     with patch.object(
-        client._head_session, "request", return_value=MagicMock(headers={"Content-Length": "1024"})
+        client._head_session,  # noqa: SLF001
+        "request",
+        return_value=MagicMock(headers={"Content-Length": "1024"}),
     ) as mock_head:
         # Simulate a HEAD request failure
         mock_head.side_effect = Exception("test error")
-        result = client._fallback_estimate(
+        result = client._fallback_estimate(  # noqa: SLF001
             items=[mock_item],
             bbox=None,
             datetime=None,
@@ -221,7 +224,7 @@ def test_fallback_estimate_with_force(mock_cached_search):
         # When not forcing, the message should be different
         mock_head.side_effect = None
         mock_head.return_value = MagicMock(headers={"Content-Length": "1024"})
-        result = client._fallback_estimate(
+        result = client._fallback_estimate(  # noqa: SLF001
             items=[mock_item],
             bbox=None,
             datetime=None,
@@ -252,41 +255,40 @@ def test_fallback_estimate_zarr_and_parquet(mock_cached_search):
 
     # Mock HEAD requests to return a size
     with patch.object(
-        client._head_session,
+        client._head_session,  # noqa: SLF001
         "request",
         return_value=MagicMock(headers={"Content-Length": "1024"}),
-    ) as mock_head:
-        with patch.dict("sys.modules", {"xarray": MagicMock()}) as mock_modules:
-            mock_xr = mock_modules["xarray"]
-            mock_ds = MagicMock()
-            mock_ds.variables.values.return_value = [
-                MagicMock(data=MagicMock(nbytes=512))
-            ]
-            mock_xr.open_zarr.return_value = mock_ds
+    ), patch.dict("sys.modules", {"xarray": MagicMock()}) as mock_modules:
+        mock_xr = mock_modules["xarray"]
+        mock_ds = MagicMock()
+        mock_ds.variables.values.return_value = [
+            MagicMock(data=MagicMock(nbytes=512))
+        ]
+        mock_xr.open_zarr.return_value = mock_ds
 
-            result = client._fallback_estimate(
-                items=[mock_item],
-                bbox=None,
-                datetime=None,
-                collections=None,
-                clipped_to_aoi=False,
-                force=False,
-            )
-            assert result["estimated_size_bytes"] == 512 + 1024
+        result = client._fallback_estimate(  # noqa: SLF001
+            items=[mock_item],
+            bbox=None,
+            datetime=None,
+            collections=None,
+            clipped_to_aoi=False,
+            force=False,
+        )
+        assert result["estimated_size_bytes"] == 512 + 1024
 
-            zarr_asset_info = next(
-                a
-                for a in result["assets_analyzed"]
-                if a["asset"] == "zarr_asset"
-            )
-            parquet_asset_info = next(
-                a
-                for a in result["assets_analyzed"]
-                if a["asset"] == "parquet_asset"
-            )
+        zarr_asset_info = next(
+            a for a in result["assets_analyzed"] if a["asset"] == "zarr_asset"
+        )
+        parquet_asset_info = next(
+            a for a in result["assets_analyzed"] if a["asset"] == "parquet_asset"
+        )
 
-            assert zarr_asset_info["method"] == "zarr-inspect"
-            assert parquet_asset_info["method"] == "head"
+        assert zarr_asset_info["method"] == "zarr-inspect"
+        assert parquet_asset_info["method"] == "head"
+
+
+class CustomTestException(Exception):
+    pass
 
 
 def test_asset_to_dict():
@@ -295,29 +297,32 @@ def test_asset_to_dict():
 
     # Test with a dict
     asset_dict = {"href": "http://test.com/asset.tif"}
-    assert client._asset_to_dict(asset_dict) == asset_dict
+    assert client._asset_to_dict(asset_dict) == asset_dict  # noqa: SLF001
 
     # Test with an object with to_dict
     class Asset:
         def to_dict(self):
             return {"href": "http://test.com/asset.tif"}
 
-    assert client._asset_to_dict(Asset()) == {"href": "http://test.com/asset.tif"}
+    assert client._asset_to_dict(Asset()) == {  # noqa: SLF001
+        "href": "http://test.com/asset.tif"
+    }
 
     # Test with an object with attributes
     class AssetWithAttrs:
         href = "http://test.com/asset.tif"
 
-    assert client._asset_to_dict(AssetWithAttrs()) == {
+    assert client._asset_to_dict(AssetWithAttrs()) == {  # noqa: SLF001
         "href": "http://test.com/asset.tif"
     }
 
     # Test with a to_dict method that raises an exception
     class AssetWithFailingToDict:
         def to_dict(self):
-            raise Exception("test")
+            msg = "test"
+            raise CustomTestException(msg)
 
-    assert client._asset_to_dict(AssetWithFailingToDict()) == {}
+    assert client._asset_to_dict(AssetWithFailingToDict()) == {}  # noqa: SLF001
 
 
 def test_sign_href():
@@ -329,8 +334,8 @@ def test_sign_href():
     with patch.dict("sys.modules", {"planetary_computer": MagicMock()}) as mock_modules:
         mock_pc = mock_modules["planetary_computer"]
         mock_pc.sign.return_value = "signed_url"
-        assert client._sign_href(href) == "signed_url"
+        assert client._sign_href(href) == "signed_url"  # noqa: SLF001
 
     # Test without planetary_computer installed
     with patch.dict("sys.modules", {"planetary_computer": None}):
-        assert client._sign_href(href) == href
+        assert client._sign_href(href) == href  # noqa: SLF001

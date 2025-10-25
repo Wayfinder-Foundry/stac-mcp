@@ -1,11 +1,21 @@
 """Tests for transaction tool handlers."""
 
+from unittest.mock import MagicMock
+
 import pytest
 from fastmcp.client import Client
 from fastmcp.tools.tool import ToolResult
 from mcp.types import TextContent
 
 from stac_mcp.fast_server import app
+from stac_mcp.tools.transactions import (
+    handle_create_collection,
+    handle_create_item,
+    handle_delete_collection,
+    handle_delete_item,
+    handle_update_collection,
+    handle_update_item,
+)
 
 
 @pytest.fixture
@@ -175,16 +185,6 @@ async def test_update_collection_success(test_app, collection_payload_factory):
     assert result.content[0].text == '{"status": "success"}'
 
 
-from unittest.mock import MagicMock
-
-from stac_mcp.tools.transactions import (
-    handle_create_collection,
-    handle_create_item,
-    handle_delete_collection,
-    handle_delete_item,
-    handle_update_collection,
-    handle_update_item,
-)
 @pytest.mark.asyncio
 async def test_delete_collection_success(test_app):
     """Test successful collection deletion."""

@@ -1,7 +1,7 @@
 """Tests for the sensor dtype registry."""
 
 import numpy as np
-import pytest
+
 from stac_mcp.tools.sensor_dtypes import SensorDtypeRegistry, SensorInfo
 
 
