@@ -107,6 +107,32 @@ def _raise_unknown_tool(name: str) -> NoReturn:
     raise ValueError(msg)
 
 
+# Simple cache of STACClient instances keyed by (catalog_url, headers)
+# This enables a lightweight session/context reuse across tool calls so
+# handlers share connection/session state instead of creating a new
+# client per tool invocation.
+_CLIENT_CACHE: dict[tuple[str | None, tuple[tuple[str, str], ...]], STACClient] = {}
+
+
+def _client_cache_key(catalog_url: str | None, headers: dict[str, str] | None):
+    headers_tuple: tuple[tuple[str, str], ...] = ()
+    if headers:
+        # Sort items for deterministic key
+        headers_tuple = tuple(sorted((str(k), str(v)) for k, v in headers.items()))
+    return (catalog_url, headers_tuple)
+
+
+def _get_cached_client(
+    catalog_url: str | None, headers: dict[str, str] | None
+) -> STACClient:
+    key = _client_cache_key(catalog_url, headers)
+    client = _CLIENT_CACHE.get(key)
+    if client is None:
+        client = STACClient(catalog_url, headers=headers)
+        _CLIENT_CACHE[key] = client
+    return client
+
+
 def _as_text_content_list(result: Any) -> list[TextContent]:
     """Normalize arbitrary handler results into a list of TextContent."""
 
@@ -181,7 +207,11 @@ async def execute_tool(
         raw_result = instrumented.value
     else:
         if client is None:
-            client = STACClient(catalog_url, headers=headers)
+            # Reuse a cached STACClient when possible so multiple tool calls
+            # within the same session/context share connection and session
+            # state (HTTP sessions, timeout wrappers, etc.). This keeps
+            # tools lightweight and consistent across invocations.
+            client = _get_cached_client(catalog_url, headers)
         # Run the handler under the instrumented wrapper in a thread
         instrumented = await asyncio.to_thread(
             instrument_tool_execution,

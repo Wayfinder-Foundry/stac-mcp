@@ -84,6 +84,40 @@ After making changes, always test these core workflows:
 
 3. **Network Scenarios**: The server handles network errors gracefully (no real network access needed for testing)
 
+## Use public APIs — do not reach into package internals
+
+- Always prefer public, documented APIs from third-party libraries. Do not read, write, or rely on underscore-prefixed or private attributes (for example avoid accessing `client._stac_io`, `session._pool`, or other internals that are not part of the published API).
+- For STAC interactions, prefer the public `pystac_client.Client` and `StacApiIO` (or a custom `StacIO` subclass) and call public methods such as `client.search()`, `client.get_collection()`, and `client.get_item()`.
+- If you need functionality not exposed by the public client, either:
+  - implement and pass a custom `StacIO` subclass to the public client constructor, or
+  - perform an explicit HTTP request using `requests` with clearly-set headers and timeouts (preferred to monkey-patching internals).
+- For testability, prefer dependency injection (accept `stac_io`, `requests.Session`, or a `client` parameter) so tests can inject fakes/mocks without touching internals.
+- Examples (preferred patterns):
+
+  ```py
+  # Preferred: public Client with a StacIO instance
+  from pystac_client import Client
+  from pystac_client.stac_api_io import StacApiIO
+
+  stac_io = StacApiIO(headers={"X-API-Key": "..."})
+  client = Client.open("https://example.com/stac", stac_io=stac_io)
+  results = client.search(collections=["c1"]).items()
+  ```
+
+  ```py
+  # Or, when you need a direct HTTP call for a capability not exposed publicly
+  import requests
+
+  resp = requests.post(
+      "https://example.com/stac/search",
+      json={"collections": ["c1"]},
+      headers={"Accept": "application/json"},
+      timeout=30,
+  )
+  ```
+
+Following these patterns improves maintainability and reduces brittle dependencies on upstream implementation details.
+
 ## Project Structure
 
 ### Repository Root
