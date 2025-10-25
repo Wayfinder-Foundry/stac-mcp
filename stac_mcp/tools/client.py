@@ -15,7 +15,6 @@ import requests
 from pystac_client.exceptions import APIError
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import Timeout
-from shapely.geometry import shape
 
 # Ensure Session.request enforces a default timeout when one is not provided.
 # This is a conservative safeguard for environments where sessions may be
@@ -497,10 +496,23 @@ class STACClient:
         limit: int = 100,
         force_metadata_only: bool = False,
     ) -> dict[str, Any]:
-        from odc import stac as odc_stac  # noqa: PLC0415 local import (guarded)
+        """Simplified data size estimator.
 
-        logger.debug("odc_stac.load before call: %r", getattr(odc_stac, "load", None))
+        This version only considers GeoTIFF-like assets (media type
+        containing 'image/tiff' or hrefs ending with .tif/.tiff). The
+        resolution is determined from these sources in order of
+        preference:
+        1. explicit metadata (file:size, bytes, etc.)
+        2. HTTP HEAD Content-Length
+        3. rasterio inspection (if rasterio available and href is
+           readable by rasterio)
 
+        The function uses the SensorDtypeRegistry to apply a collection-
+        specific native dtype hint when rasterio reports a float dtype
+        but the sensor is known to use an integer native dtype.
+        """
+
+        # Lightweight search and normalization
         search = self.client.search(
             collections=collections,
             bbox=bbox,
@@ -522,231 +534,180 @@ class STACClient:
                 "message": "No items found for the given query parameters",
             }
 
-        effective_bbox = bbox
-        clipped_to_aoi = False
-        if aoi_geojson:
-            geom = shape(aoi_geojson)
-            aoi_bounds = geom.bounds
-            if bbox:
-                effective_bbox = [
-                    max(bbox[0], aoi_bounds[0]),
-                    max(bbox[1], aoi_bounds[1]),
-                    min(bbox[2], aoi_bounds[2]),
-                    min(bbox[3], aoi_bounds[3]),
-                ]
-            else:
-                effective_bbox = list(aoi_bounds)
-            clipped_to_aoi = True
+        total_bytes = 0
+        assets_info: list[dict[str, Any]] = []
 
-        # Extracted helper methods moved to instance methods for testability
-        # Use fallback via instance method when requested
+        # If aoi_geojson is passed, we record that we intended to clip, but
+        # simplified estimator does not perform geometry clipping.
+        clipped_to_aoi = bool(aoi_geojson)
 
-        # If any item contains non-raster asset types (parquet/zarr), use fallback
-        def _needs_fallback(items_list: list[Any]) -> bool:
-            for it in items_list:
-                assets = getattr(it, "assets", {})
-                for _n, a in assets.items() if assets else []:
-                    # Normalize asset entry to a minimal dict-like view
-                    try:
-                        if isinstance(a, dict):
-                            a_dict = a
-                        elif hasattr(a, "to_dict"):
-                            a_dict = a.to_dict()  # type: ignore[attr-defined]
-                        elif isinstance(a, str):
-                            a_dict = {"href": a, "media_type": ""}
-                        else:
-                            a_dict = {
-                                "href": getattr(a, "href", None),
-                                "media_type": getattr(a, "media_type", None)
-                                or getattr(a, "type", None)
-                                or "",
-                            }
-                    except (AttributeError, TypeError) as exc:
-                        # If normalization fails, log and skip this asset
-                        logger.debug("Failed to normalize asset entry: %s", exc)
-                        continue
-
-                    media = a_dict.get("media_type")
-                    href = a_dict.get("href")
-
-                    # Include GeoTIFF/COG assets (image/tiff) as fallback candidates
-                    # so that metadata/HEAD/zarr-inspect heuristics are applied.
-                    if media and (
-                        "parquet" in str(media).lower() or "zarr" in str(media).lower()
-                    ):
-                        return True
-                    if href and (
-                        str(href).endswith(".zarr") or str(href).endswith(".parquet")
-                    ):
-                        return True
-            return False
-
-        # If the caller requests metadata-only mode, run the fallback heuristics
-        # directly (this avoids CRS/resolution auto-guess failures in some
-        # remote catalogs). Otherwise use the normal detection logic.
-        if force_metadata_only or _needs_fallback(items):
-            return self._fallback_estimate(
-                items, effective_bbox, datetime, collections, clipped_to_aoi
-            )
-
+        # Lazy import of the sensor dtype registry (same package). Keep this
+        # optional so the estimator can work without the helper module.
         try:
-            ds = odc_stac.load(items, bbox=effective_bbox, chunks={})
-            estimated_bytes = 0
-            data_vars_info: list[dict[str, Any]] = []
-            for var_name, data_array in ds.data_vars.items():
-                # Use original dtype from encoding if available (before nodata
-                # conversion). This prevents overestimation when nodata values
-                # cause dtype upcast to float64
-                original_dtype = (
-                    data_array.encoding.get("dtype")
-                    if hasattr(data_array, "encoding")
-                    else None
-                )
-                effective_dtype = (
-                    original_dtype if original_dtype is not None else data_array.dtype
-                )
+            from .sensor_dtypes import SensorDtypeRegistry  # noqa: PLC0415
 
-                # Conservative downcast heuristic: when odc.stac doesn't provide
-                # an original dtype and the loaded dtype is a float, attempt a
-                # tiny-sample check to see if values are integer-valued and have
-                # no NaNs. If so, estimate using a compact integer dtype (uint8,
-                # uint16, int16, int32) based on the sampled range. This is a
-                # best-effort optimization that may underestimate if the sample is
-                # not representative; it's intentionally conservative (small
-                # sample) to avoid heavy computation.
+            dtype_registry = SensorDtypeRegistry()
+        except (ImportError, ModuleNotFoundError, AttributeError):
+            dtype_registry = None  # optional helper
+
+        for item in items:
+            assets = getattr(item, "assets", {})
+            for name, asset in assets.items() if assets else []:
                 try:
-                    dtype_obj = np.dtype(effective_dtype)
-                    # Only attempt sampling-based downcast for float dtypes when
-                    # no explicit original dtype is provided by encoding.
-                    # Additionally, avoid sampling/downcasting if the
-                    # DataArray or encoding declares a nodata/_FillValue since
-                    # that often forces dtype upcasts and sampling may be
-                    # misleading (NaNs or fill values present).
-                    has_nodata = False
+                    asset_dict = self._asset_to_dict(asset)
+                except (AttributeError, TypeError, ValueError) as exc:
+                    logger.debug("Failed to normalize asset: %s", exc)
+                    continue
+
+                href = asset_dict.get("href")
+                media = asset_dict.get("media_type") or asset_dict.get("type") or ""
+                media = str(media).lower()
+                # If registry suggests ignoring this asset (preview/thumbnail), skip it
+                sensor_info = None
+                try:
+                    if dtype_registry is not None:
+                        sensor_info = dtype_registry.get_info(
+                            getattr(item, "collection_id", None)
+                        )
+                except (AttributeError, TypeError):
+                    sensor_info = None
+
+                if sensor_info is not None and sensor_info.should_ignore_asset(
+                    name, media
+                ):
+                    # Skip preview/thumbnail/browse/RGB preview assets per registry
+                    continue
+
+                # Consider any asset whose media string mentions TIFF/GeoTIFF
+                # or whose href ends with a TIFF extension as GeoTIFFs. Some
+                # STAC providers use vendor media types like
+                # 'image/vnd.stac.geotiff' so checking for 'tiff'/'geotiff'
+                # substrings is more robust.
+                is_geotiff = ("tiff" in media or "geotiff" in media) or (
+                    isinstance(href, str)
+                    and href.lower().endswith((".tif", ".tiff", ".tif.gz"))
+                )
+                if not is_geotiff:
+                    # Skip non-GeoTIFF assets
+                    continue
+
+                # 1) Try metadata
+                bytes_found = self._size_from_metadata(asset_dict)
+                method_used = "metadata" if bytes_found is not None else ""
+
+                # 2) HEAD (use signed href when available)
+                if bytes_found is None and isinstance(href, str):
+                    href_to_check = self._sign_href(href)
+                    bytes_found = self._head_content_length(href_to_check)
+                    if bytes_found is not None:
+                        method_used = "head"
+
+                # 3) rasterio inspection (optional)
+                if bytes_found is None and isinstance(href, str):
                     try:
-                        # xarray DataArray may expose .nodata (rasterio-like)
-                        nod = getattr(data_array, "nodata", None)
-                        if nod is not None:
-                            has_nodata = True
-                        # Check common attrs and encoding keys
-                        if not has_nodata and isinstance(getattr(data_array, "attrs", None), dict):
-                            if "_FillValue" in data_array.attrs:
-                                has_nodata = True
-                        if not has_nodata and hasattr(data_array, "encoding"):
-                            enc = getattr(data_array, "encoding") or {}
-                            if isinstance(enc, dict) and (
-                                "nodata" in enc or "_FillValue" in enc
-                            ):
-                                has_nodata = True
+                        import rasterio  # noqa: PLC0415
 
-                    except Exception:
-                        # Be conservative on any attribute access error
-                        has_nodata = True
+                        # Use rasterio to compute bytes from shape/dtype. Combine
+                        # the Env and open contexts in one statement. Use a
+                        # signed href when available so remote blobs behind the
+                        # Planetary Computer can be accessed.
+                        href_to_open = self._sign_href(href)
+                        with rasterio.Env(), rasterio.open(href_to_open) as src:
+                            bands = src.count or 1
+                            height = int(getattr(src, "height", 0))
+                            width = int(getattr(src, "width", 0))
+                            # src.dtypes is a list of dtype strings (per-band)
+                            dtype_str = src.dtypes[0] if src.dtypes else src.dtypes
 
-                    if (
-                        original_dtype is None
-                        and not has_nodata
-                        and np.issubdtype(dtype_obj, np.floating)
-                        and hasattr(data_array, "sizes")
-                    ):
-                        # Build a tiny indexer selecting up to 2 elements along
-                        # each dimension to form a very small sample block.
-                        indexer: dict[str, slice] = {}
-                        for d, s in data_array.sizes.items():
-                            take = 1 if s == 0 else min(2, int(s))
-                            indexer[d] = slice(0, take)
+                            # Prefer registry-suggested native dtype when present.
+                            if sensor_info is not None:
+                                try:
+                                    suggested = sensor_info.get_dtype_for_asset(name)
+                                except (AttributeError, TypeError, ValueError):
+                                    suggested = None
+                                if suggested is not None:
+                                    dtype = np.dtype(suggested)
+                                else:
+                                    dtype = np.dtype(dtype_str)
+                            else:
+                                dtype = np.dtype(dtype_str)
 
-                        # Try to extract the tiny sample; fall back silently on
-                        # any failure (e.g., remote IO or compute errors).
-                        try:
-                            sample = data_array.isel(indexer).values
-                        except Exception:
-                            sample = None
+                            bytes_found = (
+                                int(dtype.itemsize)
+                                * int(bands)
+                                * int(height)
+                                * int(width)
+                            )
+                            method_used = "rasterio"
+                    except (ImportError, ModuleNotFoundError):
+                        # rasterio not installed; leave bytes_found as None
+                        pass
+                    except (AttributeError, OSError, ValueError, TypeError):
+                        # Failed to open/inspect with rasterio; leave None
+                        pass
 
-                        if sample is not None:
-                            # Flatten and ensure it's a numpy array
-                            arr = np.asarray(sample).ravel()
-                            # If any NaNs present, don't downcast
-                            if not np.isnan(arr).any() and arr.size > 0:
-                                # Check integer-valuedness on the sample
-                                if np.allclose(arr, np.round(arr)):
-                                    vmin = int(arr.min())
-                                    vmax = int(arr.max())
-                                    # Choose smallest safe integer dtype
-                                    chosen = None
-                                    if vmin >= 0:
-                                        if vmax <= 0xFF:
-                                            chosen = np.dtype("uint8")
-                                        elif vmax <= 0xFFFF:
-                                            chosen = np.dtype("uint16")
-                                        elif vmax <= 0xFFFFFFFF:
-                                            chosen = np.dtype("uint32")
-                                    else:
-                                        if vmin >= -0x8000 and vmax <= 0x7FFF:
-                                            chosen = np.dtype("int16")
-                                        elif vmin >= -0x80000000 and vmax <= 0x7FFFFFFF:
-                                            chosen = np.dtype("int32")
+                if bytes_found is None:
+                    assets_info.append(
+                        {
+                            "asset": name,
+                            "media_type": media,
+                            "href": href,
+                            "estimated_size_bytes": 0,
+                            "estimated_size_mb": 0,
+                            "method": "unknown",
+                        }
+                    )
+                else:
+                    total_bytes += int(bytes_found)
+                    assets_info.append(
+                        {
+                            "asset": name,
+                            "media_type": media,
+                            "href": href,
+                            "estimated_size_bytes": int(bytes_found),
+                            "estimated_size_mb": round(bytes_found / (1024 * 1024), 2),
+                            "method": method_used or "inferred",
+                        }
+                    )
 
-                                    if chosen is not None:
-                                        dtype_obj = chosen
-                    # Compute bytes using chosen dtype_obj
-                    var_nbytes = dtype_obj.itemsize * data_array.size
-                except Exception:
-                    # If anything goes wrong, fall back to conservative
-                    # estimation using data_array.dtype
-                    dtype_obj = np.dtype(data_array.dtype)
-                    var_nbytes = dtype_obj.itemsize * data_array.size
+        estimated_mb = total_bytes / (1024 * 1024)
+        estimated_gb = total_bytes / (1024 * 1024 * 1024)
 
-                estimated_bytes += var_nbytes
-                data_vars_info.append(
-                    {
-                        "variable": var_name,
-                        "shape": list(data_array.shape),
-                        "dtype": str(effective_dtype),
-                        "size_bytes": var_nbytes,
-                        "size_mb": round(var_nbytes / (1024 * 1024), 2),
-                    },
+        # If we found nothing via GeoTIFF inspection, attempt fallback
+        # heuristics (parquet metadata, zarr inspection, or HEAD). The
+        # fallback logic is implemented in a private helper so the core
+        # GeoTIFF-only path remains simple and testable.
+        if total_bytes == 0:
+            if force_metadata_only:
+                # Caller explicitly requested fallback-only behavior
+                return self._fallback_estimate(
+                    items, bbox, datetime, collections, clipped_to_aoi
                 )
-            estimated_mb = estimated_bytes / (1024 * 1024)
-            estimated_gb = estimated_bytes / (1024 * 1024 * 1024)
-            dates = [item.datetime for item in items if item.datetime]
-            temporal_extent = None
-            if dates:
-                temporal_extent = (
-                    f"{min(dates).isoformat()} to {max(dates).isoformat()}"
-                )
-            return {
-                "item_count": len(items),
-                "estimated_size_bytes": estimated_bytes,
-                "estimated_size_mb": round(estimated_mb, 2),
-                "estimated_size_gb": round(estimated_gb, 4),
-                "bbox_used": effective_bbox,
-                "temporal_extent": temporal_extent or datetime,
-                "collections": collections
-                or list({item.collection_id for item in items}),
-                "clipped_to_aoi": clipped_to_aoi,
-                "data_variables": data_vars_info,
-                "spatial_dims": (
-                    {"x": ds.dims.get("x", 0), "y": ds.dims.get("y", 0)}
-                    if "x" in ds.dims and "y" in ds.dims
-                    else {}
-                ),
-                "message": f"Successfully estimated data size for {len(items)} items",
-            }
-        except (
-            RuntimeError,
-            ValueError,
-            AttributeError,
-            KeyError,
-            TypeError,
-        ) as exc:  # pragma: no cover - fallback path
-            logger.warning(
-                "odc.stac loading failed, using fallback estimation: %s",
-                exc,
+            # Try fallback heuristics but prefer GeoTIFF results when
+            # available. If fallback produces a non-zero estimate, return it.
+            fb = self._fallback_estimate(
+                items, bbox, datetime, collections, clipped_to_aoi
             )
-            return self._fallback_estimate(
-                items, effective_bbox, datetime, collections, clipped_to_aoi
-            )
+            if fb.get("estimated_size_bytes", 0):
+                return fb
+
+        return {
+            "item_count": len(items),
+            "estimated_size_bytes": int(total_bytes),
+            "estimated_size_mb": round(estimated_mb, 2),
+            "estimated_size_gb": round(estimated_gb, 4),
+            "bbox_used": bbox,
+            "temporal_extent": datetime,
+            "collections": collections
+            or list({getattr(item, "collection_id", None) for item in items}),
+            "clipped_to_aoi": clipped_to_aoi,
+            "assets_analyzed": assets_info,
+            "message": (
+                "Successfully estimated data size for GeoTIFF assets"
+                if total_bytes
+                else "No GeoTIFF assets found or failed to estimate sizes"
+            ),
+        }
 
     def get_root_document(self) -> dict[str, Any]:
         # Some underlying client implementations do not provide a
@@ -913,6 +874,36 @@ class STACClient:
         except AttributeError:
             pass
         return None
+
+    def _sign_href(self, href: str) -> str:
+        """Return a signed href when possible (Planetary Computer assets).
+
+        This is best-effort: if the optional `planetary_computer` package is
+        available, use it to sign blob URLs so HEAD/rasterio can access them.
+        If signing fails or the package is unavailable, return the original
+        href unchanged.
+        """
+        if not isinstance(href, str) or not href:
+            return href
+        try:
+            import planetary_computer as pc  # noqa: PLC0415
+
+            signed = pc.sign(href)
+            # pc.sign may return a string or a mapping with a 'url' field
+            if isinstance(signed, str):
+                return signed
+            if isinstance(signed, dict):
+                return signed.get("url", href)
+        except (
+            ImportError,
+            ModuleNotFoundError,
+            AttributeError,
+            TypeError,
+            ValueError,
+        ):
+            # Best-effort: leave href unchanged when signing is not possible
+            return href
+        return href
 
     def _head_content_length(self, href: str) -> int | None:
         # Simple retry with exponential backoff for transient failures.

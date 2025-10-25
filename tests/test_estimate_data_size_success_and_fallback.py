@@ -87,4 +87,6 @@ async def test_estimate_data_size_success(monkeypatch):  # noqa: ARG001
             assert "estimate" in response_data["data"]
             assert "item_count" in response_data["data"]["estimate"]
             assert response_data["data"]["estimate"]["item_count"] == ITEM_COUNT_TWO
-            assert "spatial_dims" in response_data["data"]["estimate"]
+            # GeoTIFF-only estimator does not compute spatial_dims here;
+            # ensure we returned asset analysis instead.
+            assert "assets_analyzed" in response_data["data"]["estimate"]

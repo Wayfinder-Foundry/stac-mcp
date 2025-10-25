@@ -1,34 +1,27 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastmcp.server.server import FastMCP
 
 from stac_mcp.tools import execution
 
-from stac_mcp.fastmcp_prompts.dtype_preferences import dtype_size_preferences
-
 app = FastMCP()
 
-try:
-    from stac_mcp.fastmcp_prompts.dtype_preferences import dtype_size_preferences
+_LOGGER = logging.getLogger(__name__)
 
-    # Register the imported callable as a prompt on the app. Use the public
-    # API `add_prompt` which accepts an existing function and registers it.
-    # This avoids decorator/callable confusion when registering functions
-    # imported from other modules.
-    if hasattr(app, "add_prompt"):
-        app.add_prompt(dtype_size_preferences)
-    else:
-        # Fallback: try the prompt decorator if add_prompt isn't available.
-        try:
-            app.prompt(name="dtype_size_preferences")(dtype_size_preferences)
-        except Exception:
-            pass
-except Exception:
-    # Best-effort: failure to register should not prevent server startup or
-    # tests from running in environments without fastmcp prompt support.
-    pass
+# Keep imports local to avoid hard dependency at module-import time.
+_ESTIMATE_HANDLER = None
+try:
+    # import lazily to avoid import-time side-effects when package not fully
+    # installed (tests may run without fastmcp present)
+    from stac_mcp.tools.estimate_data_size import handle_estimate_data_size
+
+    _ESTIMATE_HANDLER = handle_estimate_data_size
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - defensive import
+    _ESTIMATE_HANDLER = None
+
 
 @app.tool
 async def get_root() -> list[dict[str, Any]]:
@@ -102,7 +95,6 @@ async def search_items(
         },
         catalog_url=catalog_url,
     )
-
 
 @app.tool
 async def estimate_data_size(

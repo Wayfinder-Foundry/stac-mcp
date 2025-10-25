@@ -1,6 +1,7 @@
 """Estimate data size for a STAC query."""
 
 import importlib.util
+import logging
 from typing import Any
 
 from mcp.types import TextContent
@@ -9,13 +10,15 @@ from stac_mcp.tools import MAX_ASSET_LIST
 from stac_mcp.tools.client import STACClient
 from stac_mcp.utils.today import get_today_date
 
+_LOGGER = logging.getLogger(__name__)
+
 # Import advisory prompt text if available. Keep import optional so this module
 # remains usable in environments without the prompts module or fastmcp.
 try:
     from stac_mcp.fastmcp_prompts.dtype_preferences import (
         dtype_size_preferences,
     )
-except Exception:
+except (ImportError, ModuleNotFoundError):
     dtype_size_preferences = None
 
 try:
@@ -77,6 +80,7 @@ def _validate_aoi_geojson_argument(
 ) -> dict[str, Any] | None:
     """AOI GeoJSON is optional; return as-is (may be None)."""
     return aoi_geojson
+
 
 def handle_estimate_data_size(
     client: STACClient,
@@ -157,7 +161,10 @@ def handle_estimate_data_size(
             if advisory:
                 result_text += "\n**Estimator Advisory (dtype preferences)**\n"
                 result_text += advisory + "\n"
-        except Exception:
-            # Non-fatal: don't let advisory generation break the tool
-            pass
+        except (
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ) as exc:  # pragma: no cover - best-effort
+            _LOGGER.debug("estimate_data_size: advisory generation failed: %s", exc)
     return [TextContent(type="text", text=result_text)]

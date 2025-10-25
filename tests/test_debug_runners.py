@@ -1,4 +1,5 @@
 """Unit tests for debug finder helpers (parquet/zarr)."""
+
 import importlib.util
 import pathlib
 
@@ -32,7 +33,16 @@ class _MockClient:
 
 def test_find_parquet_item_attaches_match():
     items = [
-        {"id": "i1", "collection": "c1", "assets": {"a": {"href": "http://x/file.parquet", "media_type": "application/x-parquet"}}}
+        {
+            "id": "i1",
+            "collection": "c1",
+            "assets": {
+                "a": {
+                    "href": "http://x/file.parquet",
+                    "media_type": "application/x-parquet",
+                }
+            },
+        }
     ]
     client = _MockClient(["c1"], {"c1": items})
     found = dp.find_parquet_item(client)
@@ -42,7 +52,13 @@ def test_find_parquet_item_attaches_match():
 
 def test_find_zarr_item_attaches_match():
     items = [
-        {"id": "i2", "collection": "c2", "assets": {"b": {"href": "http://x/store.zarr", "media_type": "application/x-zarr"}}}
+        {
+            "id": "i2",
+            "collection": "c2",
+            "assets": {
+                "b": {"href": "http://x/store.zarr", "media_type": "application/x-zarr"}
+            },
+        }
     ]
     client = _MockClient(["c2"], {"c2": items})
     found = dz.find_zarr_item(client)
