@@ -1,5 +1,4 @@
 import pytest
-
 from fastmcp.client import Client
 
 from stac_mcp.fast_server import app
@@ -32,12 +31,19 @@ async def test_get_prompt_messages_include_machine_payload_for_all_prompts(test_
             if not name:
                 continue
             result = await client.get_prompt(name)
-            assert hasattr(result, "messages") and len(result.messages) > 0
+            assert hasattr(result, "messages"), f"get_prompt({name}) missing .messages"
+            assert len(result.messages) > 0, (
+                f"get_prompt({name}) returned empty .messages"
+            )
             msg = result.messages[0]
             # PromptMessage should expose machine_payload on either `_meta` or `meta`
             machine_meta = getattr(msg, "_meta", None) or getattr(msg, "meta", None)
-            assert machine_meta is not None, f"Prompt {name} did not include _meta or meta"
-            assert "machine_payload" in machine_meta, f"Prompt {name} missing machine_payload in _meta/meta"
+            assert machine_meta is not None, (
+                f"Prompt {name} did not include _meta or meta"
+            )
+            assert "machine_payload" in machine_meta, (
+                f"Prompt {name} missing machine_payload in _meta/meta"
+            )
 
 
 @pytest.mark.asyncio
@@ -49,9 +55,12 @@ async def test_list_prompts_descriptor_exposes_decorator_meta(test_app):
     async with client:
         prompts = await client.list_prompts()
 
-    assert isinstance(prompts, list) and len(prompts) > 0
+    assert isinstance(prompts, list), "list_prompts did not return a list"
+    assert len(prompts) > 0, "list_prompts returned an empty list"
 
     # Every prompt descriptor should at least have a `.meta` attribute (may be empty)
     for p in prompts:
         meta = getattr(p, "meta", None)
-        assert meta is not None, f"Prompt descriptor {getattr(p,'name', '<no-name>')} missing .meta"
+        assert meta is not None, (
+            f"Prompt descriptor {getattr(p, 'name', '<no-name>')} missing .meta"
+        )

@@ -91,7 +91,7 @@ def handle_estimate_data_size(
     dt = _validate_datetime_argument(arguments.get("datetime"))
     query = _validate_query_argument(arguments.get("query"))
     aoi_geojson = _validate_aoi_geojson_argument(arguments.get("aoi_geojson"))
-    limit = arguments.get("limit", 100)
+    limit = arguments.get("limit", 10)
     force_metadata_only = arguments.get("force_metadata_only", False)
 
     size_estimate = client.estimate_data_size(

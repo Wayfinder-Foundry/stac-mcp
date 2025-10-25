@@ -1,7 +1,5 @@
 import pytest
-
 from fastmcp.client import Client
-import mcp.types
 
 from stac_mcp.fast_server import app
 
@@ -23,17 +21,25 @@ async def test_get_prompt_returns_promptmessage_and_machine_payload(test_app):
 
     # Result should be a GetPromptResult-like object with messages
     assert hasattr(result, "messages")
-    assert isinstance(result.messages, list) and len(result.messages) > 0
+    assert isinstance(result.messages, list), (
+        "get_prompt() should return a list of messages"
+    )
+    assert len(result.messages) > 0, "get_prompt() returned an empty list of messages"
 
     msg = result.messages[0]
     # message should have human text
-    assert hasattr(msg, "content") and hasattr(msg.content, "text")
-    assert isinstance(msg.content.text, str)
+    assert hasattr(msg, "content"), "PromptMessage should have .content"
+    assert hasattr(msg.content, "text"), "PromptMessage.content should have .text"
+    assert isinstance(msg.content.text, str), (
+        "PromptMessage.content.text should be a string"
+    )
 
     # meta may be exposed on the PromptMessage as `_meta` or as `meta`; accept either
     machine_meta = getattr(msg, "_meta", None) or getattr(msg, "meta", None)
     assert machine_meta is not None, "PromptMessage should expose _meta or meta"
-    assert "machine_payload" in machine_meta, "machine_payload should be present in _meta/meta"
+    assert "machine_payload" in machine_meta, (
+        "machine_payload should be present in _meta/meta"
+    )
     payload = machine_meta["machine_payload"]
     assert isinstance(payload, dict)
     assert payload.get("name") == "get_root"

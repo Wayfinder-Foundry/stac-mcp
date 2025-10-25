@@ -1,11 +1,7 @@
-import inspect
-
 import pytest
-
-
-import stac_mcp.fast_server as fast_server
 from fastmcp.prompts.prompt import PromptMessage
 
+from stac_mcp import fast_server
 
 PROMPT_NAMES = [
     "_prompt_get_root",
@@ -87,7 +83,9 @@ def test_prompt_functions_exist_and_return_helpful_text(name: str):
     elif isinstance(text, str):
         content_text = text
 
-    assert isinstance(content_text, str), "Prompt must return a string or PromptMessage with text content"
+    assert isinstance(content_text, str), (
+        "Prompt must return a string or PromptMessage with text content"
+    )
     # Basic sanity checks for helpfulness
     assert "Example" in content_text, "Prompt should include an Example section"
     assert ("Parameters" in content_text) or ("Description" in content_text), (

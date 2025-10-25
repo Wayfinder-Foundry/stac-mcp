@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import contextlib
-import logging
 import json
+import logging
 from typing import Any
 
+from fastmcp.prompts.prompt import PromptMessage, TextContent
 from fastmcp.server.server import FastMCP
 
 from stac_mcp.tools import execution
 from stac_mcp.tools.client import STACClient
-from fastmcp.prompts.prompt import PromptMessage, TextContent
 
 app = FastMCP()
 
@@ -58,7 +58,11 @@ def _prompt_get_root() -> PromptMessage:
         "Example:\n"
         f"{json.dumps(payload['example'], indent=2)}"
     )
-    return PromptMessage(role="user", content=TextContent(type="text", text=human), _meta={"machine_payload": payload})
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
 
 
 @app.prompt(
@@ -84,7 +88,11 @@ def _prompt_get_conformance() -> PromptMessage:
         "Example:\n"
         f"{json.dumps(payload['example'], indent=2)}"
     )
-    return PromptMessage(role="user", content=TextContent(type="text", text=human), _meta={"machine_payload": payload})
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
 
 
 @app.prompt(
@@ -124,7 +132,11 @@ def _prompt_search_collections() -> PromptMessage:
         "Example:\n"
         f"{json.dumps(payload['example'], indent=2)}"
     )
-    return PromptMessage(role="user", content=TextContent(type="text", text=human), _meta={"machine_payload": payload})
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
 
 
 @app.prompt(
@@ -145,7 +157,10 @@ def _prompt_search_collections() -> PromptMessage:
 def _prompt_get_collection() -> PromptMessage:
     schema = {
         "type": "object",
-        "properties": {"collection_id": {"type": "string"}, "catalog_url": {"type": "string"}},
+        "properties": {
+            "collection_id": {"type": "string"},
+            "catalog_url": {"type": "string"},
+        },
         "required": ["collection_id"],
     }
     payload = {
@@ -161,7 +176,11 @@ def _prompt_get_collection() -> PromptMessage:
         "Example:\n"
         f"{json.dumps(payload['example'], indent=2)}"
     )
-    return PromptMessage(role="user", content=TextContent(type="text", text=human), _meta={"machine_payload": payload})
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
 
 
 @app.prompt(
@@ -173,7 +192,11 @@ def _prompt_get_collection() -> PromptMessage:
             "properties": {
                 "collection_id": {"type": "string"},
                 "item_id": {"type": "string"},
-                "output_format": {"type": "string", "enum": ["text", "json"], "default": "text"},
+                "output_format": {
+                    "type": "string",
+                    "enum": ["text", "json"],
+                    "default": "text",
+                },
                 "catalog_url": {"type": "string"},
             },
             "required": ["collection_id", "item_id"],
@@ -187,7 +210,11 @@ def _prompt_get_item() -> PromptMessage:
         "properties": {
             "collection_id": {"type": "string"},
             "item_id": {"type": "string"},
-            "output_format": {"type": "string", "enum": ["text", "json"], "default": "text"},
+            "output_format": {
+                "type": "string",
+                "enum": ["text", "json"],
+                "default": "text",
+            },
             "catalog_url": {"type": "string"},
         },
         "required": ["collection_id", "item_id"],
@@ -205,7 +232,11 @@ def _prompt_get_item() -> PromptMessage:
         "Example:\n"
         f"{json.dumps(payload['example'], indent=2)}"
     )
-    return PromptMessage(role="user", content=TextContent(type="text", text=human), _meta={"machine_payload": payload})
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
 
 
 @app.prompt(
@@ -216,7 +247,12 @@ def _prompt_get_item() -> PromptMessage:
             "type": "object",
             "properties": {
                 "collections": {"type": "array", "items": {"type": "string"}},
-                "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+                "bbox": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 4,
+                    "maxItems": 4,
+                },
                 "datetime": {"type": "string"},
                 "limit": {"type": "integer", "default": 10},
             },
@@ -230,7 +266,12 @@ def _prompt_search_items() -> PromptMessage:
         "type": "object",
         "properties": {
             "collections": {"type": "array", "items": {"type": "string"}},
-            "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+            "bbox": {
+                "type": "array",
+                "items": {"type": "number"},
+                "minItems": 4,
+                "maxItems": 4,
+            },
             "datetime": {"type": "string"},
             "limit": {"type": "integer", "default": 10},
         },
@@ -249,7 +290,11 @@ def _prompt_search_items() -> PromptMessage:
         "Example:\n"
         f"{json.dumps(payload['example'], indent=2)}"
     )
-    return PromptMessage(role="user", content=TextContent(type="text", text=human), _meta={"machine_payload": payload})
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
 
 
 @app.prompt(
@@ -260,13 +305,22 @@ def _prompt_search_items() -> PromptMessage:
             "type": "object",
             "properties": {
                 "collections": {"type": "array", "items": {"type": "string"}},
-                "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+                "bbox": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 4,
+                    "maxItems": 4,
+                },
                 "datetime": {"type": "string"},
                 "query": {"type": "object"},
                 "aoi_geojson": {"type": "object"},
                 "limit": {"type": "integer", "default": 100},
                 "force_metadata_only": {"type": "boolean", "default": False},
-                "output_format": {"type": "string", "enum": ["text", "json"], "default": "text"},
+                "output_format": {
+                    "type": "string",
+                    "enum": ["text", "json"],
+                    "default": "text",
+                },
             },
             "required": ["collections"],
         },
@@ -278,13 +332,22 @@ def _prompt_estimate_data_size() -> PromptMessage:
         "type": "object",
         "properties": {
             "collections": {"type": "array", "items": {"type": "string"}},
-            "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+            "bbox": {
+                "type": "array",
+                "items": {"type": "number"},
+                "minItems": 4,
+                "maxItems": 4,
+            },
             "datetime": {"type": "string"},
             "query": {"type": "object"},
             "aoi_geojson": {"type": "object"},
             "limit": {"type": "integer", "default": 100},
             "force_metadata_only": {"type": "boolean", "default": False},
-            "output_format": {"type": "string", "enum": ["text", "json"], "default": "text"},
+            "output_format": {
+                "type": "string",
+                "enum": ["text", "json"],
+                "default": "text",
+            },
         },
         "required": ["collections"],
     }
@@ -301,7 +364,11 @@ def _prompt_estimate_data_size() -> PromptMessage:
         "Example:\n"
         f"{json.dumps(payload['example'], indent=2)}"
     )
-    return PromptMessage(role="user", content=TextContent(type="text", text=human), _meta={"machine_payload": payload})
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
 
 
 @app.prompt(
@@ -324,7 +391,11 @@ def _prompt_estimate_data_size() -> PromptMessage:
 def _prompt_create_item() -> PromptMessage:
     schema = {
         "type": "object",
-        "properties": {"collection_id": {"type": "string"}, "item": {"type": "object"}, "api_key": {"type": "string"}},
+        "properties": {
+            "collection_id": {"type": "string"},
+            "item": {"type": "object"},
+            "api_key": {"type": "string"},
+        },
         "required": ["collection_id", "item"],
     }
     payload = {
@@ -340,7 +411,11 @@ def _prompt_create_item() -> PromptMessage:
         "Example:\n"
         f"{json.dumps(payload['example'], indent=2)}"
     )
-    return PromptMessage(role="user", content=TextContent(type="text", text=human), meta={"machine_payload": payload})
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        meta={"machine_payload": payload},
+    )
 
 
 @app.prompt(
@@ -349,26 +424,49 @@ def _prompt_create_item() -> PromptMessage:
     meta={
         "schema_update": {
             "type": "object",
-            "properties": {"collection_id": {"type": "string"}, "item": {"type": "object"}},
+            "properties": {
+                "collection_id": {"type": "string"},
+                "item": {"type": "object"},
+            },
             "required": ["collection_id", "item"],
         },
         "schema_delete": {
             "type": "object",
-            "properties": {"collection_id": {"type": "string"}, "item_id": {"type": "string"}},
+            "properties": {
+                "collection_id": {"type": "string"},
+                "item_id": {"type": "string"},
+            },
             "required": ["collection_id", "item_id"],
         },
-        "example_update": {"collection_id": "c1", "item": {"id": "i1", "type": "Feature"}},
+        "example_update": {
+            "collection_id": "c1",
+            "item": {"id": "i1", "type": "Feature"},
+        },
     },
 )
 def _prompt_update_delete_item() -> PromptMessage:
-    schema_update = {"type": "object", "properties": {"collection_id": {"type": "string"}, "item": {"type": "object"}}, "required": ["collection_id", "item"]}
-    schema_delete = {"type": "object", "properties": {"collection_id": {"type": "string"}, "item_id": {"type": "string"}}, "required": ["collection_id", "item_id"]}
+    schema_update = {
+        "type": "object",
+        "properties": {"collection_id": {"type": "string"}, "item": {"type": "object"}},
+        "required": ["collection_id", "item"],
+    }
+    schema_delete = {
+        "type": "object",
+        "properties": {
+            "collection_id": {"type": "string"},
+            "item_id": {"type": "string"},
+        },
+        "required": ["collection_id", "item_id"],
+    }
     payload = {
         "name": "update_delete_item",
         "description": "Update or delete a STAC Item.",
         "update_parameters": schema_update,
         "delete_parameters": schema_delete,
-        "example_update": {"collection_id": "c1", "item": {"id": "i1", "type": "Feature"}},
+        "example_update": {
+            "collection_id": "c1",
+            "item": {"id": "i1", "type": "Feature"},
+        },
     }
     human = (
         f"Tool: update_delete_item\nDescription: {payload['description']}\n\n"
@@ -379,20 +477,22 @@ def _prompt_update_delete_item() -> PromptMessage:
         "Example (update):\n"
         f"{json.dumps(payload.get('example_update', {}), indent=2)}"
     )
-    return PromptMessage(role="user", content=TextContent(type="text", text=human), _meta={"machine_payload": payload})
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
 
 
 @app.tool
 async def get_root() -> list[dict[str, Any]]:
     """Get the root STAC catalog document."""
-    client = getattr(app, "default_client", None)
     return await execution.execute_tool("get_root", {}, catalog_url=None, headers=None)
 
 
 @app.tool
 async def get_conformance() -> list[dict[str, Any]]:
     """Get the conformance classes for the STAC API."""
-    client = getattr(app, "default_client", None)
     return await execution.execute_tool(
         "get_conformance", {}, catalog_url=None, headers=None
     )
@@ -404,7 +504,6 @@ async def search_collections(
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search for STAC collections."""
-    client = None if catalog_url is not None else getattr(app, "default_client", None)
     return await execution.execute_tool(
         "search_collections", {"limit": limit}, catalog_url=catalog_url, headers=None
     )
@@ -416,7 +515,6 @@ async def get_collection(
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Get a specific STAC collection by its ID."""
-    client = None if catalog_url is not None else getattr(app, "default_client", None)
     return await execution.execute_tool(
         "get_collection",
         {"collection_id": collection_id},
@@ -433,7 +531,6 @@ async def get_item(
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Get a specific STAC Item by collection and item ID."""
-    client = None if catalog_url is not None else getattr(app, "default_client", None)
     return await execution.execute_tool(
         "get_item",
         arguments={
@@ -452,10 +549,11 @@ async def search_items(
     bbox: list[float] | None = None,
     datetime: str | None = None,
     limit: int | None = 10,
+    query: dict[str, Any] | None = None,
+    output_format: str | None = "text",
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search for STAC items."""
-    client = None if catalog_url is not None else getattr(app, "default_client", None)
     return await execution.execute_tool(
         "search_items",
         arguments={
@@ -463,6 +561,8 @@ async def search_items(
             "bbox": bbox,
             "datetime": datetime,
             "limit": limit,
+            "query": query,
+            "output_format": output_format,
         },
         catalog_url=catalog_url,
         headers=None,
@@ -476,13 +576,12 @@ async def estimate_data_size(
     datetime: str | None = None,
     query: dict[str, Any] | None = None,
     aoi_geojson: dict[str, Any] | None = None,
-    limit: int | None = 100,
+    limit: int | None = 10,
     force_metadata_only: bool | None = False,
     output_format: str | None = "text",
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Estimate the data size for a STAC query."""
-    client = None if catalog_url is not None else getattr(app, "default_client", None)
     return await execution.execute_tool(
         "estimate_data_size",
         arguments={
@@ -511,7 +610,6 @@ async def create_item(
     headers = {}
     if api_key:
         headers["x-api-key"] = api_key
-    client = None if catalog_url is not None else getattr(app, "default_client", None)
     return await execution.execute_tool(
         "create_item",
         arguments={"collection_id": collection_id, "item": item, "api_key": api_key},
@@ -531,7 +629,6 @@ async def update_item(
     headers = {}
     if api_key:
         headers["x-api-key"] = api_key
-    client = None if catalog_url is not None else getattr(app, "default_client", None)
     return await execution.execute_tool(
         "update_item",
         arguments={"collection_id": collection_id, "item": item, "api_key": api_key},
@@ -551,7 +648,6 @@ async def delete_item(
     headers = {}
     if api_key:
         headers["x-api-key"] = api_key
-    client = None if catalog_url is not None else getattr(app, "default_client", None)
     return await execution.execute_tool(
         "delete_item",
         arguments={
