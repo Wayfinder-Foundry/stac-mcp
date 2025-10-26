@@ -10,9 +10,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-import numpy as np
 import requests
 from pystac_client.exceptions import APIError
+
+from .sensor_dtypes import SensorDtypeRegistry
 
 # Ensure Session.request enforces a default timeout when one is not provided.
 # This is a conservative safeguard for environments where sessions may be
@@ -712,7 +713,6 @@ class STACClient:
         query: dict[str, Any] | None = None,
         aoi_geojson: dict[str, Any] | None = None,
         limit: int = 10,
-        force_metadata_only: bool = False,
     ) -> dict[str, Any]:
         """Unified data size estimator.
 
@@ -746,19 +746,19 @@ class STACClient:
         hrefs_to_head: list[str] = []
         asset_map: dict[str, dict[str, Any]] = {}
 
-        try:
-            from .sensor_dtypes import SensorDtypeRegistry
-            dtype_registry = SensorDtypeRegistry()
-        except (ImportError, ModuleNotFoundError):
-            dtype_registry = None
+        dtype_registry = SensorDtypeRegistry()
 
         for item in items:
             collection_id = getattr(item, "collection_id", None)
-            sensor_info = dtype_registry.get_info(collection_id) if dtype_registry else None
+            sensor_info = (
+                dtype_registry.get_info(collection_id) if dtype_registry else None
+            )
 
             for name, asset in getattr(item, "assets", {}).items():
                 asset_dict = self._asset_to_dict(asset)
-                media_type = (asset_dict.get("media_type") or asset_dict.get("type") or "").lower()
+                media_type = (
+                    asset_dict.get("media_type") or asset_dict.get("type") or ""
+                ).lower()
 
                 if sensor_info and sensor_info.should_ignore_asset(name, media_type):
                     continue
@@ -768,14 +768,16 @@ class STACClient:
 
                 if bytes_found is not None:
                     total_bytes += bytes_found
-                    assets_info.append({
-                        "asset": name,
-                        "media_type": media_type,
-                        "href": href,
-                        "estimated_size_bytes": bytes_found,
-                        "estimated_size_mb": round(bytes_found / (1024 * 1024), 2),
-                        "method": "metadata",
-                    })
+                    assets_info.append(
+                        {
+                            "asset": name,
+                            "media_type": media_type,
+                            "href": href,
+                            "estimated_size_bytes": bytes_found,
+                            "estimated_size_mb": round(bytes_found / (1024 * 1024), 2),
+                            "method": "metadata",
+                        }
+                    )
                 elif href:
                     hrefs_to_head.append(href)
                     asset_map[href] = {"name": name, "media_type": media_type}
@@ -786,23 +788,27 @@ class STACClient:
                 asset_details = asset_map[href]
                 if size is not None:
                     total_bytes += size
-                    assets_info.append({
-                        "asset": asset_details["name"],
-                        "media_type": asset_details["media_type"],
-                        "href": href,
-                        "estimated_size_bytes": size,
-                        "estimated_size_mb": round(size / (1024 * 1024), 2),
-                        "method": "head",
-                    })
+                    assets_info.append(
+                        {
+                            "asset": asset_details["name"],
+                            "media_type": asset_details["media_type"],
+                            "href": href,
+                            "estimated_size_bytes": size,
+                            "estimated_size_mb": round(size / (1024 * 1024), 2),
+                            "method": "head",
+                        }
+                    )
                 else:
-                    assets_info.append({
-                        "asset": asset_details["name"],
-                        "media_type": asset_details["media_type"],
-                        "href": href,
-                        "estimated_size_bytes": 0,
-                        "estimated_size_mb": 0,
-                        "method": "failed",
-                    })
+                    assets_info.append(
+                        {
+                            "asset": asset_details["name"],
+                            "media_type": asset_details["media_type"],
+                            "href": href,
+                            "estimated_size_bytes": 0,
+                            "estimated_size_mb": 0,
+                            "method": "failed",
+                        }
+                    )
 
         estimated_mb = total_bytes / (1024 * 1024)
         estimated_gb = total_bytes / (1024 * 1024 * 1024)
@@ -814,7 +820,8 @@ class STACClient:
             "estimated_size_gb": round(estimated_gb, 4),
             "bbox_used": bbox,
             "temporal_extent": datetime,
-            "collections": collections or [getattr(item, "collection_id", None) for item in items],
+            "collections": collections
+            or [getattr(item, "collection_id", None) for item in items],
             "clipped_to_aoi": bool(aoi_geojson),
             "assets_analyzed": assets_info,
             "message": "Successfully estimated data size.",
