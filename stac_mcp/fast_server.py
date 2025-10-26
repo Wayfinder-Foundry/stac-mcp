@@ -357,10 +357,19 @@ def _prompt_estimate_data_size() -> PromptMessage:
         "parameters": schema,
         "example": {"collections": ["c1"], "limit": 10, "output_format": "json"},
     }
+    # Note for users: this tool returns both the DataArray-reported size
+    # (reported_bytes from .data.nbytes) and a registry-corrected size
+    # (registry_bytes) when the sensor registry suggests a different
+    # instrument-native dtype. The numeric totals are computed from the
+    # reported values by default; check 'registry_bytes' for storage-native
+    # estimates.
     human = (
         f"Tool: estimate_data_size\nDescription: {payload['description']}\n\n"
         "Parameters:\n"
         f"{json.dumps(schema, indent=2)}\n\n"
+        "Note: The response includes per-variable fields 'reported_bytes' and\n"
+        "'registry_bytes' when applicable. Use 'registry_bytes' to estimate\n"
+        "instrument-native storage sizes.\n\n"
         "Example:\n"
         f"{json.dumps(payload['example'], indent=2)}"
     )
