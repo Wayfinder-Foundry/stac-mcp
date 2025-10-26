@@ -824,7 +824,11 @@ class STACClient:
             or [getattr(item, "collection_id", None) for item in items],
             "clipped_to_aoi": bool(aoi_geojson),
             "assets_analyzed": assets_info,
-            "message": "Successfully estimated data size.",
+            "message": (
+                "Successfully estimated data size. "
+                "Note: aoi/bbox is used to filter items, "
+                "but the size estimate is for the full assets."
+            ),
         }
 
     def get_root_document(self) -> dict[str, Any]:
@@ -1059,11 +1063,12 @@ class STACClient:
     def _head_content_length(self, href: str) -> int | None:
         # Simple retry with exponential backoff for transient failures.
         attempt = 0
+        signed_href = self._sign_href(href)
         while attempt <= self.head_retries:
             try:
                 resp = self._head_session.request(
                     "HEAD",
-                    href,
+                    signed_href,
                     headers=self.headers or {},
                     timeout=self.head_timeout_seconds,
                 )
