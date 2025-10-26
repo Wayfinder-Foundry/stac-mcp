@@ -56,6 +56,22 @@ from stac_mcp.tools.transactions import (
 logger = logging.getLogger(__name__)
 
 
+class Session:
+    """A session for a tool execution."""
+
+    def __init__(self, client: Any):
+        """Initialize the session."""
+        self.client = client
+        self._stac_client = None
+
+    @property
+    def stac_client(self) -> STACClient:
+        """Return a STAC client."""
+        if self._stac_client is None:
+            self._stac_client = STACClient()
+        return self._stac_client
+
+
 Handler = Callable[
     [STACClient, dict[str, Any]],
     list[TextContent] | dict[str, Any],
