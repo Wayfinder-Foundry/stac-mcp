@@ -725,7 +725,7 @@ class STACClient:
         query: dict[str, Any] | None = None,
         aoi_geojson: dict[str, Any] | None = None,
         limit: int = 10,
-        force_metadata_only: bool = True,
+        force_metadata_only: bool = False,
     ) -> dict[str, Any]:
         """Simplified estimator: prefer odc.stac + xarray to compute eager size.
 
@@ -766,7 +766,12 @@ class STACClient:
                 "message": "No items found for the given query parameters",
             }
 
-        if not ODC_STAC_AVAILABLE:
+        # If the optional odc.stac/xarray path is not available and the
+        # caller did not request metadata-only behaviour, return a helpful
+        # message explaining how to enable dataset-based estimates. If the
+        # caller requested `force_metadata_only=True` we skip this early
+        # return and fall back to metadata/HEAD aggregation below.
+        if not ODC_STAC_AVAILABLE and not force_metadata_only:
             return {
                 "item_count": len(items),
                 "estimated_size_bytes": 0,
@@ -783,51 +788,95 @@ class STACClient:
                 ),
             }
 
+        # If the caller requested metadata-only behaviour, skip the odc/xarray
+        # eager load path and jump straight to the metadata/HEAD fallback
+        # implemented later in this function.
+        odc_exc = False
+        if not force_metadata_only:
             # Try to perform a per-item odc.stac load and compute sizes.
-        try:
-            import xarray as xr  # type: ignore[import]  # noqa: PLC0415
-            from odc.stac import (  # noqa: PLC0415
-                load as _odc_load,  # type: ignore[import]
-            )
+            try:
+                import xarray as xr  # type: ignore[import]  # noqa: PLC0415
+                from odc.stac import (  # noqa: PLC0415
+                    load as _odc_load,  # type: ignore[import]
+                )
 
-            # Load items one-by-one so sensor registry overrides can be
-            # applied per-item and to keep memory usage predictable.
-            total_bytes = 0
-            sensor_native_total_bytes = 0
-            data_variables: list[dict[str, Any]] = []
-            dtype_registry = SensorDtypeRegistry()
+                # Load items one-by-one so sensor registry overrides can be
+                # applied per-item and to keep memory usage predictable.
+                total_bytes = 0
+                sensor_native_total_bytes = 0
+                data_variables: list[dict[str, Any]] = []
+                dtype_registry = SensorDtypeRegistry()
 
-            for item in items:
-                ds_item = _odc_load([item], chunks={})
-                if not isinstance(ds_item, xr.Dataset):
-                    continue
+                for item in items:
+                    ds_item = _odc_load([item], chunks={})
+                    if not isinstance(ds_item, xr.Dataset):
+                        continue
 
-                collection_id = getattr(item, "collection_id", None)
-                sensor_info = dtype_registry.get_info(collection_id)
+                    collection_id = getattr(item, "collection_id", None)
+                    sensor_info = dtype_registry.get_info(collection_id)
 
-                for name, da in ds_item.data_vars.items():
-                    try:
-                        shape = tuple(int(s) for s in getattr(da, "shape", ()))
-                        elems = 1
-                        for s in shape:
-                            elems *= s
+                    for name, da in ds_item.data_vars.items():
+                        try:
+                            shape = tuple(int(s) for s in getattr(da, "shape", ()))
+                            elems = 1
+                            for s in shape:
+                                elems *= s
 
-                        underlying = getattr(da, "data", None)
-                        nbytes = getattr(underlying, "nbytes", None)
-                        method = "computed"
-                        override_applied = False
-                        if nbytes is not None:
-                            size_bytes = int(nbytes)
-                            method = "nbytes"
-                            # Softer heuristic: if the reported dtype is a
-                            # floating type but the sensor registry suggests
-                            # an integer native dtype for this asset, produce
-                            # both reported and registry-corrected sizes so
-                            # callers can see both views and choose.
-                            try:
-                                import numpy as np  # type: ignore[import]  # noqa: PLC0415 - guarded import
+                            underlying = getattr(da, "data", None)
+                            nbytes = getattr(underlying, "nbytes", None)
+                            method = "computed"
+                            override_applied = False
+                            if nbytes is not None:
+                                size_bytes = int(nbytes)
+                                method = "nbytes"
+                                # Softer heuristic: if the reported dtype is a
+                                # floating type but the sensor registry suggests
+                                # an integer native dtype for this asset, produce
+                                # both reported and registry-corrected sizes so
+                                # callers can see both views and choose.
+                                try:
+                                    import numpy as np  # type: ignore[import]  # noqa: PLC0415 - guarded import
 
-                                reported_dtype = getattr(da, "dtype", None)
+                                    reported_dtype = getattr(da, "dtype", None)
+                                    override_dtype = None
+                                    if sensor_info is not None:
+                                        try:
+                                            override_dtype = (
+                                                sensor_info.get_dtype_for_asset(name)
+                                            )
+                                        except (AttributeError, TypeError, ValueError):
+                                            override_dtype = None
+
+                                    # Only consider registry correction when the
+                                    # reported dtype is a float and the registry
+                                    # suggests an integer dtype for this asset.
+                                    if (
+                                        reported_dtype is not None
+                                        and hasattr(reported_dtype, "kind")
+                                        and reported_dtype.kind == "f"
+                                        and override_dtype is not None
+                                        and np.issubdtype(override_dtype, np.integer)
+                                    ):
+                                        # Compute registry-corrected bytes (no
+                                        # side-effects on total_bytes; we keep the
+                                        # estimator's numeric total based on what
+                                        # xarray reports unless a caller requests
+                                        # otherwise).
+                                        try:
+                                            sensor_itemsize = int(
+                                                np.dtype(override_dtype).itemsize
+                                            )
+                                        except (TypeError, ValueError):
+                                            sensor_itemsize = 1
+                                        sensor_native_bytes = int(
+                                            elems * sensor_itemsize
+                                        )
+                                    else:
+                                        sensor_native_bytes = None
+                                except (ImportError, ModuleNotFoundError):
+                                    # If numpy missing, skip registry check.
+                                    sensor_native_bytes = None
+                            else:
                                 override_dtype = None
                                 if sensor_info is not None:
                                     try:
@@ -837,160 +886,135 @@ class STACClient:
                                     except (AttributeError, TypeError, ValueError):
                                         override_dtype = None
 
-                                # Only consider registry correction when the
-                                # reported dtype is a float and the registry
-                                # suggests an integer dtype for this asset.
-                                if (
-                                    reported_dtype is not None
-                                    and hasattr(reported_dtype, "kind")
-                                    and reported_dtype.kind == "f"
-                                    and override_dtype is not None
-                                    and np.issubdtype(override_dtype, np.integer)
-                                ):
-                                    # Compute registry-corrected bytes (no
-                                    # side-effects on total_bytes; we keep the
-                                    # estimator's numeric total based on what
-                                    # xarray reports unless a caller requests
-                                    # otherwise).
+                                dtype = getattr(da, "dtype", None)
+                                if override_dtype is not None:
+                                    dtype = override_dtype
+                                    override_applied = True
+
+                                itemsize = getattr(dtype, "itemsize", None)
+                                if itemsize is None:
                                     try:
-                                        sensor_itemsize = int(
-                                            np.dtype(override_dtype).itemsize
+                                        import numpy as np  # type: ignore[import]  # noqa: PLC0415 - guarded import
+
+                                        itemsize = (
+                                            np.dtype(dtype).itemsize
+                                            if dtype is not None
+                                            else 1
                                         )
-                                    except (TypeError, ValueError):
-                                        sensor_itemsize = 1
-                                    sensor_native_bytes = int(elems * sensor_itemsize)
-                                else:
-                                    sensor_native_bytes = None
-                            except (ImportError, ModuleNotFoundError):
-                                # If numpy missing, skip registry check.
-                                sensor_native_bytes = None
-                        else:
-                            override_dtype = None
-                            if sensor_info is not None:
-                                try:
-                                    override_dtype = sensor_info.get_dtype_for_asset(
-                                        name
-                                    )
-                                except (AttributeError, TypeError, ValueError):
-                                    override_dtype = None
+                                    except (
+                                        ImportError,
+                                        ModuleNotFoundError,
+                                        TypeError,
+                                        ValueError,
+                                    ):
+                                        itemsize = 1
+                                size_bytes = int(elems * int(itemsize))
 
-                            dtype = getattr(da, "dtype", None)
-                            if override_dtype is not None:
-                                dtype = override_dtype
-                                override_applied = True
+                            total_bytes += size_bytes
+                            # sensor_native_total accumulates the sensor-native
+                            # bytes when available; otherwise fall back to the
+                            # reported/computed size_bytes so the sensor-native
+                            # total is a complete estimate.
+                            if (
+                                "sensor_native_bytes" in locals()
+                                and sensor_native_bytes is not None
+                            ):
+                                sensor_native_total_bytes += int(sensor_native_bytes)
+                            else:
+                                sensor_native_total_bytes += int(size_bytes)
+                            var_entry: dict[str, Any] = {
+                                "variable": name,
+                                "shape": shape,
+                                "elements": elems,
+                                "estimated_bytes": int(size_bytes),
+                                "dtype": str(getattr(da, "dtype", None)),
+                                "method": method,
+                                "override_applied": bool(override_applied),
+                            }
+                            # If we computed a registry-corrected bytes value
+                            # for float->integer recommendations, include both
+                            # values so callers can inspect and choose.
+                            if (
+                                "sensor_native_bytes" in locals()
+                                and sensor_native_bytes is not None
+                            ):
+                                var_entry["reported_bytes"] = int(size_bytes)
+                                var_entry["sensor_native_bytes"] = int(
+                                    sensor_native_bytes
+                                )
+                                var_entry["sensor_native_dtype"] = str(override_dtype)
+                                # Recommend the sensor-native value for
+                                # storage/instrument-native use-cases but do not
+                                # change the estimator total by default.
+                                var_entry["recommended"] = "sensor_native"
+                                var_entry["sensor_native_recommended"] = True
 
-                            itemsize = getattr(dtype, "itemsize", None)
-                            if itemsize is None:
-                                try:
-                                    import numpy as np  # type: ignore[import]  # noqa: PLC0415 - guarded import
+                            data_variables.append(var_entry)
+                        except Exception as exc:  # noqa: BLE001 - defensive skip
+                            # Skip variables we cannot introspect but emit a
+                            # debug-level message so failures are visible in
+                            # debugging runs while avoiding noisy user logs.
+                            logger.debug(
+                                "Skipping variable %s due to error: %s", name, exc
+                            )
+                            continue
+                estimated_mb = total_bytes / (1024 * 1024)
+                estimated_gb = total_bytes / (1024 * 1024 * 1024)
+                sensor_native_estimated_mb = sensor_native_total_bytes / (1024 * 1024)
+                sensor_native_estimated_gb = sensor_native_total_bytes / (
+                    1024 * 1024 * 1024
+                )
 
-                                    itemsize = (
-                                        np.dtype(dtype).itemsize
-                                        if dtype is not None
-                                        else 1
-                                    )
-                                except (
-                                    ImportError,
-                                    ModuleNotFoundError,
-                                    TypeError,
-                                    ValueError,
-                                ):
-                                    itemsize = 1
-                            size_bytes = int(elems * int(itemsize))
+                # Summarize how many variables reported native .nbytes and how
+                # many have a sensor-native alternative included.
+                reported_nbytes_count = sum(
+                    1 for v in data_variables if v.get("method") == "nbytes"
+                )
+                sensor_native_corrections_count = sum(
+                    1
+                    for v in data_variables
+                    if v.get("sensor_native_bytes") is not None
+                )
 
-                        total_bytes += size_bytes
-                        # sensor_native_total accumulates the sensor-native
-                        # bytes when available; otherwise fall back to the
-                        # reported/computed size_bytes so the sensor-native
-                        # total is a complete estimate.
-                        if (
-                            "sensor_native_bytes" in locals()
-                            and sensor_native_bytes is not None
-                        ):
-                            sensor_native_total_bytes += int(sensor_native_bytes)
-                        else:
-                            sensor_native_total_bytes += int(size_bytes)
-                        var_entry: dict[str, Any] = {
-                            "variable": name,
-                            "shape": shape,
-                            "elements": elems,
-                            "estimated_bytes": int(size_bytes),
-                            "dtype": str(getattr(da, "dtype", None)),
-                            "method": method,
-                            "override_applied": bool(override_applied),
-                        }
-                        # If we computed a registry-corrected bytes value
-                        # for float->integer recommendations, include both
-                        # values so callers can inspect and choose.
-                        if (
-                            "sensor_native_bytes" in locals()
-                            and sensor_native_bytes is not None
-                        ):
-                            var_entry["reported_bytes"] = int(size_bytes)
-                            var_entry["sensor_native_bytes"] = int(sensor_native_bytes)
-                            var_entry["sensor_native_dtype"] = str(override_dtype)
-                            # Recommend the sensor-native value for
-                            # storage/instrument-native use-cases but do not
-                            # change the estimator total by default.
-                            var_entry["recommended"] = "sensor_native"
-                            var_entry["sensor_native_recommended"] = True
+                parts = [
+                    "Estimated sizes computed using odc.stac/xarray.",
+                    f"Numeric total uses .data.nbytes: {int(total_bytes)} bytes",
+                    f"(~{round(estimated_gb, 4)} GB);",
+                    "sensor-native total (instrument-native) is",
+                    f"{int(sensor_native_total_bytes)} bytes",
+                    f"(~{round(sensor_native_estimated_gb, 4)} GB).",
+                    f"Reported .data.nbytes count: {reported_nbytes_count};",
+                    f"Sensor-native corrections: {sensor_native_corrections_count}.",
+                ]
+                message = " ".join(parts)
 
-                        data_variables.append(var_entry)
-                    except Exception as exc:  # noqa: BLE001 - defensive skip
-                        # Skip variables we cannot introspect but emit a
-                        # debug-level message so failures are visible in
-                        # debugging runs while avoiding noisy user logs.
-                        logger.debug("Skipping variable %s due to error: %s", name, exc)
-                        continue
-            estimated_mb = total_bytes / (1024 * 1024)
-            estimated_gb = total_bytes / (1024 * 1024 * 1024)
-            sensor_native_estimated_mb = sensor_native_total_bytes / (1024 * 1024)
-            sensor_native_estimated_gb = sensor_native_total_bytes / (
-                1024 * 1024 * 1024
-            )
-
-            # Summarize how many variables reported native .nbytes and how
-            # many have a sensor-native alternative included.
-            reported_nbytes_count = sum(
-                1 for v in data_variables if v.get("method") == "nbytes"
-            )
-            sensor_native_corrections_count = sum(
-                1 for v in data_variables if v.get("sensor_native_bytes") is not None
-            )
-
-            parts = [
-                "Estimated sizes computed using odc.stac/xarray.",
-                f"Numeric total uses reported .data.nbytes: {int(total_bytes)} bytes",
-                f"(~{round(estimated_gb, 4)} GB);",
-                "sensor-native total (instrument-native) is",
-                f"{int(sensor_native_total_bytes)} bytes",
-                f"(~{round(sensor_native_estimated_gb, 4)} GB).",
-                f"Reported .data.nbytes count: {reported_nbytes_count};",
-                f"Sensor-native corrections: {sensor_native_corrections_count}.",
-            ]
-            message = " ".join(parts)
-
-            return {
-                "item_count": len(items),
-                "estimated_size_bytes": int(total_bytes),
-                "estimated_size_mb": round(estimated_mb, 2),
-                "estimated_size_gb": round(estimated_gb, 4),
-                "sensor_native_estimated_size_bytes": int(sensor_native_total_bytes),
-                "sensor_native_estimated_size_mb": round(sensor_native_estimated_mb, 2),
-                "sensor_native_estimated_size_gb": round(sensor_native_estimated_gb, 4),
-                "bbox_used": bbox,
-                "temporal_extent": datetime,
-                "collections": collections
-                or [getattr(item, "collection_id", None) for item in items],
-                "clipped_to_aoi": bool(aoi_geojson),
-                "data_variables": data_variables,
-                "message": message,
-            }
-        except Exception:  # pragma: no cover - best-effort
-            # odc may fail when tests pass in lightweight objects; log and
-            # fall back to metadata/HEAD-based aggregation below.
-            logger.exception("odc.stac eager estimate failed")
-            odc_exc = True
+                return {
+                    "item_count": len(items),
+                    "estimated_size_bytes": int(total_bytes),
+                    "estimated_size_mb": round(estimated_mb, 2),
+                    "estimated_size_gb": round(estimated_gb, 4),
+                    "sensor_native_estimated_size_bytes": int(
+                        sensor_native_total_bytes
+                    ),
+                    "sensor_native_estimated_size_mb": round(
+                        sensor_native_estimated_mb, 2
+                    ),
+                    "sensor_native_estimated_size_gb": round(
+                        sensor_native_estimated_gb, 4
+                    ),
+                    "bbox_used": bbox,
+                    "temporal_extent": datetime,
+                    "collections": collections
+                    or [getattr(item, "collection_id", None) for item in items],
+                    "clipped_to_aoi": bool(aoi_geojson),
+                    "data_variables": data_variables,
+                    "message": message,
+                }
+            except Exception:  # pragma: no cover - best-effort
+                # odc may fail when tests pass in lightweight objects; log and
+                # fall back to metadata/HEAD-based aggregation below.
+                logger.exception("odc.stac eager estimate failed")
+                odc_exc = True
 
         # Fallback estimator: aggregate sizes from asset metadata (file:size)
         # and, when missing, use HEAD requests to probe Content-Length. This

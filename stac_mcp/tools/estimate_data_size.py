@@ -106,12 +106,42 @@ def handle_estimate_data_size(
     if arguments.get("output_format") == "json":
         return {"type": "data_size_estimate", "estimate": size_estimate}
     result_text = "**Data Size Estimation**\n\n"
-    result_text += f"Items analyzed: {size_estimate['item_count']}\n"
-    result_text += (
-        f"Estimated size: {size_estimate['estimated_size_mb']:.2f} MB "
-        f"({size_estimate['estimated_size_gb']:.4f} GB)\n"
+    item_count = size_estimate.get("item_count", 0)
+    result_text += f"Items analyzed: {item_count}\n"
+
+    # Be defensive: some estimator implementations may omit the
+    # pre-computed MB/GB fields. Prefer explicit fields but fall back to
+    # reconstructing from bytes when necessary.
+    estimated_bytes = size_estimate.get("estimated_size_bytes")
+    if estimated_bytes is None:
+        # Some older/test fixtures may use 'estimated_bytes' or 'estimated_size'
+        estimated_bytes = size_estimate.get("estimated_bytes")
+
+    estimated_mb = size_estimate.get("estimated_size_mb")
+    if estimated_mb is None and estimated_bytes is not None:
+        try:
+            estimated_mb = float(estimated_bytes) / (1024 * 1024)
+        except (TypeError, ValueError):
+            estimated_mb = None
+
+    estimated_gb = size_estimate.get("estimated_size_gb")
+    if estimated_gb is None and estimated_mb is not None:
+        try:
+            estimated_gb = float(estimated_mb) / 1024.0
+        except (TypeError, ValueError):
+            estimated_gb = None
+
+    est_mb_str = (
+        f"{estimated_mb:.2f} MB" if isinstance(estimated_mb, (int, float)) else "n/a"
     )
-    result_text += f"Raw bytes: {size_estimate['estimated_size_bytes']:,}\n\n"
+    est_gb_str = (
+        f"{estimated_gb:.4f} GB" if isinstance(estimated_gb, (int, float)) else "n/a"
+    )
+    result_text += f"Estimated size: {est_mb_str} ({est_gb_str})\n"
+    raw_bytes_str = (
+        f"{int(estimated_bytes):,}" if estimated_bytes is not None else "n/a"
+    )
+    result_text += f"Raw bytes: {raw_bytes_str}\n\n"
     result_text += "**Query Parameters:**\n"
     result_text += "Collections: "
     collections_list = (
@@ -132,9 +162,27 @@ def handle_estimate_data_size(
     if "data_variables" in size_estimate:
         result_text += "\n**Data Variables:**\n"
         for var_info in size_estimate["data_variables"]:
+            # Support multiple possible size keys produced by different
+            # estimator implementations/tests: prefer explicit 'size_mb',
+            # then 'estimated_size_mb', then compute from 'estimated_bytes'.
+            size_mb = None
+            if "size_mb" in var_info:
+                size_mb = var_info["size_mb"]
+            elif "estimated_size_mb" in var_info:
+                size_mb = var_info["estimated_size_mb"]
+            elif (
+                "estimated_bytes" in var_info
+                and var_info["estimated_bytes"] is not None
+            ):
+                try:
+                    size_mb = var_info["estimated_bytes"] / (1024 * 1024)
+                except (TypeError, ValueError):
+                    size_mb = None
+
+            size_str = f"{size_mb:.2f}" if isinstance(size_mb, (int, float)) else "n/a"
             result_text += (
-                f"  - {var_info['variable']}: {var_info['size_mb']} MB, "
-                f"shape {var_info['shape']}, dtype {var_info['dtype']}\n"
+                f"  - {var_info.get('variable', 'unknown')}: {size_str} MB, "
+                f"shape {var_info.get('shape')}, dtype {var_info.get('dtype')}\n"
             )
     if size_estimate.get("spatial_dims"):
         spatial = size_estimate["spatial_dims"]

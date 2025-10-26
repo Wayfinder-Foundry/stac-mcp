@@ -29,7 +29,6 @@ class FakeDataset:
         self.data_vars = data_vars
 
 
-
 def make_fake_load(data_vars):
     def _load(*_args, **_kwargs):
         return FakeDataset(data_vars)
