@@ -714,24 +714,12 @@ class STACClient:
         limit: int = 10,
         force_metadata_only: bool = False,
     ) -> dict[str, Any]:
-        """Simplified data size estimator.
+        """Unified data size estimator.
 
-        This version only considers GeoTIFF-like assets (media type
-        containing 'image/tiff' or hrefs ending with .tif/.tiff). The
-        resolution is determined from these sources in order of
-        preference:
-        1. explicit metadata (file:size, bytes, etc.)
-        2. HTTP HEAD Content-Length
-        3. rasterio inspection (if rasterio available and href is
-           readable by rasterio)
-
-        The function uses the SensorDtypeRegistry to apply a collection-
-        specific native dtype hint when rasterio reports a float dtype
-        but the sensor is known to use an integer native dtype.
+        This version uses a unified approach to estimate data size for all asset
+        types. It prioritizes explicit metadata, then falls back to parallel
+        HTTP HEAD requests to get Content-Length.
         """
-
-        # Lightweight search and normalization. Use per-client cache when
-        # possible so repeated calls within the same MCP session reuse results.
         items = self._cached_search(
             collections=collections,
             bbox=bbox,
@@ -739,6 +727,7 @@ class STACClient:
             query=query,
             limit=limit,
         )
+
         if not items:
             return {
                 "item_count": 0,
@@ -754,160 +743,69 @@ class STACClient:
 
         total_bytes = 0
         assets_info: list[dict[str, Any]] = []
+        hrefs_to_head: list[str] = []
+        asset_map: dict[str, dict[str, Any]] = {}
 
-        # If aoi_geojson is passed, we record that we intended to clip, but
-        # simplified estimator does not perform geometry clipping.
-        clipped_to_aoi = bool(aoi_geojson)
-
-        # Lazy import of the sensor dtype registry (same package). Keep this
-        # optional so the estimator can work without the helper module.
         try:
-            from .sensor_dtypes import SensorDtypeRegistry  # noqa: PLC0415
-
+            from .sensor_dtypes import SensorDtypeRegistry
             dtype_registry = SensorDtypeRegistry()
-        except (ImportError, ModuleNotFoundError, AttributeError):
-            dtype_registry = None  # optional helper
+        except (ImportError, ModuleNotFoundError):
+            dtype_registry = None
 
         for item in items:
-            assets = getattr(item, "assets", {})
-            for name, asset in assets.items() if assets else []:
-                try:
-                    asset_dict = self._asset_to_dict(asset)
-                except (AttributeError, TypeError, ValueError) as exc:
-                    logger.debug("Failed to normalize asset: %s", exc)
+            collection_id = getattr(item, "collection_id", None)
+            sensor_info = dtype_registry.get_info(collection_id) if dtype_registry else None
+
+            for name, asset in getattr(item, "assets", {}).items():
+                asset_dict = self._asset_to_dict(asset)
+                media_type = (asset_dict.get("media_type") or asset_dict.get("type") or "").lower()
+
+                if sensor_info and sensor_info.should_ignore_asset(name, media_type):
                     continue
 
-                href = asset_dict.get("href")
-                media = asset_dict.get("media_type") or asset_dict.get("type") or ""
-                media = str(media).lower()
-                # If registry suggests ignoring this asset (preview/thumbnail), skip it
-                sensor_info = None
-                try:
-                    if dtype_registry is not None:
-                        sensor_info = dtype_registry.get_info(
-                            getattr(item, "collection_id", None)
-                        )
-                except (AttributeError, TypeError):
-                    sensor_info = None
-
-                if sensor_info is not None and sensor_info.should_ignore_asset(
-                    name, media
-                ):
-                    # Skip preview/thumbnail/browse/RGB preview assets per registry
-                    continue
-
-                # Consider any asset whose media string mentions TIFF/GeoTIFF
-                # or whose href ends with a TIFF extension as GeoTIFFs. Some
-                # STAC providers use vendor media types like
-                # 'image/vnd.stac.geotiff' so checking for 'tiff'/'geotiff'
-                # substrings is more robust.
-                is_geotiff = ("tiff" in media or "geotiff" in media) or (
-                    isinstance(href, str)
-                    and href.lower().endswith((".tif", ".tiff", ".tif.gz"))
-                )
-                if not is_geotiff:
-                    # Skip non-GeoTIFF assets
-                    continue
-
-                # 1) Try metadata
                 bytes_found = self._size_from_metadata(asset_dict)
-                method_used = "metadata" if bytes_found is not None else ""
+                href = asset_dict.get("href")
 
-                # 2) HEAD (use signed href when available)
-                if bytes_found is None and isinstance(href, str):
-                    href_to_check = self._sign_href(href)
-                    bytes_found = self._head_content_length(href_to_check)
-                    if bytes_found is not None:
-                        method_used = "head"
+                if bytes_found is not None:
+                    total_bytes += bytes_found
+                    assets_info.append({
+                        "asset": name,
+                        "media_type": media_type,
+                        "href": href,
+                        "estimated_size_bytes": bytes_found,
+                        "estimated_size_mb": round(bytes_found / (1024 * 1024), 2),
+                        "method": "metadata",
+                    })
+                elif href:
+                    hrefs_to_head.append(href)
+                    asset_map[href] = {"name": name, "media_type": media_type}
 
-                # 3) rasterio inspection (optional)
-                if bytes_found is None and isinstance(href, str):
-                    try:
-                        import rasterio  # noqa: PLC0415
-
-                        # Use rasterio to compute bytes from shape/dtype. Combine
-                        # the Env and open contexts in one statement. Use a
-                        # signed href when available so remote blobs behind the
-                        # Planetary Computer can be accessed.
-                        href_to_open = self._sign_href(href)
-                        with rasterio.Env(), rasterio.open(href_to_open) as src:
-                            bands = src.count or 1
-                            height = int(getattr(src, "height", 0))
-                            width = int(getattr(src, "width", 0))
-                            # src.dtypes is a list of dtype strings (per-band)
-                            dtype_str = src.dtypes[0] if src.dtypes else src.dtypes
-
-                            # Prefer registry-suggested native dtype when present.
-                            if sensor_info is not None:
-                                try:
-                                    suggested = sensor_info.get_dtype_for_asset(name)
-                                except (AttributeError, TypeError, ValueError):
-                                    suggested = None
-                                if suggested is not None:
-                                    dtype = np.dtype(suggested)
-                                else:
-                                    dtype = np.dtype(dtype_str)
-                            else:
-                                dtype = np.dtype(dtype_str)
-
-                            bytes_found = (
-                                int(dtype.itemsize)
-                                * int(bands)
-                                * int(height)
-                                * int(width)
-                            )
-                            method_used = "rasterio"
-                    except (ImportError, ModuleNotFoundError):
-                        # rasterio not installed; leave bytes_found as None
-                        pass
-                    except (AttributeError, OSError, ValueError, TypeError):
-                        # Failed to open/inspect with rasterio; leave None
-                        pass
-
-                if bytes_found is None:
-                    assets_info.append(
-                        {
-                            "asset": name,
-                            "media_type": media,
-                            "href": href,
-                            "estimated_size_bytes": 0,
-                            "estimated_size_mb": 0,
-                            "method": "unknown",
-                        }
-                    )
+        if hrefs_to_head:
+            head_results = self._parallel_head_content_lengths(hrefs_to_head)
+            for href, size in head_results.items():
+                asset_details = asset_map[href]
+                if size is not None:
+                    total_bytes += size
+                    assets_info.append({
+                        "asset": asset_details["name"],
+                        "media_type": asset_details["media_type"],
+                        "href": href,
+                        "estimated_size_bytes": size,
+                        "estimated_size_mb": round(size / (1024 * 1024), 2),
+                        "method": "head",
+                    })
                 else:
-                    total_bytes += int(bytes_found)
-                    assets_info.append(
-                        {
-                            "asset": name,
-                            "media_type": media,
-                            "href": href,
-                            "estimated_size_bytes": int(bytes_found),
-                            "estimated_size_mb": round(bytes_found / (1024 * 1024), 2),
-                            "method": method_used or "inferred",
-                        }
-                    )
+                    assets_info.append({
+                        "asset": asset_details["name"],
+                        "media_type": asset_details["media_type"],
+                        "href": href,
+                        "estimated_size_bytes": 0,
+                        "estimated_size_mb": 0,
+                        "method": "failed",
+                    })
 
         estimated_mb = total_bytes / (1024 * 1024)
         estimated_gb = total_bytes / (1024 * 1024 * 1024)
-
-        # If we found nothing via GeoTIFF inspection, attempt fallback
-        # heuristics (parquet metadata, zarr inspection, or HEAD). The
-        # fallback logic is implemented in a private helper so the core
-        # GeoTIFF-only path remains simple and testable.
-        if total_bytes == 0:
-            if force_metadata_only:
-                # Caller explicitly requested fallback-only behavior
-                return self._fallback_estimate(
-                    items, bbox, datetime, collections, clipped_to_aoi, force=True
-                )
-            # Try fallback heuristics but prefer GeoTIFF results when
-            # available. If fallback produces a non-zero estimate, return it.
-            fb = self._fallback_estimate(
-                items, bbox, datetime, collections, clipped_to_aoi
-            )
-            if fb.get("estimated_size_bytes", 0):
-                return fb
 
         return {
             "item_count": len(items),
@@ -916,15 +814,10 @@ class STACClient:
             "estimated_size_gb": round(estimated_gb, 4),
             "bbox_used": bbox,
             "temporal_extent": datetime,
-            "collections": collections
-            or list({getattr(item, "collection_id", None) for item in items}),
-            "clipped_to_aoi": clipped_to_aoi,
+            "collections": collections or [getattr(item, "collection_id", None) for item in items],
+            "clipped_to_aoi": bool(aoi_geojson),
             "assets_analyzed": assets_info,
-            "message": (
-                "Successfully estimated data size for GeoTIFF assets"
-                if total_bytes
-                else "No GeoTIFF assets found or failed to estimate sizes"
-            ),
+            "message": "Successfully estimated data size.",
         }
 
     def get_root_document(self) -> dict[str, Any]:
@@ -1215,173 +1108,3 @@ class STACClient:
                     # Keep failure modes simple for the estimator; record None
                     results[href] = None
         return results
-
-    def _fallback_estimate(
-        self,
-        items: list[Any],
-        bbox: list[float] | None,
-        datetime: str | None,
-        collections: list[str] | None,
-        clipped_to_aoi: bool,
-        force: bool = False,
-    ) -> dict[str, Any]:
-        """Fallback estimation using metadata, HEAD, parquet, and zarr heuristics.
-
-        This is a conservative implementation that mirrors the legacy
-        estimator behavior used in tests: prefer metadata, then HEAD, then
-        basic inspection for zarr using xarray when available.
-        """
-        total = 0
-        assets_info: list[dict[str, Any]] = []
-        count = 0
-        error_flag = False
-        for item in items:
-            count += 1
-            assets = getattr(item, "assets", {})
-            for name, asset in assets.items() if assets else []:
-                a = self._asset_to_dict(asset)
-                href = a.get("href")
-                media = str(a.get("media_type") or a.get("type") or "").lower()
-
-                # 1) metadata
-                bytes_found = self._size_from_metadata(a)
-                method = "metadata" if bytes_found is not None else ""
-
-                # 2) parquet/zarr heuristics and HEAD
-                if bytes_found is None and isinstance(href, str):
-                    if "parquet" in media or href.lower().endswith(".parquet"):
-                        # Try metadata first (already done), then HEAD
-                        try:
-                            resp = self._head_session.request(
-                                "HEAD",
-                                href,
-                                headers=self.headers or {},
-                                timeout=self.head_timeout_seconds,
-                            )
-                            cl = resp.headers.get("Content-Length") or resp.headers.get(
-                                "content-length"
-                            )
-                            if cl:
-                                try:
-                                    bytes_found = int(cl)
-                                    method = "head"
-                                except (TypeError, ValueError):
-                                    bytes_found = None
-                        except Exception:  # noqa: BLE001
-                            bytes_found = None
-                            # Record that a HEAD/inspection error occurred
-                            error_flag = True
-                    elif "zarr" in media or (
-                        isinstance(href, str) and href.endswith(".zarr")
-                    ):
-                        # Try to inspect zarr/xarray to compute size
-                        try:
-                            import xarray as xr  # type: ignore  # noqa: PLC0415,PGH003
-
-                            ds = None
-                            if hasattr(xr, "open_zarr"):
-                                try:
-                                    ds = xr.open_zarr(href)
-                                except Exception:  # noqa: BLE001
-                                    ds = None
-                            if ds is None and hasattr(xr, "open_dataset"):
-                                try:
-                                    ds = xr.open_dataset(href, engine="zarr")
-                                except Exception:  # noqa: BLE001
-                                    ds = None
-                            if ds is not None:
-                                # Sum up variable nbytes when available
-                                try:
-                                    total_bytes = 0
-                                    for var in ds.variables.values():
-                                        try:
-                                            total_bytes += int(
-                                                getattr(var.data, "nbytes", 0)
-                                            )
-                                        except Exception:  # noqa: BLE001
-                                            err_msg = (
-                                                "Failed to get nbytes for zarr variable"
-                                            )
-                                            logger.debug(
-                                                err_msg,
-                                                exc_info=True,
-                                            )
-                                    if total_bytes:
-                                        bytes_found = total_bytes
-                                        method = "zarr-inspect"
-                                except Exception:  # noqa: BLE001
-                                    bytes_found = None
-                        except Exception:  # noqa: BLE001
-                            # xarray not available or failed; fall back to
-                            # small estimate
-                            bytes_found = 24
-                            method = "zarr-inspect"
-                            error_flag = True
-                    else:
-                        # Generic HEAD attempt
-                        try:
-                            resp = self._head_session.request(
-                                "HEAD",
-                                href,
-                                headers=self.headers or {},
-                                timeout=self.head_timeout_seconds,
-                            )
-                            cl = resp.headers.get("Content-Length") or resp.headers.get(
-                                "content-length"
-                            )
-                            if cl:
-                                try:
-                                    bytes_found = int(cl)
-                                    method = "head"
-                                except (TypeError, ValueError):
-                                    bytes_found = None
-                        except Exception:  # noqa: BLE001
-                            bytes_found = None
-                            error_flag = True
-
-                if bytes_found is None:
-                    assets_info.append(
-                        {
-                            "asset": name,
-                            "media_type": media,
-                            "href": href,
-                            "estimated_size_bytes": 0,
-                            "estimated_size_mb": 0,
-                            "method": "unknown",
-                        }
-                    )
-                else:
-                    total += int(bytes_found)
-                    assets_info.append(
-                        {
-                            "asset": name,
-                            "media_type": media,
-                            "href": href,
-                            "estimated_size_bytes": int(bytes_found),
-                            "estimated_size_mb": round(bytes_found / (1024 * 1024), 2),
-                            "method": method or "inferred",
-                        }
-                    )
-
-        estimated_mb = total / (1024 * 1024)
-        estimated_gb = total / (1024 * 1024 * 1024)
-
-        message = "Fallback estimate computed"
-        # If we were explicitly asked to run fallback-only (force) or if
-        # transient HEAD/inspection errors were observed, signal an error
-        # message when no bytes could be determined.
-        if total == 0 and (error_flag or force):
-            message = "Error estimating size: HEAD requests timed out or failed"
-
-        return {
-            "item_count": count,
-            "estimated_size_bytes": int(total),
-            "estimated_size_mb": round(estimated_mb, 2),
-            "estimated_size_gb": round(estimated_gb, 4),
-            "bbox_used": bbox,
-            "temporal_extent": datetime,
-            "collections": collections or [],
-            "clipped_to_aoi": clipped_to_aoi,
-            "assets_analyzed": assets_info,
-            "message": message,
-        }
