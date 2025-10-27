@@ -40,6 +40,18 @@ def test_handle_get_conformance_text_and_json():
     assert j["type"] == "conformance"
 
 
+def test_handle_get_root_not_found():
+    """Test handle_get_root when the root document is not found."""
+
+    class FakeClientRootNotFound:
+        def get_root_document(self):
+            return None
+
+    client = FakeClientRootNotFound()
+    res = handle_get_root(client, {})
+    assert "ID: None" in res[0].text
+
+
 def test_handle_get_item_various_fields():
     class FakeClientItem:
         def get_item(self, collection_id, item_id):  # noqa: ARG002
