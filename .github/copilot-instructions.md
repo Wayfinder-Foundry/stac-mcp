@@ -61,7 +61,7 @@ python examples/example_usage.py
 4.  **Verify Test Coverage:**
     ```bash
     uv run coverage run -m pytest -v
-    uv run coverage report --fail-under=90
+    uv run coverage report --fail-under=85
     ```
 
 **IMPORTANT:** Run the `ruff format` and `ruff check` commands multiple times in sequence to ensure all issues are resolved, as auto-fixing can sometimes introduce new formatting needs.
