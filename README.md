@@ -94,6 +94,24 @@ The `estimate_data_size` tool provides accurate size estimates for geospatial da
 
 ## Usage
 
+### MCP Protocol / Server Configuration
+
+The server implements the [Model Context Protocol (MCP)](https://github.com/Model-Context-Protocol/MCP) for standardized communication.
+
+```json
+{
+  "stac": {
+    "command": "uvx",
+    "args": [
+      "--from",
+      "git+https://github.com/wayfinder-foundry/stac-mcp",
+      "stac-mcp"
+    ],
+    "transport": "stdio",
+  }
+}
+```
+
 ### Command Line
 
 #### Native Installation

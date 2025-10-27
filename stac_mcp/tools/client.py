@@ -15,6 +15,18 @@ from pystac_client.exceptions import APIError
 
 from .sensor_dtypes import SensorDtypeRegistry
 
+# Optional odc.stac/xarray path for more accurate, dtype-aware size estimates.
+try:
+    # Detect optional runtime availability without importing heavy modules at
+    # module import time. Prefer specific import errors to avoid catching
+    # unrelated exceptions.
+    import odc.stac  # noqa: F401
+    import xarray  # noqa: F401
+
+    ODC_STAC_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    ODC_STAC_AVAILABLE = False
+
 # Ensure Session.request enforces a default timeout when one is not provided.
 # This is a conservative safeguard for environments where sessions may be
 # constructed by third-party libraries (pystac_client) without an explicit
@@ -713,13 +725,22 @@ class STACClient:
         query: dict[str, Any] | None = None,
         aoi_geojson: dict[str, Any] | None = None,
         limit: int = 10,
+        force_metadata_only: bool = False,
     ) -> dict[str, Any]:
-        """Unified data size estimator.
+        """Simplified estimator: prefer odc.stac + xarray to compute eager size.
 
-        This version uses a unified approach to estimate data size for all asset
-        types. It prioritizes explicit metadata, then falls back to parallel
-        HTTP HEAD requests to get Content-Length.
+        This implementation is intentionally minimal: when odc.stac and
+        xarray are available it loads the matching items into an
+        xarray.Dataset and computes an eager size estimate by summing the
+        number of elements across data variables. For simplicity we assume
+        1 byte per element (ignore dtype/itemsize). If optional libraries
+        are missing we return a helpful message.
         """
+
+        # Retrieve matching items (pystac.Item objects). Keep this small and
+        # deterministic. The underlying search may return more items than the
+        # requested `limit` due to provider behavior or cached results, so
+        # enforce truncation here before any expensive work (odc.stac.load).
         items = self._cached_search(
             collections=collections,
             bbox=bbox,
@@ -727,6 +748,10 @@ class STACClient:
             query=query,
             limit=limit,
         )
+
+        # Respect the caller-provided limit strictly.
+        if limit and limit > 0 and len(items) > limit:
+            items = items[:limit]
 
         if not items:
             return {
@@ -737,82 +762,341 @@ class STACClient:
                 "bbox_used": bbox,
                 "temporal_extent": datetime,
                 "collections": collections or [],
-                "clipped_to_aoi": False,
+                "clipped_to_aoi": bool(aoi_geojson),
                 "message": "No items found for the given query parameters",
             }
 
-        total_bytes = 0
-        assets_info: list[dict[str, Any]] = []
-        hrefs_to_head: list[str] = []
-        asset_map: dict[str, dict[str, Any]] = {}
+        # If the optional odc.stac/xarray path is not available and the
+        # caller did not request metadata-only behaviour, return a helpful
+        # message explaining how to enable dataset-based estimates. If the
+        # caller requested `force_metadata_only=True` we skip this early
+        # return and fall back to metadata/HEAD aggregation below.
+        if not ODC_STAC_AVAILABLE and not force_metadata_only:
+            return {
+                "item_count": len(items),
+                "estimated_size_bytes": 0,
+                "estimated_size_mb": 0,
+                "estimated_size_gb": 0,
+                "bbox_used": bbox,
+                "temporal_extent": datetime,
+                "collections": collections
+                or [getattr(item, "collection_id", None) for item in items],
+                "clipped_to_aoi": bool(aoi_geojson),
+                "message": (
+                    "odc.stac/xarray not available; install 'odc-stac' "
+                    "and 'xarray' to enable dataset-based estimates"
+                ),
+            }
 
-        dtype_registry = SensorDtypeRegistry()
+        # If the caller requested metadata-only behaviour, skip the odc/xarray
+        # eager load path and jump straight to the metadata/HEAD fallback
+        # implemented later in this function.
+        odc_exc = False
+        if not force_metadata_only:
+            # Try to perform a per-item odc.stac load and compute sizes.
+            try:
+                import xarray as xr  # type: ignore[import]  # noqa: PLC0415
+                from odc.stac import (  # noqa: PLC0415
+                    load as _odc_load,  # type: ignore[import]
+                )
+
+                # Load items one-by-one so sensor registry overrides can be
+                # applied per-item and to keep memory usage predictable.
+                total_bytes = 0
+                sensor_native_total_bytes = 0
+                data_variables: list[dict[str, Any]] = []
+                dtype_registry = SensorDtypeRegistry()
+
+                for item in items:
+                    ds_item = _odc_load([item], chunks={})
+                    if not isinstance(ds_item, xr.Dataset):
+                        continue
+
+                    collection_id = getattr(item, "collection_id", None)
+                    sensor_info = dtype_registry.get_info(collection_id)
+
+                    for name, da in ds_item.data_vars.items():
+                        try:
+                            shape = tuple(int(s) for s in getattr(da, "shape", ()))
+                            elems = 1
+                            for s in shape:
+                                elems *= s
+
+                            underlying = getattr(da, "data", None)
+                            nbytes = getattr(underlying, "nbytes", None)
+                            method = "computed"
+                            override_applied = False
+                            if nbytes is not None:
+                                size_bytes = int(nbytes)
+                                method = "nbytes"
+                                # Softer heuristic: if the reported dtype is a
+                                # floating type but the sensor registry suggests
+                                # an integer native dtype for this asset, produce
+                                # both reported and registry-corrected sizes so
+                                # callers can see both views and choose.
+                                try:
+                                    import numpy as np  # type: ignore[import]  # noqa: PLC0415 - guarded import
+
+                                    reported_dtype = getattr(da, "dtype", None)
+                                    override_dtype = None
+                                    if sensor_info is not None:
+                                        try:
+                                            override_dtype = (
+                                                sensor_info.get_dtype_for_asset(name)
+                                            )
+                                        except (AttributeError, TypeError, ValueError):
+                                            override_dtype = None
+
+                                    # Only consider registry correction when the
+                                    # reported dtype is a float and the registry
+                                    # suggests an integer dtype for this asset.
+                                    if (
+                                        reported_dtype is not None
+                                        and hasattr(reported_dtype, "kind")
+                                        and reported_dtype.kind == "f"
+                                        and override_dtype is not None
+                                        and np.issubdtype(override_dtype, np.integer)
+                                    ):
+                                        # Compute registry-corrected bytes (no
+                                        # side-effects on total_bytes; we keep the
+                                        # estimator's numeric total based on what
+                                        # xarray reports unless a caller requests
+                                        # otherwise).
+                                        try:
+                                            sensor_itemsize = int(
+                                                np.dtype(override_dtype).itemsize
+                                            )
+                                        except (TypeError, ValueError):
+                                            sensor_itemsize = 1
+                                        sensor_native_bytes = int(
+                                            elems * sensor_itemsize
+                                        )
+                                    else:
+                                        sensor_native_bytes = None
+                                except (ImportError, ModuleNotFoundError):
+                                    # If numpy missing, skip registry check.
+                                    sensor_native_bytes = None
+                            else:
+                                override_dtype = None
+                                if sensor_info is not None:
+                                    try:
+                                        override_dtype = (
+                                            sensor_info.get_dtype_for_asset(name)
+                                        )
+                                    except (AttributeError, TypeError, ValueError):
+                                        override_dtype = None
+
+                                dtype = getattr(da, "dtype", None)
+                                if override_dtype is not None:
+                                    dtype = override_dtype
+                                    override_applied = True
+
+                                itemsize = getattr(dtype, "itemsize", None)
+                                if itemsize is None:
+                                    try:
+                                        import numpy as np  # type: ignore[import]  # noqa: PLC0415 - guarded import
+
+                                        itemsize = (
+                                            np.dtype(dtype).itemsize
+                                            if dtype is not None
+                                            else 1
+                                        )
+                                    except (
+                                        ImportError,
+                                        ModuleNotFoundError,
+                                        TypeError,
+                                        ValueError,
+                                    ):
+                                        itemsize = 1
+                                size_bytes = int(elems * int(itemsize))
+
+                            total_bytes += size_bytes
+                            # sensor_native_total accumulates the sensor-native
+                            # bytes when available; otherwise fall back to the
+                            # reported/computed size_bytes so the sensor-native
+                            # total is a complete estimate.
+                            if (
+                                "sensor_native_bytes" in locals()
+                                and sensor_native_bytes is not None
+                            ):
+                                sensor_native_total_bytes += int(sensor_native_bytes)
+                            else:
+                                sensor_native_total_bytes += int(size_bytes)
+                            var_entry: dict[str, Any] = {
+                                "variable": name,
+                                "shape": shape,
+                                "elements": elems,
+                                "estimated_bytes": int(size_bytes),
+                                "dtype": str(getattr(da, "dtype", None)),
+                                "method": method,
+                                "override_applied": bool(override_applied),
+                            }
+                            # If we computed a registry-corrected bytes value
+                            # for float->integer recommendations, include both
+                            # values so callers can inspect and choose.
+                            if (
+                                "sensor_native_bytes" in locals()
+                                and sensor_native_bytes is not None
+                            ):
+                                var_entry["reported_bytes"] = int(size_bytes)
+                                var_entry["sensor_native_bytes"] = int(
+                                    sensor_native_bytes
+                                )
+                                var_entry["sensor_native_dtype"] = str(override_dtype)
+                                # Recommend the sensor-native value for
+                                # storage/instrument-native use-cases but do not
+                                # change the estimator total by default.
+                                var_entry["recommended"] = "sensor_native"
+                                var_entry["sensor_native_recommended"] = True
+
+                            data_variables.append(var_entry)
+                        except Exception as exc:  # noqa: BLE001 - defensive skip
+                            # Skip variables we cannot introspect but emit a
+                            # debug-level message so failures are visible in
+                            # debugging runs while avoiding noisy user logs.
+                            logger.debug(
+                                "Skipping variable %s due to error: %s", name, exc
+                            )
+                            continue
+                estimated_mb = total_bytes / (1024 * 1024)
+                estimated_gb = total_bytes / (1024 * 1024 * 1024)
+                sensor_native_estimated_mb = sensor_native_total_bytes / (1024 * 1024)
+                sensor_native_estimated_gb = sensor_native_total_bytes / (
+                    1024 * 1024 * 1024
+                )
+
+                # Summarize how many variables reported native .nbytes and how
+                # many have a sensor-native alternative included.
+                reported_nbytes_count = sum(
+                    1 for v in data_variables if v.get("method") == "nbytes"
+                )
+                sensor_native_corrections_count = sum(
+                    1
+                    for v in data_variables
+                    if v.get("sensor_native_bytes") is not None
+                )
+
+                parts = [
+                    "Estimated sizes computed using odc.stac/xarray.",
+                    f"Numeric total uses .data.nbytes: {int(total_bytes)} bytes",
+                    f"(~{round(estimated_gb, 4)} GB);",
+                    "sensor-native total (instrument-native) is",
+                    f"{int(sensor_native_total_bytes)} bytes",
+                    f"(~{round(sensor_native_estimated_gb, 4)} GB).",
+                    f"Reported .data.nbytes count: {reported_nbytes_count};",
+                    f"Sensor-native corrections: {sensor_native_corrections_count}.",
+                ]
+                message = " ".join(parts)
+
+                return {
+                    "item_count": len(items),
+                    "estimated_size_bytes": int(total_bytes),
+                    "estimated_size_mb": round(estimated_mb, 2),
+                    "estimated_size_gb": round(estimated_gb, 4),
+                    "sensor_native_estimated_size_bytes": int(
+                        sensor_native_total_bytes
+                    ),
+                    "sensor_native_estimated_size_mb": round(
+                        sensor_native_estimated_mb, 2
+                    ),
+                    "sensor_native_estimated_size_gb": round(
+                        sensor_native_estimated_gb, 4
+                    ),
+                    "bbox_used": bbox,
+                    "temporal_extent": datetime,
+                    "collections": collections
+                    or [getattr(item, "collection_id", None) for item in items],
+                    "clipped_to_aoi": bool(aoi_geojson),
+                    "data_variables": data_variables,
+                    "message": message,
+                }
+            except Exception:  # pragma: no cover - best-effort
+                # odc may fail when tests pass in lightweight objects; log and
+                # fall back to metadata/HEAD-based aggregation below.
+                logger.exception("odc.stac eager estimate failed")
+                odc_exc = True
+
+        # Fallback estimator: aggregate sizes from asset metadata (file:size)
+        # and, when missing, use HEAD requests to probe Content-Length. This
+        # path is exercised by unit tests and serves as a robust fallback
+        # when odc/xarray-based introspection is unavailable or fails.
+        total_bytes = 0
+        assets_analyzed: list[dict[str, Any]] = []
+        hrefs_to_probe: list[str] = []
 
         for item in items:
-            collection_id = getattr(item, "collection_id", None)
-            sensor_info = (
-                dtype_registry.get_info(collection_id) if dtype_registry else None
-            )
+            # Accept both dict-like and object items (tests use MagicMock)
+            assets = getattr(item, "assets", None) or {}
+            # assets may be a dict of asset objects or dicts
+            for name, asset in assets.items() if isinstance(assets, dict) else []:
+                try:
+                    a = self._asset_to_dict(asset)
+                    # First, try metadata-based size hints
+                    meta_size = self._size_from_metadata(a)
+                    if meta_size is not None:
+                        assets_analyzed.append(
+                            {
+                                "asset": name,
+                                "href": a.get("href"),
+                                "method": "metadata",
+                                "size": int(meta_size),
+                            }
+                        )
+                        total_bytes += int(meta_size)
+                        continue
 
-            for name, asset in getattr(item, "assets", {}).items():
-                asset_dict = self._asset_to_dict(asset)
-                media_type = (
-                    asset_dict.get("media_type") or asset_dict.get("type") or ""
-                ).lower()
+                    # If no metadata size, and we have an href, queue for HEAD
+                    href = a.get("href")
+                    if href:
+                        hrefs_to_probe.append(href)
+                        assets_analyzed.append(
+                            {
+                                "asset": name,
+                                "href": href,
+                                "method": "head",
+                                "size": None,
+                            }
+                        )
+                        continue
 
-                if sensor_info and sensor_info.should_ignore_asset(name, media_type):
-                    continue
-
-                bytes_found = self._size_from_metadata(asset_dict)
-                href = asset_dict.get("href")
-
-                if bytes_found is not None:
-                    total_bytes += bytes_found
-                    assets_info.append(
-                        {
-                            "asset": name,
-                            "media_type": media_type,
-                            "href": href,
-                            "estimated_size_bytes": bytes_found,
-                            "estimated_size_mb": round(bytes_found / (1024 * 1024), 2),
-                            "method": "metadata",
-                        }
+                    # Otherwise we couldn't analyze this asset
+                    assets_analyzed.append(
+                        {"asset": name, "href": None, "method": "failed", "size": None}
                     )
-                elif href:
-                    hrefs_to_head.append(href)
-                    asset_map[href] = {"name": name, "media_type": media_type}
+                except (AttributeError, TypeError, ValueError) as exc:
+                    logger.debug("Failed to normalize asset %s: %s", name, exc)
+                    assets_analyzed.append(
+                        {"asset": name, "href": None, "method": "failed", "size": None}
+                    )
 
-        if hrefs_to_head:
-            head_results = self._parallel_head_content_lengths(hrefs_to_head)
-            for href, size in head_results.items():
-                asset_details = asset_map[href]
-                if size is not None:
-                    total_bytes += size
-                    assets_info.append(
-                        {
-                            "asset": asset_details["name"],
-                            "media_type": asset_details["media_type"],
-                            "href": href,
-                            "estimated_size_bytes": size,
-                            "estimated_size_mb": round(size / (1024 * 1024), 2),
-                            "method": "head",
-                        }
-                    )
-                else:
-                    assets_info.append(
-                        {
-                            "asset": asset_details["name"],
-                            "media_type": asset_details["media_type"],
-                            "href": href,
-                            "estimated_size_bytes": 0,
-                            "estimated_size_mb": 0,
-                            "method": "failed",
-                        }
-                    )
+        # Probe hrefs in parallel (HEAD requests). _parallel_head_content_lengths
+        # returns a mapping href -> size | None.
+        if hrefs_to_probe:
+            try:
+                head_results = self._parallel_head_content_lengths(hrefs_to_probe)
+            except Exception as exc:  # pragma: no cover - defensive  # noqa: BLE001
+                logger.debug("HEAD probing failed: %s", exc)
+                head_results = dict.fromkeys(hrefs_to_probe)
+
+            # Fill in sizes for analyzed assets
+            for a in assets_analyzed:
+                if a.get("method") == "head" and a.get("href"):
+                    size = head_results.get(a["href"])
+                    if size is None:
+                        a["method"] = "failed"
+                        a["size"] = None
+                    else:
+                        a["size"] = int(size)
+                        total_bytes += int(size)
 
         estimated_mb = total_bytes / (1024 * 1024)
-        estimated_gb = total_bytes / (1024 * 1024 * 1024)
+        estimated_gb = total_bytes / (1024 * 1024 * 1024) if total_bytes else 0
 
+        message = (
+            "Estimated sizes computed using metadata/HEAD fallback. "
+            f"Total (metadata+HEAD) is {int(total_bytes)} bytes "
+            f"(~{round(estimated_gb, 4)} GB)."
+        )
         return {
             "item_count": len(items),
             "estimated_size_bytes": int(total_bytes),
@@ -823,12 +1107,8 @@ class STACClient:
             "collections": collections
             or [getattr(item, "collection_id", None) for item in items],
             "clipped_to_aoi": bool(aoi_geojson),
-            "assets_analyzed": assets_info,
-            "message": (
-                "Successfully estimated data size. "
-                "Note: aoi/bbox is used to filter items, "
-                "but the size estimate is for the full assets."
-            ),
+            "assets_analyzed": assets_analyzed,
+            "message": message,
         }
 
     def get_root_document(self) -> dict[str, Any]:
