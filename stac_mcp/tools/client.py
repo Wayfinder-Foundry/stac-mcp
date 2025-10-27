@@ -1230,9 +1230,11 @@ class STACClient:
                     "parameters": body,
                 }
             res_json = resp.json() if resp.content else {}
-            aggs_result = res_json.get("aggregations") or {}
+            aggs_result = res_json.get("aggregations")
+            if aggs_result is None:
+                aggs_result = {}
             return {
-                "supported": bool(aggs_result),
+                "supported": "aggregations" in res_json,
                 "aggregations": aggs_result,
                 # any additional metadata preserved
             }
