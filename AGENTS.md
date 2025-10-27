@@ -38,12 +38,29 @@ Public-API-first rule
 
 These rules keep behavior stable across upstream library upgrades and make code easier to test and maintain.
 
-Formatting & Linting - required commands before any commit/push:
-- `uv run ruff format stac-mcp/ test/ examples/`
-- `uv run ruff check stac-mcp/ tests/ examples/ --fix --no-cache`
-- `uv run pytest -v`
-All checks must pass - run `uv run ruff format ...` and `uv run ruff check...` multiple times to ensure the 
-formatting does not break the linting and vice-versa (because of --fix).
+**Formatting & Linting: Pre-Commit/Pre-Push Checklist**
+
+**MUST** run these commands and ensure they pass before every `git commit` and `git push`.
+
+1.  **Format Code:**
+    ```bash
+    uv run ruff format stac_mcp/ tests/ examples/
+    ```
+2.  **Lint and Auto-Fix:**
+    ```bash
+    uv run ruff check stac_mcp/ tests/ examples/ --fix --no-cache
+    ```
+3.  **Run Tests:**
+    ```bash
+    uv run pytest -q
+    ```
+4.  **Verify Test Coverage:**
+    ```bash
+    uv run coverage run -m pytest -v
+    uv run coverage report --fail-below=85
+    ```
+
+**IMPORTANT:** Run the `ruff format` and `ruff check` commands multiple times in sequence to ensure all issues are resolved, as auto-fixing can sometimes introduce new formatting needs.
 
 Testing & validation
 - Write tests for behavior, not implementation; prefer parametrized tests for similar cases.

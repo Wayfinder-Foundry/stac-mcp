@@ -176,14 +176,14 @@ def handle_estimate_data_size(
         else "All"
     )
     result_text += f"{collections_list}\n"
-    if size_estimate.get("bbox_used"):
+    if size_estimate["bbox_used"]:
         b = size_estimate["bbox_used"]
         result_text += (
             f"Bounding box: [{b[0]:.4f}, {b[1]:.4f}, {b[2]:.4f}, {b[3]:.4f}]\n"
         )
-    if size_estimate.get("temporal_extent"):
+    if size_estimate["temporal_extent"]:
         result_text += f"Time range: {size_estimate['temporal_extent']}\n"
-    if size_estimate.get("clipped_to_aoi"):
+    if size_estimate["clipped_to_aoi"]:
         result_text += "Clipped to AOI: Yes (minimized to smallest area)\n"
     if "data_variables" in size_estimate:
         result_text += "\n**Data Variables:**\n"
