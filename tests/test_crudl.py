@@ -11,6 +11,9 @@ import requests
 
 from stac_mcp.tools.crudl import CRUDL
 
+# Constants for magic numbers
+TWO = 2
+
 
 def _get_pystac_from_sys():
     """Get pystac module from sys.modules when mocked."""
@@ -413,7 +416,7 @@ def test_list_items_remote(mock_get, crudl_manager, sample_item):
 
 def test_manager_with_api_key(crudl_manager_with_key):
     """Test CRUDL with API key."""
-    headers = crudl_manager_with_key._get_headers()
+    headers = crudl_manager_with_key._get_headers()  # noqa: SLF001
     assert "Authorization" in headers
     assert headers["Authorization"] == "Bearer test-api-key"
 
@@ -423,14 +426,14 @@ def test_manager_with_env_api_key():
     """Test CRUDL with API key from environment."""
 
     manager = CRUDL()
-    headers = manager._get_headers()
+    headers = manager._get_headers()  # noqa: SLF001
     assert "Authorization" in headers
     assert headers["Authorization"] == "Bearer env-api-key"
 
 
 def test_manager_without_api_key(crudl_manager):
     """Test CRUDL without API key."""
-    headers = crudl_manager._get_headers()
+    headers = crudl_manager._get_headers()  # noqa: SLF001
     assert "Authorization" not in headers
 
 
@@ -440,7 +443,7 @@ def test_manager_without_api_key(crudl_manager):
 def test_write_json_file_remote(crudl_manager, sample_catalog):
     """Test writing JSON to remote URL."""
     with patch("requests.put") as mock_put:
-        crudl_manager._write_json_file(
+        crudl_manager._write_json_file(  # noqa: SLF001
             "https://example.com/catalog.json", sample_catalog
         )
 
@@ -450,7 +453,7 @@ def test_write_json_file_remote(crudl_manager, sample_catalog):
 def test_delete_file_remote(crudl_manager):
     """Test deleting a remote resource."""
     with patch("requests.delete") as mock_delete:
-        crudl_manager._delete_file("https://example.com/catalog.json")
+        crudl_manager._delete_file("https://example.com/catalog.json")  # noqa: SLF001
 
         mock_delete.assert_called_once()
 
@@ -475,7 +478,7 @@ def test_list_catalogs_local_with_directory(crudl_manager, tmp_path, sample_cata
 
         result = crudl_manager.list_catalogs(str(tmp_path))
 
-        assert len(result) == 2
+        assert len(result) == TWO
 
 
 def test_list_catalogs_local_with_error(crudl_manager, tmp_path):
@@ -496,7 +499,7 @@ def test_list_catalogs_local_with_error(crudl_manager, tmp_path):
             result = crudl_manager.list_catalogs(str(tmp_path))
 
             # Should return empty list and log warning
-            assert result == []
+            assert not result
             mock_logger.warning.assert_called()
 
 
@@ -522,7 +525,7 @@ def test_list_collections_local_with_directory(
 
         result = crudl_manager.list_collections(str(tmp_path))
 
-        assert len(result) == 2
+        assert len(result) == TWO
 
 
 def test_list_items_local_with_directory(crudl_manager, tmp_path, sample_item):
@@ -542,7 +545,7 @@ def test_list_items_local_with_directory(crudl_manager, tmp_path, sample_item):
 
         result = crudl_manager.list_items(str(tmp_path))
 
-        assert len(result) == 2
+        assert len(result) == TWO
 
 
 def test_update_collection_remote(crudl_manager, sample_collection):
@@ -610,10 +613,11 @@ def test_delete_item_remote(crudl_manager):
 
 def test_import_error_on_missing_pystac(crudl_manager, monkeypatch):
     """Test error handling when pystac is not installed."""
+    _no_pystac = "No module named 'pystac'"
 
     def mock_import(name, *args, **kwargs):
         if name == "pystac":
-            raise ImportError("No module named 'pystac'")
+            raise ImportError(_no_pystac)
         return __import__(name, *args, **kwargs)
 
     monkeypatch.setattr("builtins.__import__", mock_import)
@@ -651,13 +655,13 @@ def test_remote_read_write_delete_errors(mock_delete, mock_put, mock_get):
     mock_delete.side_effect = requests.exceptions.RequestException("Request failed")
 
     with pytest.raises(requests.exceptions.RequestException):
-        manager._read_json_file(url)
+        manager._read_json_file(url)  # noqa: SLF001
 
     with pytest.raises(requests.exceptions.RequestException):
-        manager._write_json_file(url, {})
+        manager._write_json_file(url, {})  # noqa: SLF001
 
     with pytest.raises(requests.exceptions.RequestException):
-        manager._delete_file(url)
+        manager._delete_file(url)  # noqa: SLF001
 
 
 def test_list_collections_local_with_error(crudl_manager, tmp_path):
@@ -675,7 +679,7 @@ def test_list_collections_local_with_error(crudl_manager, tmp_path):
         )
         with patch("stac_mcp.tools.crudl.logger") as mock_logger:
             result = crudl_manager.list_collections(str(tmp_path))
-            assert result == []
+            assert not result
             mock_logger.warning.assert_called_once()
 
 
@@ -692,5 +696,5 @@ def test_list_items_local_with_error(crudl_manager, tmp_path):
         sys.modules["pystac"].Item.from_file.side_effect = Exception("Invalid JSON")
         with patch("stac_mcp.tools.crudl.logger") as mock_logger:
             result = crudl_manager.list_items(str(tmp_path))
-            assert result == []
+            assert not result
             mock_logger.warning.assert_called_once()
