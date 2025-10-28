@@ -17,6 +17,7 @@ from mcp.types import TextContent
 
 from stac_mcp.observability import instrument_tool_execution, record_tool_result_size
 from stac_mcp.tools.client import STACClient
+from stac_mcp.tools.crudl import CRUDL
 from stac_mcp.tools.estimate_data_size import handle_estimate_data_size
 from stac_mcp.tools.get_aggregations import handle_get_aggregations
 from stac_mcp.tools.get_collection import handle_get_collection
@@ -25,33 +26,24 @@ from stac_mcp.tools.get_item import handle_get_item
 from stac_mcp.tools.get_queryables import handle_get_queryables
 from stac_mcp.tools.get_root import handle_get_root
 from stac_mcp.tools.pystac_handlers import (
-    handle_pystac_create_catalog,
-    handle_pystac_create_collection,
-    handle_pystac_create_item,
-    handle_pystac_delete_catalog,
-    handle_pystac_delete_collection,
-    handle_pystac_delete_item,
-    handle_pystac_list_catalogs,
-    handle_pystac_list_collections,
-    handle_pystac_list_items,
-    handle_pystac_read_catalog,
-    handle_pystac_read_collection,
-    handle_pystac_read_item,
-    handle_pystac_update_catalog,
-    handle_pystac_update_collection,
-    handle_pystac_update_item,
-)
-from stac_mcp.tools.pystac_management import PySTACManager
-from stac_mcp.tools.search_collections import handle_search_collections
-from stac_mcp.tools.search_items import handle_search_items
-from stac_mcp.tools.transactions import (
+    handle_create_catalog,
     handle_create_collection,
     handle_create_item,
+    handle_delete_catalog,
     handle_delete_collection,
     handle_delete_item,
+    handle_list_catalogs,
+    handle_list_collections,
+    handle_list_items,
+    handle_read_catalog,
+    handle_read_collection,
+    handle_read_item,
+    handle_update_catalog,
     handle_update_collection,
     handle_update_item,
 )
+from stac_mcp.tools.search_collections import handle_search_collections
+from stac_mcp.tools.search_items import handle_search_items
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +65,27 @@ class Session:
 
 
 Handler = Callable[
-    [STACClient, dict[str, Any]],
+    [STACClient | CRUDL, dict[str, Any]],
     list[TextContent] | dict[str, Any],
 ]
+
+_CRUDL_HANDLERS: dict[str, Callable] = {
+    "create_catalog": handle_create_catalog,
+    "read_catalog": handle_read_catalog,
+    "update_catalog": handle_update_catalog,
+    "delete_catalog": handle_delete_catalog,
+    "list_catalogs": handle_list_catalogs,
+    "create_collection": handle_create_collection,
+    "read_collection": handle_read_collection,
+    "update_collection": handle_update_collection,
+    "delete_collection": handle_delete_collection,
+    "list_collections": handle_list_collections,
+    "create_item": handle_create_item,
+    "read_item": handle_read_item,
+    "update_item": handle_update_item,
+    "delete_item": handle_delete_item,
+    "list_items": handle_list_items,
+}
 
 
 _TOOL_HANDLERS: dict[str, Handler] = {
@@ -88,37 +98,13 @@ _TOOL_HANDLERS: dict[str, Handler] = {
     "get_conformance": handle_get_conformance,
     "get_queryables": handle_get_queryables,
     "get_aggregations": handle_get_aggregations,
-    "create_item": handle_create_item,
-    "update_item": handle_update_item,
-    "delete_item": handle_delete_item,
-    "create_collection": handle_create_collection,
-    "update_collection": handle_update_collection,
-    "delete_collection": handle_delete_collection,
-}
-
-# PySTAC-based CRUDL handlers (use PySTACManager instead of STACClient)
-_PYSTAC_TOOL_HANDLERS: dict[str, Callable] = {
-    "pystac_create_catalog": handle_pystac_create_catalog,
-    "pystac_read_catalog": handle_pystac_read_catalog,
-    "pystac_update_catalog": handle_pystac_update_catalog,
-    "pystac_delete_catalog": handle_pystac_delete_catalog,
-    "pystac_list_catalogs": handle_pystac_list_catalogs,
-    "pystac_create_collection": handle_pystac_create_collection,
-    "pystac_read_collection": handle_pystac_read_collection,
-    "pystac_update_collection": handle_pystac_update_collection,
-    "pystac_delete_collection": handle_pystac_delete_collection,
-    "pystac_list_collections": handle_pystac_list_collections,
-    "pystac_create_item": handle_pystac_create_item,
-    "pystac_read_item": handle_pystac_read_item,
-    "pystac_update_item": handle_pystac_update_item,
-    "pystac_delete_item": handle_pystac_delete_item,
-    "pystac_list_items": handle_pystac_list_items,
+    **_CRUDL_HANDLERS,
 }
 
 
 def _raise_unknown_tool(name: str) -> NoReturn:
     """Raise a standardized error for unknown tool names."""
-    _tools = list(_TOOL_HANDLERS.keys()) + list(_PYSTAC_TOOL_HANDLERS.keys())
+    _tools = list(_TOOL_HANDLERS.keys())
     msg = f"Unknown tool: {name}. Available tools: {_tools}"
     raise ValueError(msg)
 
@@ -194,23 +180,18 @@ async def execute_tool(
     """
     arguments = dict(arguments or {})
 
-    # Check if this is a pystac tool
-    is_pystac_tool = tool_name in _PYSTAC_TOOL_HANDLERS
+    is_crudl_tool = tool_name in _CRUDL_HANDLERS
 
     if handler is None:
-        if is_pystac_tool:
-            handler = _PYSTAC_TOOL_HANDLERS.get(tool_name)
-        else:
-            handler = _TOOL_HANDLERS.get(tool_name)
+        handler = _TOOL_HANDLERS.get(tool_name)
         if handler is None:
             _raise_unknown_tool(tool_name)
 
-    # PySTAC tools use PySTACManager instead of STACClient
     # Offload handler execution to a thread to avoid blocking the async event loop
     # (handlers may perform network I/O or heavy CPU work like odc.stac.load).
 
-    if is_pystac_tool:
-        manager = PySTACManager()
+    if is_crudl_tool:
+        manager = CRUDL()
         # Run the handler under the instrumented wrapper in a thread
         instrumented = await asyncio.to_thread(
             instrument_tool_execution,

@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from stac_mcp.tools.pystac_management import PySTACManager
+    from stac_mcp.tools.crudl import CRUDL
 
 
 # ======================== Catalog Handlers ========================
 
 
-def handle_pystac_create_catalog(
-    manager: PySTACManager,
+def handle_create_catalog(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle creating a STAC Catalog using pystac."""
@@ -23,8 +23,8 @@ def handle_pystac_create_catalog(
     return manager.create_catalog(path, catalog_id, description, title)
 
 
-def handle_pystac_read_catalog(
-    manager: PySTACManager,
+def handle_read_catalog(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle reading a STAC Catalog using pystac."""
@@ -32,8 +32,8 @@ def handle_pystac_read_catalog(
     return manager.read_catalog(path)
 
 
-def handle_pystac_update_catalog(
-    manager: PySTACManager,
+def handle_update_catalog(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle updating a STAC Catalog using pystac."""
@@ -42,8 +42,8 @@ def handle_pystac_update_catalog(
     return manager.update_catalog(path, catalog)
 
 
-def handle_pystac_delete_catalog(
-    manager: PySTACManager,
+def handle_delete_catalog(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle deleting a STAC Catalog using pystac."""
@@ -51,8 +51,8 @@ def handle_pystac_delete_catalog(
     return manager.delete_catalog(path)
 
 
-def handle_pystac_list_catalogs(
-    manager: PySTACManager,
+def handle_list_catalogs(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle listing STAC Catalogs using pystac."""
@@ -64,8 +64,8 @@ def handle_pystac_list_catalogs(
 # ======================== Collection Handlers ========================
 
 
-def handle_pystac_create_collection(
-    manager: PySTACManager,
+def handle_create_collection(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle creating a STAC Collection using pystac."""
@@ -74,8 +74,8 @@ def handle_pystac_create_collection(
     return manager.create_collection(path, collection)
 
 
-def handle_pystac_read_collection(
-    manager: PySTACManager,
+def handle_read_collection(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle reading a STAC Collection using pystac."""
@@ -83,8 +83,8 @@ def handle_pystac_read_collection(
     return manager.read_collection(path)
 
 
-def handle_pystac_update_collection(
-    manager: PySTACManager,
+def handle_update_collection(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle updating a STAC Collection using pystac."""
@@ -93,8 +93,8 @@ def handle_pystac_update_collection(
     return manager.update_collection(path, collection)
 
 
-def handle_pystac_delete_collection(
-    manager: PySTACManager,
+def handle_delete_collection(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle deleting a STAC Collection using pystac."""
@@ -102,8 +102,8 @@ def handle_pystac_delete_collection(
     return manager.delete_collection(path)
 
 
-def handle_pystac_list_collections(
-    manager: PySTACManager,
+def handle_list_collections(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle listing STAC Collections using pystac."""
@@ -115,8 +115,8 @@ def handle_pystac_list_collections(
 # ======================== Item Handlers ========================
 
 
-def handle_pystac_create_item(
-    manager: PySTACManager,
+def handle_create_item(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle creating a STAC Item using pystac."""
@@ -125,8 +125,8 @@ def handle_pystac_create_item(
     return manager.create_item(path, item)
 
 
-def handle_pystac_read_item(
-    manager: PySTACManager,
+def handle_read_item(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle reading a STAC Item using pystac."""
@@ -134,8 +134,8 @@ def handle_pystac_read_item(
     return manager.read_item(path)
 
 
-def handle_pystac_update_item(
-    manager: PySTACManager,
+def handle_update_item(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle updating a STAC Item using pystac."""
@@ -144,8 +144,8 @@ def handle_pystac_update_item(
     return manager.update_item(path, item)
 
 
-def handle_pystac_delete_item(
-    manager: PySTACManager,
+def handle_delete_item(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle deleting a STAC Item using pystac."""
@@ -153,8 +153,8 @@ def handle_pystac_delete_item(
     return manager.delete_item(path)
 
 
-def handle_pystac_list_items(
-    manager: PySTACManager,
+def handle_list_items(
+    manager: CRUDL,
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle listing STAC Items using pystac."""

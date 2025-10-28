@@ -1,40 +1,23 @@
-"""PySTAC-based CRUDL operations for STAC catalogs, collections, and items.
-
-This module provides Create, Read, Update, Delete, and List operations using
-pystac for both local (filesystem) and remote (HTTP/S) STAC resources.
-This complements the existing transaction tools (which use pystac-client for
-remote API transactions only).
-
-Key differences from transaction tools:
-- Uses pystac for direct object manipulation (local and remote)
-- Supports local filesystem operations
-- Supports STAC_API_KEY environment variable for authenticated remote requests
-- Provides full CRUDL operations (including List)
-"""
+"""A unified class for STAC transactional operations."""
 
 from __future__ import annotations
 
 import json
 import logging
 import os
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any
+
+import requests
 
 logger = logging.getLogger(__name__)
 
 
-class PySTACManager:
-    """Manager for pystac-based CRUDL operations on STAC resources."""
+class CRUDL:
+    """A unified interface for all transactional operations."""
 
     def __init__(self, api_key: str | None = None) -> None:
-        """Initialize PySTAC manager.
-
-        Args:
-            api_key: Optional API key for authenticated remote requests.
-                     If not provided, will check STAC_API_KEY env variable.
-        """
+        """Initialize the CRUDL class."""
         self.api_key = api_key or os.getenv("STAC_API_KEY")
 
     def _get_headers(self) -> dict[str, str]:
@@ -51,11 +34,9 @@ class PySTACManager:
     def _read_json_file(self, path: str) -> dict[str, Any]:
         """Read JSON from local file or remote URL."""
         if self._is_remote(path):
-            req = urllib.request.Request(  # noqa: S310
-                path, headers=self._get_headers()
-            )
-            with urllib.request.urlopen(req) as response:  # noqa: S310
-                return json.loads(response.read().decode("utf-8"))
+            response = requests.get(path, headers=self._get_headers(), timeout=30)
+            response.raise_for_status()
+            return response.json()
         else:
             with Path(path).open("r") as f:
                 return json.load(f)
@@ -63,13 +44,13 @@ class PySTACManager:
     def _write_json_file(self, path: str, data: dict[str, Any]) -> None:
         """Write JSON to local file or remote URL."""
         if self._is_remote(path):
-            req = urllib.request.Request(  # noqa: S310
+            response = requests.put(
                 path,
                 data=json.dumps(data).encode("utf-8"),
                 headers=self._get_headers(),
-                method="PUT",
+                timeout=30,
             )
-            urllib.request.urlopen(req)  # noqa: S310
+            response.raise_for_status()
         else:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             with Path(path).open("w") as f:
@@ -78,12 +59,8 @@ class PySTACManager:
     def _delete_file(self, path: str) -> None:
         """Delete local file or remote resource."""
         if self._is_remote(path):
-            req = urllib.request.Request(  # noqa: S310
-                path,
-                headers=self._get_headers(),
-                method="DELETE",
-            )
-            urllib.request.urlopen(req)  # noqa: S310
+            response = requests.delete(path, headers=self._get_headers(), timeout=30)
+            response.raise_for_status()
         else:
             Path(path).unlink(missing_ok=True)
 
@@ -122,14 +99,14 @@ class PySTACManager:
 
         if self._is_remote(path):
             # For remote, POST to endpoint
-            req = urllib.request.Request(  # noqa: S310
+            response = requests.post(
                 path,
                 data=json.dumps(catalog_dict).encode("utf-8"),
                 headers=self._get_headers(),
-                method="POST",
+                timeout=30,
             )
-            with urllib.request.urlopen(req) as response:  # noqa: S310
-                return json.loads(response.read().decode("utf-8"))
+            response.raise_for_status()
+            return response.json()
         else:
             # For local, save to file
             catalog.normalize_hrefs(str(Path(path).parent))
@@ -180,14 +157,14 @@ class PySTACManager:
         catalog = pystac.Catalog.from_dict(catalog_dict)
 
         if self._is_remote(path):
-            req = urllib.request.Request(  # noqa: S310
+            response = requests.put(
                 path,
                 data=json.dumps(catalog_dict).encode("utf-8"),
                 headers=self._get_headers(),
-                method="PUT",
+                timeout=30,
             )
-            with urllib.request.urlopen(req) as response:  # noqa: S310
-                return json.loads(response.read().decode("utf-8"))
+            response.raise_for_status()
+            return response.json()
         else:
             catalog.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
             return catalog.to_dict()
@@ -215,22 +192,20 @@ class PySTACManager:
         """
         if self._is_remote(base_path):
             # For remote, fetch catalog list from API
-            req = urllib.request.Request(  # noqa: S310
-                base_path, headers=self._get_headers()
-            )
-            with urllib.request.urlopen(req) as response:  # noqa: S310
-                data = json.loads(response.read().decode("utf-8"))
-                # Handle different API responses
-                if "catalogs" in data:
-                    return data["catalogs"]
-                if "links" in data:
-                    # Extract child catalogs from links
-                    return [
-                        link
-                        for link in data["links"]
-                        if link.get("rel") in ("child", "catalog")
-                    ]
-                return [data]
+            response = requests.get(base_path, headers=self._get_headers(), timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            # Handle different API responses
+            if "catalogs" in data:
+                return data["catalogs"]
+            if "links" in data:
+                # Extract child catalogs from links
+                return [
+                    link
+                    for link in data["links"]
+                    if link.get("rel") in ("child", "catalog")
+                ]
+            return [data]
         else:
             # For local, scan directory for catalog.json files
             catalogs = []
@@ -268,14 +243,14 @@ class PySTACManager:
         collection = pystac.Collection.from_dict(collection_dict)
 
         if self._is_remote(path):
-            req = urllib.request.Request(  # noqa: S310
+            response = requests.post(
                 path,
                 data=json.dumps(collection_dict).encode("utf-8"),
                 headers=self._get_headers(),
-                method="POST",
+                timeout=30,
             )
-            with urllib.request.urlopen(req) as response:  # noqa: S310
-                return json.loads(response.read().decode("utf-8"))
+            response.raise_for_status()
+            return response.json()
         else:
             collection.normalize_hrefs(str(Path(path).parent))
             collection.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
@@ -322,14 +297,14 @@ class PySTACManager:
         collection = pystac.Collection.from_dict(collection_dict)
 
         if self._is_remote(path):
-            req = urllib.request.Request(  # noqa: S310
+            response = requests.put(
                 path,
                 data=json.dumps(collection_dict).encode("utf-8"),
                 headers=self._get_headers(),
-                method="PUT",
+                timeout=30,
             )
-            with urllib.request.urlopen(req) as response:  # noqa: S310
-                return json.loads(response.read().decode("utf-8"))
+            response.raise_for_status()
+            return response.json()
         else:
             collection.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
             return collection.to_dict()
@@ -357,14 +332,12 @@ class PySTACManager:
         """
         if self._is_remote(base_path):
             # For remote, fetch collections from API
-            req = urllib.request.Request(  # noqa: S310
-                base_path, headers=self._get_headers()
-            )
-            with urllib.request.urlopen(req) as response:  # noqa: S310
-                data = json.loads(response.read().decode("utf-8"))
-                if "collections" in data:
-                    return data["collections"]
-                return [data]
+            response = requests.get(base_path, headers=self._get_headers(), timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            if "collections" in data:
+                return data["collections"]
+            return [data]
         else:
             # For local, scan directory for collection.json files
             collections = []
@@ -404,14 +377,14 @@ class PySTACManager:
         item = pystac.Item.from_dict(item_dict)
 
         if self._is_remote(path):
-            req = urllib.request.Request(  # noqa: S310
+            response = requests.post(
                 path,
                 data=json.dumps(item_dict).encode("utf-8"),
                 headers=self._get_headers(),
-                method="POST",
+                timeout=30,
             )
-            with urllib.request.urlopen(req) as response:  # noqa: S310
-                return json.loads(response.read().decode("utf-8"))
+            response.raise_for_status()
+            return response.json()
         else:
             item.save_object(dest_href=path)
             return item.to_dict()
@@ -457,14 +430,14 @@ class PySTACManager:
         item = pystac.Item.from_dict(item_dict)
 
         if self._is_remote(path):
-            req = urllib.request.Request(  # noqa: S310
+            response = requests.put(
                 path,
                 data=json.dumps(item_dict).encode("utf-8"),
                 headers=self._get_headers(),
-                method="PUT",
+                timeout=30,
             )
-            with urllib.request.urlopen(req) as response:  # noqa: S310
-                return json.loads(response.read().decode("utf-8"))
+            response.raise_for_status()
+            return response.json()
         else:
             item.save_object(dest_href=path)
             return item.to_dict()
@@ -492,16 +465,14 @@ class PySTACManager:
         """
         if self._is_remote(base_path):
             # For remote, fetch items from API
-            req = urllib.request.Request(  # noqa: S310
-                base_path, headers=self._get_headers()
-            )
-            with urllib.request.urlopen(req) as response:  # noqa: S310
-                data = json.loads(response.read().decode("utf-8"))
-                if "features" in data:
-                    return data["features"]
-                if "items" in data:
-                    return data["items"]
-                return [data]
+            response = requests.get(base_path, headers=self._get_headers(), timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            if "features" in data:
+                return data["features"]
+            if "items" in data:
+                return data["items"]
+            return [data]
         else:
             # For local, scan directory for item JSON files
             items = []
@@ -518,4 +489,4 @@ class PySTACManager:
 
 
 # Global instance for convenience
-pystac_manager = PySTACManager()
+crudl_manager = CRUDL()
