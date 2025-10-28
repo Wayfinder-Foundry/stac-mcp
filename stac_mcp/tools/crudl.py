@@ -47,9 +47,8 @@ class CRUDL:
             response = requests.get(path, headers=self._get_headers(), timeout=30)
             response.raise_for_status()
             return response.json()
-        else:
-            with Path(path).open("r") as f:
-                return json.load(f)
+        with Path(path).open("r") as f:
+            return json.load(f)
 
     def _write_json_file(self, path: str, data: dict[str, Any]) -> None:
         """Write JSON to local file or remote URL."""
@@ -117,11 +116,10 @@ class CRUDL:
             )
             response.raise_for_status()
             return response.json()
-        else:
-            # For local, save to file
-            catalog.normalize_hrefs(str(Path(path).parent))
-            catalog.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
-            return catalog_dict
+        # For local, save to file
+        catalog.normalize_hrefs(str(Path(path).parent))
+        catalog.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
+        return catalog_dict
 
     def read_catalog(self, path: str) -> dict[str, Any]:
         """Read a STAC Catalog.
@@ -175,9 +173,8 @@ class CRUDL:
             )
             response.raise_for_status()
             return response.json()
-        else:
-            catalog.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
-            return catalog.to_dict()
+        catalog.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
+        return catalog.to_dict()
 
     def delete_catalog(self, path: str) -> dict[str, Any]:
         """Delete a STAC Catalog.
@@ -216,17 +213,16 @@ class CRUDL:
                     if link.get("rel") in ("child", "catalog")
                 ]
             return [data]
-        else:
-            # For local, scan directory for catalog.json files
-            catalogs = []
-            base = Path(base_path)
-            if base.is_dir():
-                for catalog_file in base.rglob("catalog.json"):
-                    try:
-                        catalogs.append(self.read_catalog(str(catalog_file)))
-                    except Exception as e:  # noqa: BLE001
-                        logger.warning("Failed to read catalog %s: %s", catalog_file, e)
-            return catalogs
+        # For local, scan directory for catalog.json files
+        catalogs = []
+        base = Path(base_path)
+        if base.is_dir():
+            for catalog_file in base.rglob("catalog.json"):
+                try:
+                    catalogs.append(self.read_catalog(str(catalog_file)))
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("Failed to read catalog %s: %s", catalog_file, e)
+        return catalogs
 
     # ======================== Collection Operations ========================
 
@@ -261,10 +257,9 @@ class CRUDL:
             )
             response.raise_for_status()
             return response.json()
-        else:
-            collection.normalize_hrefs(str(Path(path).parent))
-            collection.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
-            return collection.to_dict()
+        collection.normalize_hrefs(str(Path(path).parent))
+        collection.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
+        return collection.to_dict()
 
     def read_collection(self, path: str) -> dict[str, Any]:
         """Read a STAC Collection.
@@ -316,9 +311,8 @@ class CRUDL:
             )
             response.raise_for_status()
             return response.json()
-        else:
-            collection.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
-            return collection.to_dict()
+        collection.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
+        return collection.to_dict()
 
     def delete_collection(self, path: str) -> dict[str, Any]:
         """Delete a STAC Collection.
@@ -349,19 +343,18 @@ class CRUDL:
             if "collections" in data:
                 return data["collections"]
             return [data]
-        else:
-            # For local, scan directory for collection.json files
-            collections = []
-            base = Path(base_path)
-            if base.is_dir():
-                for collection_file in base.rglob("collection.json"):
-                    try:
-                        collections.append(self.read_collection(str(collection_file)))
-                    except Exception as e:  # noqa: BLE001
-                        logger.warning(
-                            "Failed to read collection %s: %s", collection_file, e
-                        )
-            return collections
+        # For local, scan directory for collection.json files
+        collections = []
+        base = Path(base_path)
+        if base.is_dir():
+            for collection_file in base.rglob("collection.json"):
+                try:
+                    collections.append(self.read_collection(str(collection_file)))
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to read collection %s: %s", collection_file, e
+                    )
+        return collections
 
     # ======================== Item Operations ========================
 
@@ -396,9 +389,8 @@ class CRUDL:
             )
             response.raise_for_status()
             return response.json()
-        else:
-            item.save_object(dest_href=path)
-            return item.to_dict()
+        item.save_object(dest_href=path)
+        return item.to_dict()
 
     def read_item(self, path: str) -> dict[str, Any]:
         """Read a STAC Item.
@@ -449,9 +441,8 @@ class CRUDL:
             )
             response.raise_for_status()
             return response.json()
-        else:
-            item.save_object(dest_href=path)
-            return item.to_dict()
+        item.save_object(dest_href=path)
+        return item.to_dict()
 
     def delete_item(self, path: str) -> dict[str, Any]:
         """Delete a STAC Item.
@@ -484,19 +475,18 @@ class CRUDL:
             if "items" in data:
                 return data["items"]
             return [data]
-        else:
-            # For local, scan directory for item JSON files
-            items = []
-            base = Path(base_path)
-            if base.is_dir():
-                # Look for .json files that are not catalog.json or collection.json
-                for item_file in base.rglob("*.json"):
-                    if item_file.name not in ("catalog.json", "collection.json"):
-                        try:
-                            items.append(self.read_item(str(item_file)))
-                        except Exception as e:  # noqa: BLE001
-                            logger.warning("Failed to read item %s: %s", item_file, e)
-            return items
+        # For local, scan directory for item JSON files
+        items = []
+        base = Path(base_path)
+        if base.is_dir():
+            # Look for .json files that are not catalog.json or collection.json
+            for item_file in base.rglob("*.json"):
+                if item_file.name not in ("catalog.json", "collection.json"):
+                    try:
+                        items.append(self.read_item(str(item_file)))
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning("Failed to read item %s: %s", item_file, e)
+        return items
 
 
 # Global instance for convenience

@@ -195,9 +195,7 @@ async def execute_tool(
         crudl_headers = headers
         if not crudl_headers and api_key:
             crudl_headers = {"x-api-key": api_key}
-        manager = CRUDL(
-            catalog_url=catalog_url, api_key=api_key, headers=crudl_headers
-        )
+        manager = CRUDL(catalog_url=catalog_url, api_key=api_key, headers=crudl_headers)
         # Run the handler under the instrumented wrapper in a thread
         instrumented = await asyncio.to_thread(
             instrument_tool_execution,
