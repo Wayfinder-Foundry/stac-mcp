@@ -7,7 +7,12 @@ async def test_create_item(stac_test_server, default_catalog_url):
     client = stac_test_server["client"]
 
     async with client:
-        payload = {"id": "test-create-1", "type": "Feature", "properties": {}}
+        payload = {
+            "id": "test-create-1",
+            "type": "Feature",
+            "properties": {"datetime": "2021-01-01T00:00:00Z"},
+            "stac_version": "1.0.0",
+        }
         result = await client.call_tool(
             "create_item",
             {
@@ -45,7 +50,8 @@ async def test_update_and_delete_item(stac_test_server, default_catalog_url):
                     "item": {
                         "id": "test-create-1",
                         "type": "Feature",
-                        "properties": {},
+                        "properties": {"datetime": "2021-01-01T00:00:00Z"},
+                        "stac_version": "1.0.0",
                     },
                     "api_key": api_key,
                     "catalog_url": default_catalog_url,
@@ -56,8 +62,9 @@ async def test_update_and_delete_item(stac_test_server, default_catalog_url):
         updated = {
             "id": "test-create-1",
             "type": "Feature",
-            "properties": {"foo": "bar"},
+            "properties": {"foo": "bar", "datetime": "2021-01-01T00:00:00Z"},
             "collection": "vancouver-subaoi-collection",
+            "stac_version": "1.0.0",
         }
         result = await client.call_tool(
             "update_item",

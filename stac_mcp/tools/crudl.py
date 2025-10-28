@@ -16,12 +16,22 @@ logger = logging.getLogger(__name__)
 class CRUDL:
     """A unified interface for all transactional operations."""
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        catalog_url: str | None = None,
+        api_key: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         """Initialize the CRUDL class."""
+        self.catalog_url = catalog_url
         self.api_key = api_key or os.getenv("STAC_API_KEY")
+        self.headers = headers
 
     def _get_headers(self) -> dict[str, str]:
         """Get HTTP headers including API key if available."""
+        if self.headers:
+            return self.headers
+
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -297,7 +307,8 @@ class CRUDL:
         collection = pystac.Collection.from_dict(collection_dict)
 
         if self._is_remote(path):
-            response = requests.put(
+            # The test server uses POST for collection updates
+            response = requests.post(
                 path,
                 data=json.dumps(collection_dict).encode("utf-8"),
                 headers=self._get_headers(),

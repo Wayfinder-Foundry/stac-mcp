@@ -549,7 +549,7 @@ def test_update_collection_remote(crudl_manager, sample_collection):
     """Test updating a remote collection."""
     with (
         patch.dict("sys.modules", {"pystac": MagicMock()}),
-        patch("requests.put") as mock_put,
+        patch("requests.post") as mock_post,
     ):
         mock_coll = MagicMock()
         mock_coll.to_dict.return_value = sample_collection
@@ -557,7 +557,7 @@ def test_update_collection_remote(crudl_manager, sample_collection):
 
         mock_response = MagicMock()
         mock_response.json.return_value = sample_collection
-        mock_put.return_value = mock_response
+        mock_post.return_value = mock_response
 
         result = crudl_manager.update_collection(
             "https://example.com/collections/test", sample_collection
