@@ -44,22 +44,27 @@ python examples/example_usage.py
 ## Validation
 
 ### Always Run These Validation Steps After Making Changes
-1. **Format and lint code** (required for CI to pass):
-   ```bash
-  # Format code (takes ~0.2 seconds)
-  ruff format stac_mcp/ tests/ examples/
+**MUST** run these commands and ensure they pass before every `git commit` and `git push`.
 
-   # Fix auto-fixable linting issues (takes ~0.02 seconds)
-   ruff check stac_mcp/ tests/ examples/ --fix
-   
-   # Note: Some ruff issues require manual fixes (62 issues currently exist)
-   # Focus on critical issues like unused imports and formatting
-   ```
+1.  **Format Code:**
+    ```bash
+    uv run ruff format stac_mcp/ tests/ examples/
+    ```
+2.  **Lint and Auto-Fix:**
+    ```bash
+    uv run ruff check stac_mcp/ tests/ examples/ --fix --no-cache
+    ```
+3.  **Run Tests:**
+    ```bash
+    uv run pytest -q
+    ```
+4.  **Verify Test Coverage:**
+    ```bash
+    uv run coverage run -m pytest -v
+    uv run coverage report --fail-under=85
+    ```
 
-2. **Run all tests** (takes ~1 second, NEVER CANCEL, set timeout to 30+ seconds):
-   ```bash
-   pytest -v
-   ```
+**IMPORTANT:** Run the `ruff format` and `ruff check` commands multiple times in sequence to ensure all issues are resolved, as auto-fixing can sometimes introduce new formatting needs.
 
 3. **Test MCP server functionality** (takes ~0.6 seconds):
    ```bash

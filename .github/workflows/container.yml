@@ -67,7 +67,10 @@ jobs:
           INCREMENT_TYPE=""
 
           # Check for version bump labels first (highest priority)
-          if echo "$LABELS" | grep -q "bump:major\|bump:release"; then
+          if echo "$LABELS" | grep -q "bump:none"; then
+            INCREMENT_TYPE=""
+            echo "Version bump skipped due to 'bump:none' label"
+          elif echo "$LABELS" | grep -q "bump:major\|bump:release"; then
             INCREMENT_TYPE="major"
             echo "Version bump determined by label: major"
           elif echo "$LABELS" | grep -q "bump:minor\|bump:feature"; then
