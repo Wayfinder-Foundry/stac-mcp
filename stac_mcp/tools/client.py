@@ -569,11 +569,19 @@ class STACClient:
 
             if session is not None and hasattr(session, "request"):
                 response = session.request(
-                    method, url, headers=request_headers, timeout=timeout, **kwargs
+                    method.upper(),
+                    url,
+                    headers=request_headers,
+                    timeout=timeout,
+                    **kwargs,
                 )
             else:
                 response = requests.request(
-                    method, url, headers=request_headers, timeout=timeout, **kwargs
+                    method.upper(),
+                    url,
+                    headers=request_headers,
+                    timeout=timeout,
+                    **kwargs,
                 )
             if response.status_code == HTTP_404:
                 return None
@@ -581,14 +589,15 @@ class STACClient:
             # If this transaction modified server state, invalidate cache.
             if method.lower() in ("post", "put", "delete"):
                 affected = None
+                affected = None
                 try:
                     # Try to extract a collection id from the URL when present
                     # e.g., .../collections/{collection_id}/items
                     # or .../collections/{collection_id}
-                    base = self.catalog_url.replace("catalog.json", "")
-                    path = url.split(base, 1)[-1]
-                    if "/collections/" in path:
-                        tail = path.split("/collections/", 1)[1]
+                    base = self.catalog_url.replace("catalog.json", "").rstrip("/")
+                    path = url.split(base, 1)[-1].lstrip("/")
+                    if path.startswith("collections/"):
+                        tail = path.split("collections/", 1)[1]
                         coll = tail.split("/", 1)[0]
                         if coll:
                             affected = [coll]

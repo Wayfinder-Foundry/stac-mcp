@@ -54,7 +54,7 @@ class TestTimeoutConfiguration:
             with pytest.raises(STACTimeoutError):
                 client.delete_item("test", "test")
             mock_request.assert_called_with(
-                "delete",
+                "DELETE",
                 "https://example.com/collections/test/items/test",
                 headers={"Accept": "application/json"},
                 timeout=TIMEOUT_30_SECONDS,

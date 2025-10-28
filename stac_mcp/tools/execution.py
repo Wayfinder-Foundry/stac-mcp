@@ -196,6 +196,9 @@ async def execute_tool(
         if not crudl_headers and api_key:
             crudl_headers = {"x-api-key": api_key}
         manager = CRUDL(catalog_url=catalog_url, api_key=api_key, headers=crudl_headers)
+        # For CRUDL operations, we need both a CRUDL manager for the
+        # transaction and a STACClient for cache invalidation.
+        search_client = _get_cached_client(catalog_url, headers)
         # Run the handler under the instrumented wrapper in a thread
         instrumented = await asyncio.to_thread(
             instrument_tool_execution,
@@ -204,6 +207,7 @@ async def execute_tool(
             handler,
             manager,
             arguments,
+            client=search_client,  # pass client to handler
         )
         raw_result = instrumented.value
     else:

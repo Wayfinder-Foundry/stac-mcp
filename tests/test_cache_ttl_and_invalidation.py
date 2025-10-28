@@ -86,21 +86,48 @@ async def test_cache_invalidation_on_create(monkeypatch):
             def raise_for_status(self):
                 return None
 
-        def fake_request(_method, _url, _headers=None, _timeout=None, **_kwargs):
+            def json(self):
+                return {"ok": True}
+
+        def fake_request(
+            _self,
+            method,  # noqa: ARG001
+            url,  # noqa: ARG001
+            **kwargs,  # noqa: ARG001
+        ):
             return FakeResp()
 
-        monkeypatch.setattr("requests.request", fake_request)
+        monkeypatch.setattr("requests.Session.request", fake_request)
 
         client = Client(app)
         async with client:
+            catalog_url = "https://example.com/catalog.json"
             # prime cache
-            await client.call_tool("search_items", {"collections": ["c1"], "limit": 5})
+            await client.call_tool(
+                "search_items",
+                {"collections": ["c1"], "limit": 5, "catalog_url": catalog_url},
+            )
             assert calls["n"] == 1
             # call create_item which should invalidate cache
             await client.call_tool(
-                "create_item", {"collection_id": "c1", "item": {"id": "new"}}
+                "create_item",
+                {
+                    "collection_id": "c1",
+                    "item": {
+                        "id": "new",
+                        "stac_version": "1.0.0",
+                        "type": "Feature",
+                        "properties": {"datetime": "2021-01-01T00:00:00Z"},
+                        "geometry": {"type": "Point", "coordinates": [0, 0]},
+                        "bbox": [0, 0, 0, 0],
+                    },
+                    "catalog_url": catalog_url,
+                },
             )
             # next search should invoke underlying search again
-            await client.call_tool("search_items", {"collections": ["c1"], "limit": 5})
+            await client.call_tool(
+                "search_items",
+                {"collections": ["c1"], "limit": 5, "catalog_url": catalog_url},
+            )
     min_num_calls = 2
     assert calls["n"] >= min_num_calls

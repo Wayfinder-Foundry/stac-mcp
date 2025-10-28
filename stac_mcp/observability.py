@@ -333,6 +333,7 @@ def instrument_tool_execution(
     catalog_url: str | None,
     func,
     *args,
+    client: Any | None = None,
     **kwargs,
 ) -> ToolExecutionResult:
     """Execute a tool handler with logging, timing, metrics, and correlation id.
@@ -365,7 +366,12 @@ def instrument_tool_execution(
     duration_ms = 0.0
     try:
         with trace_span(f"tool.{tool_name}"):
-            result = func(*args, **kwargs)
+            # Pass client to handler if it was provided. This is used by
+            # CRUDL operations to hook into the STACClient's cache.
+            if client:
+                result = func(*args, **kwargs, client=client)
+            else:
+                result = func(*args, **kwargs)
         duration_ms = (time.perf_counter() - t0) * 1000.0
         return ToolExecutionResult(
             value=result,

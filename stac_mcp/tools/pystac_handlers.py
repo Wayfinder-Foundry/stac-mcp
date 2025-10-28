@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from stac_mcp.tools.client import STACClient
     from stac_mcp.tools.crudl import CRUDL
 
 
@@ -153,6 +155,7 @@ def handle_list_collections(
 def handle_create_item(
     manager: CRUDL,
     arguments: dict[str, Any],
+    client: STACClient | None = None,
 ) -> dict[str, Any]:
     """Handle creating a STAC Item using pystac."""
     path = arguments.get("path")
@@ -161,7 +164,12 @@ def handle_create_item(
         collection_id = arguments["collection_id"]
         path = f"{base_url}/collections/{collection_id}/items"
     item = arguments["item"]
-    return manager.create_item(path, item)
+    result = manager.create_item(path, item)
+    if result and client:
+        collection_id = arguments.get("collection_id")
+        with suppress(Exception):
+            client._invalidate_cache(affected_collections=[collection_id])  # noqa: SLF001
+    return result
 
 
 def handle_read_item(
@@ -181,6 +189,7 @@ def handle_read_item(
 def handle_update_item(
     manager: CRUDL,
     arguments: dict[str, Any],
+    client: STACClient | None = None,
 ) -> dict[str, Any]:
     """Handle updating a STAC Item using pystac."""
     path = arguments.get("path")
@@ -191,12 +200,18 @@ def handle_update_item(
         item_id = item.get("id")
         path = f"{base_url}/collections/{collection_id}/items/{item_id}"
     item = arguments["item"]
-    return manager.update_item(path, item)
+    result = manager.update_item(path, item)
+    if result and client:
+        collection_id = arguments.get("item", {}).get("collection")
+        with suppress(Exception):
+            client._invalidate_cache(affected_collections=[collection_id])  # noqa: SLF001
+    return result
 
 
 def handle_delete_item(
     manager: CRUDL,
     arguments: dict[str, Any],
+    client: STACClient | None = None,
 ) -> dict[str, Any]:
     """Handle deleting a STAC Item using pystac."""
     path = arguments.get("path")
@@ -205,7 +220,12 @@ def handle_delete_item(
         collection_id = arguments["collection_id"]
         item_id = arguments["item_id"]
         path = f"{base_url}/collections/{collection_id}/items/{item_id}"
-    return manager.delete_item(path)
+    result = manager.delete_item(path)
+    if result and client:
+        collection_id = arguments.get("collection_id")
+        with suppress(Exception):
+            client._invalidate_cache(affected_collections=[collection_id])  # noqa: SLF001
+    return result
 
 
 def handle_list_items(

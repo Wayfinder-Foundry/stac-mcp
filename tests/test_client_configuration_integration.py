@@ -39,7 +39,7 @@ class TestADR0007Integration:
             mock_request.return_value = mock_response
             client.delete_item("test", "test", timeout=120)
             mock_request.assert_called_with(
-                "delete",
+                "DELETE",
                 "https://example.com/collections/test/items/test",
                 headers={"Accept": "application/json"},
                 timeout=120,
@@ -60,7 +60,7 @@ class TestADR0007Integration:
             mock_request.return_value = mock_response
             client.delete_item("test", "test", headers={"X-Override": "value2"})
             mock_request.assert_called_with(
-                "delete",
+                "DELETE",
                 "https://example.com/collections/test/items/test",
                 headers={
                     "Accept": "application/json",

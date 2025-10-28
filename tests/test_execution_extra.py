@@ -46,19 +46,20 @@ async def test_execute_tool_json_modes(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_execute_tool_pystac_path(monkeypatch):
-    # Ensure PySTACManager creation path is used without invoking real manager
+async def test_execute_tool_crudl_path(monkeypatch):
+    # Ensure CRUDL creation path is used without invoking real manager
     class DummyManager:
-        pass
+        def __init__(self, catalog_url=None, api_key=None, headers=None):
+            pass
 
-    monkeypatch.setattr(execution, "PySTACManager", DummyManager)
+    monkeypatch.setattr(execution, "CRUDL", DummyManager)
 
-    def handler(manager, arguments):  # noqa: ARG001
+    def handler(manager, arguments, client=None):  # noqa: ARG001
         assert isinstance(manager, DummyManager)
-        return ["pystac-result"]
+        return ["crudl-result"]
 
     res = await execution.execute_tool(
-        "pystac_list_collections", arguments={}, handler=handler
+        "list_collections", arguments={}, handler=handler
     )
     assert len(res) == 1
     assert res[0].text is not None
