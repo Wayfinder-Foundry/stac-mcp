@@ -35,8 +35,8 @@ jobs:
           uv sync --all-extras --dev
       - name: Lint
         run: |
-          uv run ruff format stac_mcp/ tests/ examples/
-          uv run ruff check stac_mcp/ tests/ examples/ --fix --no-cache
+          uv run ruff format stac_mcp/ tests/
+          uv run ruff check stac_mcp/ tests/ --fix --no-cache
       - name: Build (hatchling via uv) to validate packaging
         run: |
           uv build

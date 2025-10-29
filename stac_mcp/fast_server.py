@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 from typing import Any
@@ -9,7 +8,6 @@ from fastmcp.prompts.prompt import PromptMessage, TextContent
 from fastmcp.server.server import FastMCP
 
 from stac_mcp.tools import execution
-from stac_mcp.tools.client import STACClient
 
 app = FastMCP()
 
@@ -380,119 +378,6 @@ def _prompt_estimate_data_size() -> PromptMessage:
     )
 
 
-@app.prompt(
-    name="tool_create_item_prompt",
-    description="Usage for create_item tool",
-    meta={
-        "schema": {
-            "type": "object",
-            "properties": {
-                "collection_id": {"type": "string"},
-                "item": {"type": "object"},
-                "api_key": {"type": "string"},
-                "catalog_url": {"type": "string"},
-            },
-            "required": ["collection_id", "item"],
-        },
-        "example": {"collection_id": "c1", "item": {"id": "i1", "type": "Feature"}},
-    },
-)
-def _prompt_create_item() -> PromptMessage:
-    schema = {
-        "type": "object",
-        "properties": {
-            "collection_id": {"type": "string"},
-            "item": {"type": "object"},
-            "api_key": {"type": "string"},
-        },
-        "required": ["collection_id", "item"],
-    }
-    payload = {
-        "name": "create_item",
-        "description": "Create a new STAC Item.",
-        "parameters": schema,
-        "example": {"collection_id": "c1", "item": {"id": "i1", "type": "Feature"}},
-    }
-    human = (
-        f"Tool: create_item\nDescription: {payload['description']}\n\n"
-        "Parameters:\n"
-        f"{json.dumps(schema, indent=2)}\n\n"
-        "Example:\n"
-        f"{json.dumps(payload['example'], indent=2)}"
-    )
-    return PromptMessage(
-        role="user",
-        content=TextContent(type="text", text=human),
-        meta={"machine_payload": payload},
-    )
-
-
-@app.prompt(
-    name="tool_update_delete_item_prompt",
-    description="Usage for update_item and delete_item tools",
-    meta={
-        "schema_update": {
-            "type": "object",
-            "properties": {
-                "collection_id": {"type": "string"},
-                "item": {"type": "object"},
-            },
-            "required": ["collection_id", "item"],
-        },
-        "schema_delete": {
-            "type": "object",
-            "properties": {
-                "collection_id": {"type": "string"},
-                "item_id": {"type": "string"},
-            },
-            "required": ["collection_id", "item_id"],
-        },
-        "example_update": {
-            "collection_id": "c1",
-            "item": {"id": "i1", "type": "Feature"},
-        },
-    },
-)
-def _prompt_update_delete_item() -> PromptMessage:
-    schema_update = {
-        "type": "object",
-        "properties": {"collection_id": {"type": "string"}, "item": {"type": "object"}},
-        "required": ["collection_id", "item"],
-    }
-    schema_delete = {
-        "type": "object",
-        "properties": {
-            "collection_id": {"type": "string"},
-            "item_id": {"type": "string"},
-        },
-        "required": ["collection_id", "item_id"],
-    }
-    payload = {
-        "name": "update_delete_item",
-        "description": "Update or delete a STAC Item.",
-        "update_parameters": schema_update,
-        "delete_parameters": schema_delete,
-        "example_update": {
-            "collection_id": "c1",
-            "item": {"id": "i1", "type": "Feature"},
-        },
-    }
-    human = (
-        f"Tool: update_delete_item\nDescription: {payload['description']}\n\n"
-        "Parameters (update):\n"
-        f"{json.dumps(schema_update, indent=2)}\n\n"
-        "Parameters (delete):\n"
-        f"{json.dumps(schema_delete, indent=2)}\n\n"
-        "Example (update):\n"
-        f"{json.dumps(payload.get('example_update', {}), indent=2)}"
-    )
-    return PromptMessage(
-        role="user",
-        content=TextContent(type="text", text=human),
-        _meta={"machine_payload": payload},
-    )
-
-
 @app.tool
 async def get_root() -> list[dict[str, Any]]:
     """Get the root STAC catalog document."""
@@ -606,97 +491,3 @@ async def estimate_data_size(
         catalog_url=catalog_url,
         headers=None,
     )
-
-
-@app.tool
-async def create_item(
-    collection_id: str,
-    item: dict[str, Any],
-    api_key: str | None = None,
-    catalog_url: str | None = None,
-) -> list[dict[str, Any]]:
-    """Create a new STAC Item in a collection."""
-    headers = {}
-    if api_key:
-        headers["x-api-key"] = api_key
-    return await execution.execute_tool(
-        "create_item",
-        arguments={"collection_id": collection_id, "item": item, "api_key": api_key},
-        catalog_url=catalog_url,
-        headers=headers,
-    )
-
-
-@app.tool
-async def update_item(
-    collection_id: str,
-    item: dict[str, Any],
-    api_key: str | None = None,
-    catalog_url: str | None = None,
-) -> list[dict[str, Any]]:
-    """Update an existing STAC Item in a collection."""
-    headers = {}
-    if api_key:
-        headers["x-api-key"] = api_key
-    return await execution.execute_tool(
-        "update_item",
-        arguments={"collection_id": collection_id, "item": item, "api_key": api_key},
-        catalog_url=catalog_url,
-        headers=headers,
-    )
-
-
-@app.tool
-async def delete_item(
-    collection_id: str,
-    item_id: str,
-    api_key: str | None = None,
-    catalog_url: str | None = None,
-) -> list[dict[str, Any]]:
-    """Delete a STAC Item from a collection."""
-    headers = {}
-    if api_key:
-        headers["x-api-key"] = api_key
-    return await execution.execute_tool(
-        "delete_item",
-        arguments={
-            "collection_id": collection_id,
-            "item_id": item_id,
-            "api_key": api_key,
-        },
-        catalog_url=catalog_url,
-        headers=headers,
-    )
-
-
-# Create a shared STACClient stored on app.state for reuse. Some fastmcp
-# implementations may not provide an `on_event` decorator; create the
-# default client eagerly at import time to keep test setup simple.
-def _startup_shared_client() -> None:
-    """Create a shared STACClient stored on app.state for reuse.
-
-    Handlers will use this client when no custom catalog_url is provided.
-    """
-    try:
-        app.default_client = STACClient()
-        _LOGGER.debug("fast_server: created default shared STACClient")
-    except (ImportError, RuntimeError, TypeError, ValueError) as exc:
-        _LOGGER.debug("fast_server: could not create default STACClient: %s", exc)
-
-
-def _shutdown_shared_client() -> None:
-    """Clean up shared STACClient resources on shutdown."""
-    client = getattr(app, "default_client", None)
-    if client is not None:
-        # Close underlying HEAD session if present; suppress errors during
-        # shutdown but avoid blind except blocks.
-        sess = getattr(client, "_head_session", None)
-        if sess is not None:
-            with contextlib.suppress(Exception):
-                sess.close()
-
-
-# Create the shared client eagerly so tests importing `app` have a ready
-# STACClient available. This mirrors a startup handler for frameworks that
-# call lifecycle events.
-_startup_shared_client()

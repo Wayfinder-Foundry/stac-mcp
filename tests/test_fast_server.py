@@ -125,36 +125,6 @@ async def test_get_and_search_items_variants(monkeypatch):
     assert dummy.calls[-1]["arguments"]["limit"] == ARG_LIMIT_TWO
 
 
-@pytest.mark.asyncio
-async def test_create_update_delete_headers(monkeypatch):
-    dummy = DummyCall()
-    monkeypatch.setattr(fast_server.execution, "execute_tool", dummy)
-
-    item = {"id": "i1"}
-
-    # Without api_key: headers should be empty dict when passed through execute_tool
-    await call_tool(fast_server.create_item, "col", item, api_key=None)
-    assert dummy.calls[-1]["name"] == "create_item"
-    assert dummy.calls[-1]["headers"] == {}
-
-    # With api_key: x-api-key header must be set
-    await call_tool(fast_server.create_item, "col", item, api_key="secret")
-    assert dummy.calls[-1]["headers"] == {"x-api-key": "secret"}
-
-    # update_item
-    await call_tool(fast_server.update_item, "col", item)
-    assert dummy.calls[-1]["name"] == "update_item"
-
-    await call_tool(fast_server.update_item, "col", item, api_key="k")
-    assert dummy.calls[-1]["headers"] == {"x-api-key": "k"}
-
-    # delete_item
-    await call_tool(fast_server.delete_item, "col", "it1")
-    assert dummy.calls[-1]["name"] == "delete_item"
-    await call_tool(fast_server.delete_item, "col", "it1", api_key="k2")
-    assert dummy.calls[-1]["headers"] == {"x-api-key": "k2"}
-
-
 @pytest.fixture
 def test_app():
     """Return a clean app for each test."""
@@ -201,3 +171,153 @@ async def test_call_tool(test_app):
         # The result from the tool function is JSON serialized into the content block
         response_data = json.loads(result.content[0].text)
         assert response_data == [{"type": "text", "text": "mocked response"}]
+
+
+@pytest.mark.asyncio
+async def test_call_search_items_tool(test_app):
+    """Test calling the search_items tool with arguments."""
+
+    def dummy_search_items(
+        collections: list[str],
+        bbox: list[float] | None = None,  # noqa: ARG001
+        datetime: str | None = None,  # noqa: ARG001
+        limit: int | None = 10,  # noqa: ARG001
+        query: dict[str, Any] | None = None,  # noqa: ARG001
+        output_format: str | None = "text",  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
+    ) -> list[dict[str, Any]]:
+        assert collections == ["test-collection"]
+        return [{"type": "text", "text": "mocked search response"}]
+
+    test_app.tool(name="search_items")(dummy_search_items)
+
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool(
+            "search_items", {"collections": ["test-collection"]}
+        )
+        response_data = json.loads(result.content[0].text)
+        assert response_data == [{"type": "text", "text": "mocked search response"}]
+
+
+@pytest.mark.asyncio
+async def test_call_estimate_data_size_tool(test_app):
+    """Test calling the estimate_data_size tool with arguments."""
+
+    def dummy_estimate_data_size(
+        collections: list[str],
+        bbox: list[float] | None = None,  # noqa: ARG001
+        datetime: str | None = None,  # noqa: ARG001
+        query: dict[str, Any] | None = None,  # noqa: ARG001
+        aoi_geojson: dict[str, Any] | None = None,  # noqa: ARG001
+        limit: int | None = 10,  # noqa: ARG001
+        force_metadata_only: bool | None = False,  # noqa: ARG001
+        output_format: str | None = "text",  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
+    ) -> list[dict[str, Any]]:
+        assert collections == ["test-collection"]
+        return [{"type": "text", "text": "mocked estimate response"}]
+
+    test_app.tool(name="estimate_data_size")(dummy_estimate_data_size)
+
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool(
+            "estimate_data_size", {"collections": ["test-collection"]}
+        )
+        response_data = json.loads(result.content[0].text)
+        assert response_data == [{"type": "text", "text": "mocked estimate response"}]
+
+
+@pytest.mark.asyncio
+async def test_call_get_item_tool(test_app):
+    """Test calling the get_item tool with arguments."""
+
+    def dummy_get_item(
+        collection_id: str,
+        item_id: str,
+        output_format: str | None = "text",  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
+    ) -> list[dict[str, Any]]:
+        assert collection_id == "test-collection"
+        assert item_id == "test-item"
+        return [{"type": "text", "text": "mocked get_item response"}]
+
+    test_app.tool(name="get_item")(dummy_get_item)
+
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool(
+            "get_item", {"collection_id": "test-collection", "item_id": "test-item"}
+        )
+        response_data = json.loads(result.content[0].text)
+        assert response_data == [{"type": "text", "text": "mocked get_item response"}]
+
+
+@pytest.mark.asyncio
+async def test_call_get_root_tool(test_app):
+    """Test calling the get_root tool."""
+
+    def dummy_get_root() -> list[dict[str, Any]]:
+        return [{"type": "text", "text": "mocked get_root response"}]
+
+    test_app.tool(name="get_root")(dummy_get_root)
+
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool("get_root")
+        response_data = json.loads(result.content[0].text)
+        assert response_data == [{"type": "text", "text": "mocked get_root response"}]
+
+
+@pytest.mark.asyncio
+async def test_call_get_conformance_tool(test_app):
+    """Test calling the get_conformance tool."""
+
+    def dummy_get_conformance() -> list[dict[str, Any]]:
+        return [{"type": "text", "text": "mocked get_conformance response"}]
+
+    test_app.tool(name="get_conformance")(dummy_get_conformance)
+
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool("get_conformance")
+        response_data = json.loads(result.content[0].text)
+        assert response_data == [
+            {"type": "text", "text": "mocked get_conformance response"}
+        ]
+
+
+@pytest.mark.asyncio
+async def test_call_search_collections_tool(test_app):
+    """Test calling the search_collections tool."""
+
+    def dummy_search_collections(
+        limit: int | None = 10,  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
+    ) -> list[dict[str, Any]]:
+        return [{"type": "text", "text": "mocked search_collections response"}]
+
+    test_app.tool(name="search_collections")(dummy_search_collections)
+
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool("search_collections")
+        response_data = json.loads(result.content[0].text)
+        assert response_data == [
+            {"type": "text", "text": "mocked search_collections response"}
+        ]
+
+        result = await client.call_tool(
+            "search_collections", {"catalog_url": "https://example.com"}
+        )
+        response_data = json.loads(result.content[0].text)
+        assert response_data == [
+            {"type": "text", "text": "mocked search_collections response"}
+        ]
+
+        result = await client.call_tool("search_collections", {"limit": 5})
+        response_data = json.loads(result.content[0].text)
+        assert response_data == [
+            {"type": "text", "text": "mocked search_collections response"}
+        ]

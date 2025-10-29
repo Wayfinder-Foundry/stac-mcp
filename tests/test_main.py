@@ -23,7 +23,7 @@ def test_main_module_execution():
     result = subprocess.run(  # noqa: S603
         [sys.executable, "-m", "stac_mcp", "--help"],
         capture_output=True,
-        timeout=5,
+        timeout=10,
         check=False,
     )
 

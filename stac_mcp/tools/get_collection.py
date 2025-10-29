@@ -15,6 +15,8 @@ def handle_get_collection(
 ) -> list[TextContent] | dict[str, Any]:
     collection_id = arguments["collection_id"]
     collection = client.get_collection(collection_id)
+    if collection is None:
+        return {"type": "collection", "collection": None}
     if arguments.get("output_format") == "json":
         return {"type": "collection", "collection": collection}
     title = collection.get("title", collection.get("id", collection_id))

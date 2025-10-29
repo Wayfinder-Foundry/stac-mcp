@@ -16,6 +16,8 @@ def handle_get_item(
     collection_id = arguments["collection_id"]
     item_id = arguments["item_id"]
     item = client.get_item(collection_id, item_id)
+    if item is None:
+        return {"type": "item", "item": None}
     if arguments.get("output_format") == "json":
         return {"type": "item", "item": item}
     item_id_value = item.get("id", item_id)

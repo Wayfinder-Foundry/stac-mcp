@@ -119,16 +119,13 @@ def test_get_item_not_found(stac_client, monkeypatch):
     assert item is None
 
 
-def test_update_item_missing_id_raises_error(stac_client):
-    """Test that updating an item with a missing ID raises a ValueError."""
-    with pytest.raises(ValueError, match="Item must have 'collection' and 'id'"):
-        stac_client.update_item(item={"collection": "test-collection"})
-
-
-def test_update_item_missing_collection_raises_error(stac_client):
-    """Test that updating an item with a missing collection raises a ValueError."""
-    with pytest.raises(ValueError, match="Item must have 'collection' and 'id'"):
-        stac_client.update_item(item={"id": "test-item"})
+def test_get_item_collection_not_found(stac_client, monkeypatch):
+    """Test that get_item returns None when the collection is not found."""
+    mock_client = MagicMock()
+    mock_client.get_collection.return_value = None
+    monkeypatch.setattr(stac_client, "_client", mock_client)
+    item = stac_client.get_item(collection_id="not-found", item_id="some-item")
+    assert item is None
 
 
 # ---------------- Conformance-aware method tests ---------------- #

@@ -18,8 +18,8 @@ pip install -e ".[dev]"
 pytest
 
 # Run formatting and linting (takes ~0.2 seconds total)
-ruff format stac_mcp/ tests/ examples/
-ruff check stac_mcp/ tests/ examples/ --fix
+ruff format stac_mcp/ tests/
+ruff check stac_mcp/ tests/ --fix
 ```
 
 - After ANY code edit (even small), re-run `ruff format` and `ruff check --fix` locally before committing to keep diffs clean and surface issues early.
@@ -48,11 +48,11 @@ python examples/example_usage.py
 
 1.  **Format Code:**
     ```bash
-    uv run ruff format stac_mcp/ tests/ examples/
+    uv run ruff format stac_mcp/ tests/
     ```
 2.  **Lint and Auto-Fix:**
     ```bash
-    uv run ruff check stac_mcp/ tests/ examples/ --fix --no-cache
+    uv run ruff check stac_mcp/ tests/ --fix --no-cache
     ```
 3.  **Run Tests:**
     ```bash
@@ -66,12 +66,7 @@ python examples/example_usage.py
 
 **IMPORTANT:** Run the `ruff format` and `ruff check` commands multiple times in sequence to ensure all issues are resolved, as auto-fixing can sometimes introduce new formatting needs.
 
-3. **Test MCP server functionality** (takes ~0.6 seconds):
-   ```bash
-   python examples/example_usage.py
-   ```
-
-4. **Manual MCP server test** (optional, server will wait for input):
+3. **Manual MCP server test** (optional, server will wait for input):
    ```bash
    timeout 5s stac-mcp || true  # Should timeout after 5s (exit code 124), indicating server is running
    ```
@@ -84,10 +79,9 @@ After making changes, always test these core workflows:
    - get_collection  
    - search_items
    - get_item
+   - estimate-data-size
 
-2. **Basic Functionality**: Run example script to ensure MCP protocol works correctly
-
-3. **Network Scenarios**: The server handles network errors gracefully (no real network access needed for testing)
+2. **Network Scenarios**: The server handles network errors gracefully (no real network access needed for testing)
 
 ## Use public APIs — do not reach into package internals
 
@@ -132,9 +126,8 @@ Following these patterns improves maintainability and reduces brittle dependenci
 ├── .gitignore              # Python gitignore
 ├── LICENSE                 # Apache 2.0 license  
 ├── README.md               # User documentation
-├── examples/               # Usage examples
-│   ├── example_usage.py    # Demonstrates MCP server usage
-│   └── mcp_config_example.json  # MCP client configuration
+├── AGENTS.md               # Copilot agent instructions
+├── architecture/            # Architecture notes
 ├── pyproject.toml          # Python project configuration
 ├── stac_mcp/              # Main package
 │   ├── __init__.py        # Package init
@@ -148,14 +141,13 @@ Following these patterns improves maintainability and reduces brittle dependenci
 ### Key Files
 - **stac_mcp/fast_server.py**: Main MCP server implementation with 4 STAC tools
 - **pyproject.toml**: Defines dependencies, build system, and tool configuration
-- **examples/example_usage.py**: Demonstrates all server functionality
 - **tests/**: Comprehensive test suite with 9 tests covering MCP protocol and server functionality
 
 ## Dependencies and Requirements
 
 ### Python Requirements
-- Python 3.8+ (supports 3.8, 3.9, 3.10, 3.11, 3.12)
-- Main dependencies: mcp>=1.0.0, pystac-client>=0.7.0, pystac>=1.8.0, anyio>=3.7.0
+- Python 3.8+ (supports 3.11, 3.12)
+- Main dependencies: fastmcp>=2.0.0, mcp>=1.0.0, pystac-client>=0.7.0, pystac>=1.8.0, anyio>=3.7.0
 - Dev dependencies: pytest, pytest-asyncio, ruff, jsonschema
 
 ### Network Requirements
@@ -175,14 +167,11 @@ pip install -e ".[dev]"
 # 2. Make your changes
 
 # 3. Format and lint
-ruff format stac_mcp/ tests/ examples/
-ruff check stac_mcp/ tests/ examples/ --fix
+ruff format stac_mcp/ tests/
+ruff check stac_mcp/ tests/ --fix
 
 # 4. Run tests
 pytest -v
-
-# 5. Test functionality  
-python examples/example_usage.py
 ```
 
 ### Testing Different STAC Catalogs
@@ -197,7 +186,13 @@ Configure MCP clients with:
 {
   "mcpServers": {
     "stac": {
-      "command": "stac-mcp"
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/wayfinder-foundry/stac-mcp",
+        "stac-mcp"
+      ],
+      "transport": "stdio",
     }
   }
 }
@@ -209,11 +204,10 @@ Configure MCP clients with:
 1. **Import errors**: Run `pip install -e ".[dev]"` to install in development mode
 2. **Linting failures**: Run `ruff format` and `ruff check --fix` before committing  
 3. **Network timeouts**: Expected in sandbox environments, real network needed for STAC APIs
-4. **MCP protocol errors**: Test with `python examples/example_usage.py` first
 
 ### Build/Test Failures
-- **Ruff formatting**: Must pass for CI - run `ruff format stac_mcp/ tests/ examples/`
-- **Ruff linting**: Must pass for CI - run `ruff check --fix stac_mcp/ tests/ examples/` (62 issues currently exist, many auto-fixable)
+- **Ruff formatting**: Must pass for CI - run `ruff format stac_mcp/ tests/`
+- **Ruff linting**: Must pass for CI - run `ruff check --fix stac_mcp/ tests/` (62 issues currently exist, many auto-fixable)
 - **Pytest failures**: All 9 tests must pass - investigate specific test failures
 - **Network issues**: pip install may timeout in sandbox environments (expected)
 
@@ -294,10 +288,10 @@ Examples:
    - Increments version in all files
    - Creates git tag (e.g., v1.2.3)
    - Builds and pushes containers with semantic tags:
-     - `ghcr.io/bnjam/stac-mcp:1.2.3` (exact version)
-     - `ghcr.io/bnjam/stac-mcp:1.2` (major.minor)
-     - `ghcr.io/bnjam/stac-mcp:1` (major)
-     - `ghcr.io/bnjam/stac-mcp:latest` (for main branch)
+     - `ghcr.io/wayfinder-foundry/stac-mcp:1.2.3` (exact version)
+     - `ghcr.io/wayfinder-foundry/stac-mcp:1.2` (major.minor)
+     - `ghcr.io/wayfinder-foundry/stac-mcp:1` (major)
+     - `ghcr.io/wayfinder-foundry/stac-mcp:latest` (for main branch)
 
 ### Version Synchronization
 The version management script maintains consistency across:

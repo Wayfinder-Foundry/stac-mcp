@@ -1,6 +1,6 @@
 """Additional client edge cases and error scenarios."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from stac_mcp.tools.client import STACClient
 
@@ -31,23 +31,6 @@ class TestClientInitialization:
         mock_read_json.return_value = stac_catalog_factory()
         client = STACClient("https://example.com/stac")
         assert client.catalog_url == "https://example.com/stac"
-
-
-class TestHeaderHandling:
-    """Test HTTP header handling edge cases."""
-
-    @patch("pystac_client.stac_api_io.StacApiIO.read_json")
-    def test_default_headers_included(self, mock_read_json):
-        """Test that default headers are included."""
-        mock_read_json.return_value = stac_catalog_factory()
-        client = STACClient("https://example.com")
-        with patch.object(client.client._stac_io.session, "request") as mock_request:  # noqa: SLF001
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {"ok": True}
-            mock_request.return_value = mock_response
-            client.delete_item("test", "test")
-            mock_request.assert_called_once()
 
 
 class TestSearchOperations:
