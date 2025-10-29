@@ -57,6 +57,18 @@ def test_asset_to_dict(client: STACClient):
     result = client._asset_to_dict(asset)  # noqa: SLF001
     assert result == {"key": "value"}
 
+    # Test fallback
+    asset.to_dict = None
+    asset.href = "https://example.com"
+    result = client._asset_to_dict(asset)  # noqa: SLF001
+    assert result["href"] == "https://example.com"
+
+    # Test fallback
+    asset.to_dict = None
+    asset.href = "https://example.com"
+    result = client._asset_to_dict(asset)  # noqa: SLF001
+    assert result["href"] == "https://example.com"
+
 
 def test_size_from_metadata(client: STACClient):
     """Test _size_from_metadata."""

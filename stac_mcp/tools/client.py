@@ -490,7 +490,10 @@ class STACClient:
 
     def get_item(self, collection_id: str, item_id: str) -> dict[str, Any]:
         try:
-            item = self.client.get_collection(collection_id).get_item(item_id)
+            collection = self.client.get_collection(collection_id)
+            if collection is None:
+                return None
+            item = collection.get_item(item_id)
         except APIError:  # pragma: no cover - network dependent
             logger.exception(
                 "Error fetching item %s from collection %s",
