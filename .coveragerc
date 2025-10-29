@@ -4,14 +4,18 @@ omit =
     tests/*
     scripts/version.py
     docs/*
-    examples/*
     assets/*
+    scripts/*
     architecture/*
     .venv/*
     dist/*
     build/*
     .eggs/*
     */__init__.py
+    .devcontainer/*
+    .github/*
+    .git/*
+    .vscode/*
 branch = True
 
 [report]

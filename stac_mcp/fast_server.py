@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 from typing import Any
@@ -9,7 +8,6 @@ from fastmcp.prompts.prompt import PromptMessage, TextContent
 from fastmcp.server.server import FastMCP
 
 from stac_mcp.tools import execution
-from stac_mcp.tools.client import STACClient
 
 app = FastMCP()
 
@@ -493,36 +491,3 @@ async def estimate_data_size(
         catalog_url=catalog_url,
         headers=None,
     )
-
-
-# Create a shared STACClient stored on app.state for reuse. Some fastmcp
-# implementations may not provide an `on_event` decorator; create the
-# default client eagerly at import time to keep test setup simple.
-def _startup_shared_client() -> None:
-    """Create a shared STACClient stored on app.state for reuse.
-
-    Handlers will use this client when no custom catalog_url is provided.
-    """
-    try:
-        app.default_client = STACClient()
-        _LOGGER.debug("fast_server: created default shared STACClient")
-    except (ImportError, RuntimeError, TypeError, ValueError) as exc:
-        _LOGGER.debug("fast_server: could not create default STACClient: %s", exc)
-
-
-def _shutdown_shared_client() -> None:
-    """Clean up shared STACClient resources on shutdown."""
-    client = getattr(app, "default_client", None)
-    if client is not None:
-        # Close underlying HEAD session if present; suppress errors during
-        # shutdown but avoid blind except blocks.
-        sess = getattr(client, "_head_session", None)
-        if sess is not None:
-            with contextlib.suppress(Exception):
-                sess.close()
-
-
-# Create the shared client eagerly so tests importing `app` have a ready
-# STACClient available. This mirrors a startup handler for frameworks that
-# call lifecycle events.
-_startup_shared_client()

@@ -128,15 +128,6 @@ def test_get_item_collection_not_found(stac_client, monkeypatch):
     assert item is None
 
 
-def test_get_item_collection_not_found(stac_client, monkeypatch):
-    """Test that get_item returns None when the collection is not found."""
-    mock_client = MagicMock()
-    mock_client.get_collection.return_value = None
-    monkeypatch.setattr(stac_client, "_client", mock_client)
-    item = stac_client.get_item(collection_id="not-found", item_id="some-item")
-    assert item is None
-
-
 # ---------------- Conformance-aware method tests ---------------- #
 
 

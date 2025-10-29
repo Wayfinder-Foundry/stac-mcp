@@ -179,12 +179,12 @@ async def test_call_search_items_tool(test_app):
 
     def dummy_search_items(
         collections: list[str],
-        bbox: list[float] | None = None,
-        datetime: str | None = None,
-        limit: int | None = 10,
-        query: dict[str, Any] | None = None,
-        output_format: str | None = "text",
-        catalog_url: str | None = None,
+        bbox: list[float] | None = None,  # noqa: ARG001
+        datetime: str | None = None,  # noqa: ARG001
+        limit: int | None = 10,  # noqa: ARG001
+        query: dict[str, Any] | None = None,  # noqa: ARG001
+        output_format: str | None = "text",  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
     ) -> list[dict[str, Any]]:
         assert collections == ["test-collection"]
         return [{"type": "text", "text": "mocked search response"}]
@@ -206,14 +206,14 @@ async def test_call_estimate_data_size_tool(test_app):
 
     def dummy_estimate_data_size(
         collections: list[str],
-        bbox: list[float] | None = None,
-        datetime: str | None = None,
-        query: dict[str, Any] | None = None,
-        aoi_geojson: dict[str, Any] | None = None,
-        limit: int | None = 10,
-        force_metadata_only: bool | None = False,
-        output_format: str | None = "text",
-        catalog_url: str | None = None,
+        bbox: list[float] | None = None,  # noqa: ARG001
+        datetime: str | None = None,  # noqa: ARG001
+        query: dict[str, Any] | None = None,  # noqa: ARG001
+        aoi_geojson: dict[str, Any] | None = None,  # noqa: ARG001
+        limit: int | None = 10,  # noqa: ARG001
+        force_metadata_only: bool | None = False,  # noqa: ARG001
+        output_format: str | None = "text",  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
     ) -> list[dict[str, Any]]:
         assert collections == ["test-collection"]
         return [{"type": "text", "text": "mocked estimate response"}]
@@ -236,8 +236,8 @@ async def test_call_get_item_tool(test_app):
     def dummy_get_item(
         collection_id: str,
         item_id: str,
-        output_format: str | None = "text",
-        catalog_url: str | None = None,
+        output_format: str | None = "text",  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
     ) -> list[dict[str, Any]]:
         assert collection_id == "test-collection"
         assert item_id == "test-item"
@@ -293,8 +293,8 @@ async def test_call_search_collections_tool(test_app):
     """Test calling the search_collections tool."""
 
     def dummy_search_collections(
-        limit: int | None = 10,
-        catalog_url: str | None = None,
+        limit: int | None = 10,  # noqa: ARG001
+        catalog_url: str | None = None,  # noqa: ARG001
     ) -> list[dict[str, Any]]:
         return [{"type": "text", "text": "mocked search_collections response"}]
 
@@ -321,59 +321,3 @@ async def test_call_search_collections_tool(test_app):
         assert response_data == [
             {"type": "text", "text": "mocked search_collections response"}
         ]
-
-
-@pytest.mark.asyncio
-async def test_call_search_items_tool(test_app):
-    """Test calling the search_items tool with arguments."""
-
-    def dummy_search_items(
-        collections: list[str],
-        bbox: list[float] | None = None,
-        datetime: str | None = None,
-        limit: int | None = 10,
-        query: dict[str, Any] | None = None,
-        output_format: str | None = "text",
-        catalog_url: str | None = None,
-    ) -> list[dict[str, Any]]:
-        assert collections == ["test-collection"]
-        return [{"type": "text", "text": "mocked search response"}]
-
-    test_app.tool(name="search_items")(dummy_search_items)
-
-    client = Client(test_app)
-    async with client:
-        result = await client.call_tool(
-            "search_items", {"collections": ["test-collection"]}
-        )
-        response_data = json.loads(result.content[0].text)
-        assert response_data == [{"type": "text", "text": "mocked search response"}]
-
-
-@pytest.mark.asyncio
-async def test_call_estimate_data_size_tool(test_app):
-    """Test calling the estimate_data_size tool with arguments."""
-
-    def dummy_estimate_data_size(
-        collections: list[str],
-        bbox: list[float] | None = None,
-        datetime: str | None = None,
-        query: dict[str, Any] | None = None,
-        aoi_geojson: dict[str, Any] | None = None,
-        limit: int | None = 10,
-        force_metadata_only: bool | None = False,
-        output_format: str | None = "text",
-        catalog_url: str | None = None,
-    ) -> list[dict[str, Any]]:
-        assert collections == ["test-collection"]
-        return [{"type": "text", "text": "mocked estimate response"}]
-
-    test_app.tool(name="estimate_data_size")(dummy_estimate_data_size)
-
-    client = Client(test_app)
-    async with client:
-        result = await client.call_tool(
-            "estimate_data_size", {"collections": ["test-collection"]}
-        )
-        response_data = json.loads(result.content[0].text)
-        assert response_data == [{"type": "text", "text": "mocked estimate response"}]
