@@ -32,8 +32,6 @@ All tools accept an optional `output_format` parameter (`"text"` default, or `"j
 
 - **`get_root`**: Fetch root document (id/title/description/links/conformance subset)
 - **`get_conformance`**: List all conformance classes; optionally verify specific URIs
-- **`get_queryables`**: Retrieve queryable fields (global or per collection) when supported
-- **`get_aggregations`**: Execute a search requesting aggregations (count/stats) if supported
 - **`search_collections`**: List and search available STAC collections
 - **`get_collection`**: Get detailed information about a specific collection
 - **`search_items`**: Search for STAC items with spatial, temporal, and attribute filters
@@ -79,46 +77,14 @@ The server implements the [Model Context Protocol (MCP)](https://github.com/Mode
 }
 ```
 
-### Command Line
-
-#### Native Installation
-
-```bash
-pip install stac-mcp
-```
-
-```bash
-stac-mcp
-```
-
-Each invocation starts an MCP stdio server; it waits for protocol messages (see `examples/example_usage.py`).
-
-### Repository Usage
-
-```bash
-pip install -e .
-```
-
-#### Container Usage
-
-##### Local
-
-```bash
-docker build -t stac-mcp .
-```
-
-```bash
-docker run --rm -i stac-mcp
-```
-
 ##### Published Image
 
 ```bash
 # With Docker
-docker run --rm -i ghcr.io/bnjam/stac-mcp:latest
+docker run --rm -i ghcr.io/wayfinder-foundry/stac-mcp:latest
 
 # With Podman
-podman run --rm -i ghcr.io/bnjam/stac-mcp:latest
+podman run --rm -i ghcr.io/wayfinder-foundry/stac-mcp:latest
 ```
 
 ### Examples
