@@ -24,34 +24,8 @@ from stac_mcp.tools.get_conformance import handle_get_conformance
 from stac_mcp.tools.get_item import handle_get_item
 from stac_mcp.tools.get_queryables import handle_get_queryables
 from stac_mcp.tools.get_root import handle_get_root
-from stac_mcp.tools.pystac_handlers import (
-    handle_pystac_create_catalog,
-    handle_pystac_create_collection,
-    handle_pystac_create_item,
-    handle_pystac_delete_catalog,
-    handle_pystac_delete_collection,
-    handle_pystac_delete_item,
-    handle_pystac_list_catalogs,
-    handle_pystac_list_collections,
-    handle_pystac_list_items,
-    handle_pystac_read_catalog,
-    handle_pystac_read_collection,
-    handle_pystac_read_item,
-    handle_pystac_update_catalog,
-    handle_pystac_update_collection,
-    handle_pystac_update_item,
-)
-from stac_mcp.tools.pystac_management import PySTACManager
 from stac_mcp.tools.search_collections import handle_search_collections
 from stac_mcp.tools.search_items import handle_search_items
-from stac_mcp.tools.transactions import (
-    handle_create_collection,
-    handle_create_item,
-    handle_delete_collection,
-    handle_delete_item,
-    handle_update_collection,
-    handle_update_item,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -88,37 +62,12 @@ _TOOL_HANDLERS: dict[str, Handler] = {
     "get_conformance": handle_get_conformance,
     "get_queryables": handle_get_queryables,
     "get_aggregations": handle_get_aggregations,
-    "create_item": handle_create_item,
-    "update_item": handle_update_item,
-    "delete_item": handle_delete_item,
-    "create_collection": handle_create_collection,
-    "update_collection": handle_update_collection,
-    "delete_collection": handle_delete_collection,
-}
-
-# PySTAC-based CRUDL handlers (use PySTACManager instead of STACClient)
-_PYSTAC_TOOL_HANDLERS: dict[str, Callable] = {
-    "pystac_create_catalog": handle_pystac_create_catalog,
-    "pystac_read_catalog": handle_pystac_read_catalog,
-    "pystac_update_catalog": handle_pystac_update_catalog,
-    "pystac_delete_catalog": handle_pystac_delete_catalog,
-    "pystac_list_catalogs": handle_pystac_list_catalogs,
-    "pystac_create_collection": handle_pystac_create_collection,
-    "pystac_read_collection": handle_pystac_read_collection,
-    "pystac_update_collection": handle_pystac_update_collection,
-    "pystac_delete_collection": handle_pystac_delete_collection,
-    "pystac_list_collections": handle_pystac_list_collections,
-    "pystac_create_item": handle_pystac_create_item,
-    "pystac_read_item": handle_pystac_read_item,
-    "pystac_update_item": handle_pystac_update_item,
-    "pystac_delete_item": handle_pystac_delete_item,
-    "pystac_list_items": handle_pystac_list_items,
 }
 
 
 def _raise_unknown_tool(name: str) -> NoReturn:
     """Raise a standardized error for unknown tool names."""
-    _tools = list(_TOOL_HANDLERS.keys()) + list(_PYSTAC_TOOL_HANDLERS.keys())
+    _tools = list(_TOOL_HANDLERS.keys())
     msg = f"Unknown tool: {name}. Available tools: {_tools}"
     raise ValueError(msg)
 
@@ -194,50 +143,29 @@ async def execute_tool(
     """
     arguments = dict(arguments or {})
 
-    # Check if this is a pystac tool
-    is_pystac_tool = tool_name in _PYSTAC_TOOL_HANDLERS
-
     if handler is None:
-        if is_pystac_tool:
-            handler = _PYSTAC_TOOL_HANDLERS.get(tool_name)
-        else:
-            handler = _TOOL_HANDLERS.get(tool_name)
+        handler = _TOOL_HANDLERS.get(tool_name)
         if handler is None:
             _raise_unknown_tool(tool_name)
 
-    # PySTAC tools use PySTACManager instead of STACClient
     # Offload handler execution to a thread to avoid blocking the async event loop
     # (handlers may perform network I/O or heavy CPU work like odc.stac.load).
-
-    if is_pystac_tool:
-        manager = PySTACManager()
-        # Run the handler under the instrumented wrapper in a thread
-        instrumented = await asyncio.to_thread(
-            instrument_tool_execution,
-            tool_name,
-            catalog_url,
-            handler,
-            manager,
-            arguments,
-        )
-        raw_result = instrumented.value
-    else:
-        if client is None:
-            # Reuse a cached STACClient when possible so multiple tool calls
-            # within the same session/context share connection and session
-            # state (HTTP sessions, timeout wrappers, etc.). This keeps
-            # tools lightweight and consistent across invocations.
-            client = _get_cached_client(catalog_url, headers)
-        # Run the handler under the instrumented wrapper in a thread
-        instrumented = await asyncio.to_thread(
-            instrument_tool_execution,
-            tool_name,
-            catalog_url,
-            handler,
-            client,
-            arguments,
-        )
-        raw_result = instrumented.value
+    if client is None:
+        # Reuse a cached STACClient when possible so multiple tool calls
+        # within the same session/context share connection and session
+        # state (HTTP sessions, timeout wrappers, etc.). This keeps
+        # tools lightweight and consistent across invocations.
+        client = _get_cached_client(catalog_url, headers)
+    # Run the handler under the instrumented wrapper in a thread
+    instrumented = await asyncio.to_thread(
+        instrument_tool_execution,
+        tool_name,
+        catalog_url,
+        handler,
+        client,
+        arguments,
+    )
+    raw_result = instrumented.value
 
     output_format = arguments.get("output_format", "text")
     if output_format == "json":

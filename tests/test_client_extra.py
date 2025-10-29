@@ -50,21 +50,6 @@ def test_search_cache_key(client: STACClient):
     assert isinstance(key, str)
 
 
-def test_invalidate_cache(client: STACClient):
-    """Test _invalidate_cache."""
-    client._search_cache = {"test": (0, [])}  # noqa: SLF001
-    client._invalidate_cache()  # noqa: SLF001
-    assert not client._search_cache  # noqa: SLF001
-
-
-def test_invalidate_cache_with_collections(client: STACClient):
-    """Test _invalidate_cache with collections."""
-    client._search_cache = {"collection1": (0, []), "collection2": (0, [])}  # noqa: SLF001
-    client._invalidate_cache(affected_collections=["collection1"])  # noqa: SLF001
-    assert "collection2" in client._search_cache  # noqa: SLF001
-    assert "collection1" not in client._search_cache  # noqa: SLF001
-
-
 def test_asset_to_dict(client: STACClient):
     """Test _asset_to_dict."""
     asset = MagicMock()

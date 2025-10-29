@@ -11,8 +11,6 @@ PROMPT_NAMES = [
     "_prompt_get_item",
     "_prompt_search_items",
     "_prompt_estimate_data_size",
-    "_prompt_create_item",
-    "_prompt_update_delete_item",
 ]
 
 

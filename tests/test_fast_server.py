@@ -125,36 +125,6 @@ async def test_get_and_search_items_variants(monkeypatch):
     assert dummy.calls[-1]["arguments"]["limit"] == ARG_LIMIT_TWO
 
 
-@pytest.mark.asyncio
-async def test_create_update_delete_headers(monkeypatch):
-    dummy = DummyCall()
-    monkeypatch.setattr(fast_server.execution, "execute_tool", dummy)
-
-    item = {"id": "i1"}
-
-    # Without api_key: headers should be empty dict when passed through execute_tool
-    await call_tool(fast_server.create_item, "col", item, api_key=None)
-    assert dummy.calls[-1]["name"] == "create_item"
-    assert dummy.calls[-1]["headers"] == {}
-
-    # With api_key: x-api-key header must be set
-    await call_tool(fast_server.create_item, "col", item, api_key="secret")
-    assert dummy.calls[-1]["headers"] == {"x-api-key": "secret"}
-
-    # update_item
-    await call_tool(fast_server.update_item, "col", item)
-    assert dummy.calls[-1]["name"] == "update_item"
-
-    await call_tool(fast_server.update_item, "col", item, api_key="k")
-    assert dummy.calls[-1]["headers"] == {"x-api-key": "k"}
-
-    # delete_item
-    await call_tool(fast_server.delete_item, "col", "it1")
-    assert dummy.calls[-1]["name"] == "delete_item"
-    await call_tool(fast_server.delete_item, "col", "it1", api_key="k2")
-    assert dummy.calls[-1]["headers"] == {"x-api-key": "k2"}
-
-
 @pytest.fixture
 def test_app():
     """Return a clean app for each test."""

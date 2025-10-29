@@ -7,7 +7,6 @@ private access are suppressed for this module.
 # ruff: noqa: SLF001
 
 import json
-import time
 from types import SimpleNamespace
 
 import pytest
@@ -57,17 +56,6 @@ def test_cached_search_expiry_and_refresh():
     client._client = SimpleNamespace(search=_search_b)
     items2 = client._cached_search(collections=["c1"], limit=1)
     assert items2[0].id == "b"
-
-
-def test_invalidate_cache_clears_matching_keys():
-    client = STACClient()
-    client._search_cache = {
-        'collections:["c1"]': (time.time(), [1]),
-        'collections:["c2"]': (time.time(), [2]),
-    }
-    client._invalidate_cache(affected_collections=["c1"])
-    # Ensure no remaining cache keys reference c1
-    assert all("c1" not in k for k in client._search_cache)
 
 
 def test_check_conformance_raises():
