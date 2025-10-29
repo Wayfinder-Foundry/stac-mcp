@@ -2,8 +2,8 @@ name: Build and Publish Container
 
 on:
   push:
-    branches: [ main ]
-    tags: [ '*' ]
+    branches: [main]
+    tags: ["*"]
 
 env:
   REGISTRY: ghcr.io
@@ -14,117 +14,124 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
-      contents: write  # Required to push commits and tags
+      contents: write # Required to push commits and tags
     outputs:
       new_version: ${{ steps.bump.outputs.new_version }}
       version_changed: ${{ steps.bump.outputs.version_changed }}
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
 
-    - name: Install dependencies
-      run: |
-        pip install -e ".[dev]"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
 
-    - name: Determine version increment from merged PR
-      id: bump
-      run: |
-        # Get the merge commit message to find the PR number
-        MERGE_MSG=$(git log -1 --pretty=format:"%s")
-        echo "Merge message: $MERGE_MSG"
-        
-        # Extract PR number from merge message
-        PR_NUM=$(echo "$MERGE_MSG" | grep -oP "Merge pull request #\K\d+" || echo "")
-        
-        if [ -z "$PR_NUM" ]; then
-          echo "No PR number found in merge commit, skipping version bump"
-          echo "version_changed=false" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        
-        echo "Found PR #$PR_NUM"
-        
-        # Get the branch name and labels from the PR
-        BRANCH_NAME=$(gh pr view $PR_NUM --json headRefName --jq '.headRefName')
-        LABELS=$(gh pr view $PR_NUM --json labels --jq '.labels[].name' | tr '\n' ' ')
-        echo "Branch name: $BRANCH_NAME"
-        echo "PR labels: $LABELS"
-        
-        # Determine version increment type
-        # Priority: labels > branch prefixes > no bump
-        INCREMENT_TYPE=""
-        
-        # Check for version bump labels first (highest priority)
-        if echo "$LABELS" | grep -q "bump:major\|bump:release"; then
-          INCREMENT_TYPE="major"
-          echo "Version bump determined by label: major"
-        elif echo "$LABELS" | grep -q "bump:minor\|bump:feature"; then
-          INCREMENT_TYPE="minor"
-          echo "Version bump determined by label: minor"
-        elif echo "$LABELS" | grep -q "bump:patch\|bump:hotfix"; then
-          INCREMENT_TYPE="patch"
-          echo "Version bump determined by label: patch"
-        # Fall back to branch prefix detection
-        elif [[ "$BRANCH_NAME" == hotfix/* ]] || [[ "$BRANCH_NAME" == copilot/fix-* ]] || [[ "$BRANCH_NAME" == copilot/hotfix/* ]] || [[ "$BRANCH_NAME" == fix/* ]]; then
-          INCREMENT_TYPE="patch"
-          echo "Version bump determined by branch prefix: patch"
-        elif [[ "$BRANCH_NAME" == feature/* ]] || [[ "$BRANCH_NAME" == copilot/feature/* ]]; then
-          INCREMENT_TYPE="minor"
-          echo "Version bump determined by branch prefix: minor"
-        elif [[ "$BRANCH_NAME" == release/* ]] || [[ "$BRANCH_NAME" == copilot/release/* ]]; then
-          INCREMENT_TYPE="major"
-          echo "Version bump determined by branch prefix: major"
-        fi
-        
-        # If no increment type determined, skip version bump
-        if [ -z "$INCREMENT_TYPE" ]; then
-          echo "No version bump label or recognized branch prefix found, skipping version bump"
-          echo "version_changed=false" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-        
-        echo "Version increment type: $INCREMENT_TYPE"
-        
-        # Get current version and increment
-        CURRENT_VERSION=$(python scripts/version.py current | cut -d' ' -f3)
-        echo "Current version: $CURRENT_VERSION"
-        
-        # Increment version
-        python scripts/version.py $INCREMENT_TYPE
-        NEW_VERSION=$(python scripts/version.py current | cut -d' ' -f3)
-        
-        echo "New version: $NEW_VERSION"
-        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-        echo "version_changed=true" >> $GITHUB_OUTPUT
-        
-        # Configure git for commit
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        
-        # Commit version changes
-        git add pyproject.toml stac_mcp/__init__.py stac_mcp/server.py
-        git commit -m "chore: bump version to $NEW_VERSION (auto-increment from $BRANCH_NAME branch)"
-        
-        # Pull latest changes from main to avoid push conflicts
-        git pull --rebase origin main
-        
-        # Push the version bump commit
-        git push
-        
-        # Create and push tag
-        git tag "v$NEW_VERSION"
-        git push origin "v$NEW_VERSION"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  
+      - name: Sync dependencies (dev + extras)
+        run: |
+          # Sync project dependencies (dev + extras) using uv
+          uv sync --all-extras --dev
+
+      - name: Determine version increment from merged PR
+        id: bump
+        run: |
+          # Get the merge commit message to find the PR number
+          MERGE_MSG=$(git log -1 --pretty=format:"%s")
+          echo "Merge message: $MERGE_MSG"
+
+          # Extract PR number from merge message
+          PR_NUM=$(echo "$MERGE_MSG" | grep -oP "Merge pull request #\K\d+" || echo "")
+
+          if [ -z "$PR_NUM" ]; then
+            echo "No PR number found in merge commit, skipping version bump"
+            echo "version_changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Found PR #$PR_NUM"
+
+          # Get the branch name and labels from the PR
+          BRANCH_NAME=$(gh pr view $PR_NUM --json headRefName --jq '.headRefName')
+          LABELS=$(gh pr view $PR_NUM --json labels --jq '.labels[].name' | tr '\n' ' ')
+          echo "Branch name: $BRANCH_NAME"
+          echo "PR labels: $LABELS"
+
+          # Determine version increment type
+          # Priority: labels > branch prefixes > no bump
+          INCREMENT_TYPE=""
+
+          # Check for version bump labels first (highest priority)
+          if echo "$LABELS" | grep -q "bump:none"; then
+            INCREMENT_TYPE=""
+            echo "Version bump skipped due to 'bump:none' label"
+          elif echo "$LABELS" | grep -q "bump:major\|bump:release"; then
+            INCREMENT_TYPE="major"
+            echo "Version bump determined by label: major"
+          elif echo "$LABELS" | grep -q "bump:minor\|bump:feature"; then
+            INCREMENT_TYPE="minor"
+            echo "Version bump determined by label: minor"
+          elif echo "$LABELS" | grep -q "bump:patch\|bump:hotfix"; then
+            INCREMENT_TYPE="patch"
+            echo "Version bump determined by label: patch"
+          # Fall back to branch prefix detection
+          elif [[ "$BRANCH_NAME" == hotfix/* ]] || [[ "$BRANCH_NAME" == copilot/fix-* ]] || [[ "$BRANCH_NAME" == copilot/hotfix/* ]] || [[ "$BRANCH_NAME" == fix/* ]]; then
+            INCREMENT_TYPE="patch"
+            echo "Version bump determined by branch prefix: patch"
+          elif [[ "$BRANCH_NAME" == feature/* ]] || [[ "$BRANCH_NAME" == copilot/feature/* ]]; then
+            INCREMENT_TYPE="minor"
+            echo "Version bump determined by branch prefix: minor"
+          elif [[ "$BRANCH_NAME" == release/* ]] || [[ "$BRANCH_NAME" == copilot/release/* ]]; then
+            INCREMENT_TYPE="major"
+            echo "Version bump determined by branch prefix: major"
+          fi
+
+          # If no increment type determined, skip version bump
+          if [ -z "$INCREMENT_TYPE" ]; then
+            echo "No version bump label or recognized branch prefix found, skipping version bump"
+            echo "version_changed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Version increment type: $INCREMENT_TYPE"
+
+          # Get current version and increment
+          CURRENT_VERSION=$(python scripts/version.py current | cut -d' ' -f3)
+          echo "Current version: $CURRENT_VERSION"
+
+          # Increment version
+          python scripts/version.py $INCREMENT_TYPE
+          NEW_VERSION=$(python scripts/version.py current | cut -d' ' -f3)
+
+          echo "New version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version_changed=true" >> $GITHUB_OUTPUT
+
+          # Configure git for commit
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          # Commit version changes
+          git add pyproject.toml stac_mcp/__init__.py stac_mcp/fast_server.py
+          git commit -m "chore: bump version to $NEW_VERSION (auto-increment from $BRANCH_NAME branch)"
+
+          # Pull latest changes from main to avoid push conflicts
+          git pull --rebase origin main
+
+          # Push the version bump commit
+          git push
+
+          # Create and push tag
+          git tag "v$NEW_VERSION"
+          git push origin "v$NEW_VERSION"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   pypi-publish:
     runs-on: ubuntu-latest
     needs: [version-bump]
@@ -133,39 +140,40 @@ jobs:
       name: pypi
       url: https://pypi.org/project/stac-mcp/
     permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
-    
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        # Fetch the latest changes if version was bumped
-        ref: main
-        fetch-depth: 0
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch the latest changes if version was bumped
+          ref: main
+          fetch-depth: 0
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
 
-    - name: Install build dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build twine
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Install build tools directly via pip
+          python -m pip install build twine
 
-    - name: Build package
-      run: |
-        python -m build
+      - name: Build package
+        run: |
+          python -m build
 
-    - name: Check package
-      run: |
-        twine check dist/*
+      - name: Check package
+        run: |
+          twine check dist/*
 
-    - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        # Provide the PyPI API token stored in repository or environment secrets
-        password: ${{ secrets.PYPI_API_TOKEN }}
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Provide the PyPI API token stored in repository or environment secrets
+          password: ${{ secrets.PYPI_API_TOKEN }}
 
   build:
     runs-on: ubuntu-latest
@@ -176,75 +184,75 @@ jobs:
       packages: write
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        # Fetch the latest changes if version was bumped
-        ref: ${{ github.event_name == 'push' && needs.version-bump.outputs.version_changed == 'true' && 'main' || github.sha }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch the latest changes if version was bumped
+          ref: ${{ github.event_name == 'push' && needs.version-bump.outputs.version_changed == 'true' && 'main' || github.sha }}
 
-    - name: Set up lowercase image name
-      run: echo "IMAGE_NAME_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+      - name: Set up lowercase image name
+        run: echo "IMAGE_NAME_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Compute version for tagging
-      id: ver
-      run: |
-        VERSION=""
-        if [ "${{ needs.version-bump.outputs.version_changed }}" = "true" ] && [ -n "${{ needs.version-bump.outputs.new_version }}" ]; then
-          VERSION="${{ needs.version-bump.outputs.new_version }}"
-        elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-          TAG="${GITHUB_REF#refs/tags/}"
-          VERSION="${TAG#v}"
-          # Validate that VERSION is a valid semver (e.g., 1.2.3, 1.2.3-alpha, 1.2.3+build)
-          SEMVER_REGEX="^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$"
-          if ! [[ "$VERSION" =~ $SEMVER_REGEX ]]; then
-            echo "Error: Extracted version '$VERSION' is not a valid semver." >&2
-            exit 1
+      - name: Compute version for tagging
+        id: ver
+        run: |
+          VERSION=""
+          if [ "${{ needs.version-bump.outputs.version_changed }}" = "true" ] && [ -n "${{ needs.version-bump.outputs.new_version }}" ]; then
+            VERSION="${{ needs.version-bump.outputs.new_version }}"
+          elif [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+            # Validate that VERSION is a valid semver (e.g., 1.2.3, 1.2.3-alpha, 1.2.3+build)
+            SEMVER_REGEX="^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$"
+            if ! [[ "$VERSION" =~ $SEMVER_REGEX ]]; then
+              echo "Error: Extracted version '$VERSION' is not a valid semver." >&2
+              exit 1
+            fi
           fi
-        fi
-        echo "Resolved version: $VERSION"
-        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-        echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Resolved version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}
-        tags: |
-          type=ref,event=pr
-          # Use the resolved version (from version bump or tag) to always emit semver tags in this run
-          type=semver,pattern={{version}},value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version != '' }}
-          type=semver,pattern={{major}}.{{minor}},value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version != '' }}
-          type=semver,pattern={{major}},value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version != '' }}
-          type=raw,value=latest,enable={{is_default_branch}}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}
+          tags: |
+            type=ref,event=pr
+            # Use the resolved version (from version bump or tag) to always emit semver tags in this run
+            type=semver,pattern={{version}},value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version != '' }}
+            type=semver,pattern={{major}},value=${{ steps.ver.outputs.version }},enable=${{ steps.ver.outputs.version != '' }}
+            type=raw,value=latest,enable={{is_default_branch}}
 
-    - name: Set up QEMU (for cross-platform emulation)
-      uses: docker/setup-qemu-action@v2
+      - name: Set up QEMU (for cross-platform emulation)
+        uses: docker/setup-qemu-action@v2
 
-    - name: Set up Docker Buildx
-      id: buildx
-      uses: docker/setup-buildx-action@v2
-      with:
-        install: true
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          install: true
 
-    - name: Build and push Container image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Containerfile
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build and push Container image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Containerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   github-release:
     runs-on: ubuntu-latest

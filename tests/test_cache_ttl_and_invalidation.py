@@ -1,0 +1,106 @@
+import time
+from types import SimpleNamespace
+from unittest.mock import PropertyMock, patch
+
+import pytest
+from fastmcp import Client
+
+from stac_mcp.fast_server import app
+
+
+@pytest.mark.asyncio
+async def test_search_cache_hit():
+    calls = {"n": 0}
+
+    items = [SimpleNamespace(id="i1", collection_id="c1", datetime=None, assets={})]
+
+    def search_fn(**_):
+        calls["n"] += 1
+        return SimpleNamespace(items=lambda: items)
+
+    with patch(
+        "stac_mcp.tools.client.STACClient.client",
+        new_callable=PropertyMock,
+        return_value=SimpleNamespace(search=search_fn),
+    ):
+        client = Client(app)
+        async with client:
+            # first call - should invoke underlying search
+            await client.call_tool("search_items", {"collections": ["c1"], "limit": 5})
+            # second call same params - should be served from cache (no new search)
+            await client.call_tool("search_items", {"collections": ["c1"], "limit": 5})
+
+    assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_search_cache_ttl_expiry(monkeypatch):
+    calls = {"n": 0}
+
+    items = [SimpleNamespace(id="i1", collection_id="c1", datetime=None, assets={})]
+
+    def search_fn(**_):
+        calls["n"] += 1
+        return SimpleNamespace(items=lambda: items)
+
+    # set TTL to 1 second
+    monkeypatch.setenv("STAC_MCP_SEARCH_CACHE_TTL_SECONDS", "1")
+
+    with patch(
+        "stac_mcp.tools.client.STACClient.client",
+        new_callable=PropertyMock,
+        return_value=SimpleNamespace(search=search_fn),
+    ):
+        client = Client(app)
+        async with client:
+            await client.call_tool("search_items", {"collections": ["c1"], "limit": 5})
+            # wait for TTL to expire
+            time.sleep(1.1)
+            await client.call_tool("search_items", {"collections": ["c1"], "limit": 5})
+
+    min_num_calls = 2
+    assert calls["n"] >= min_num_calls
+
+
+@pytest.mark.asyncio
+async def test_cache_invalidation_on_create(monkeypatch):
+    calls = {"n": 0}
+
+    items = [SimpleNamespace(id="i1", collection_id="c1", datetime=None, assets={})]
+
+    def search_fn(**_):
+        calls["n"] += 1
+        return SimpleNamespace(items=lambda: items)
+
+    with patch(
+        "stac_mcp.tools.client.STACClient.client",
+        new_callable=PropertyMock,
+        return_value=SimpleNamespace(search=search_fn),
+    ):
+        # patch requests.request so create_item transaction succeeds and
+        # triggers cache invalidation inside _do_transaction
+        class FakeResp:
+            status_code = 200
+            content = b'{"ok": true}'
+
+            def raise_for_status(self):
+                return None
+
+        def fake_request(_method, _url, _headers=None, _timeout=None, **_kwargs):
+            return FakeResp()
+
+        monkeypatch.setattr("requests.request", fake_request)
+
+        client = Client(app)
+        async with client:
+            # prime cache
+            await client.call_tool("search_items", {"collections": ["c1"], "limit": 5})
+            assert calls["n"] == 1
+            # call create_item which should invalidate cache
+            await client.call_tool(
+                "create_item", {"collection_id": "c1", "item": {"id": "new"}}
+            )
+            # next search should invoke underlying search again
+            await client.call_tool("search_items", {"collections": ["c1"], "limit": 5})
+    min_num_calls = 2
+    assert calls["n"] >= min_num_calls

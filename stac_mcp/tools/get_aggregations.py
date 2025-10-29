@@ -1,4 +1,4 @@
-"""Tool to request aggregations for a STAC item search (Aggregations Extension)."""
+"""Tool to get STAC aggregations."""
 
 from typing import Any
 
@@ -30,9 +30,10 @@ def handle_get_aggregations(
     if arguments.get("output_format") == "json":
         return {"type": "aggregations", **data}
     result_text = "**Aggregations**\n\n"
-    result_text += f"Supported: {'Yes' if data['supported'] else 'No'}\n"
-    if data["aggregations"]:
+    result_text += f"Supported: {'Yes' if data.get('supported') else 'No'}\n"
+    if data.get("aggregations"):
+        result_text += "aggregations:\n"
         for name, agg in data["aggregations"].items():
             result_text += f"  - {name}: {agg}\n"
-    result_text += f"\n{data['message']}\n"
+    result_text += f"\n{data.get('message', '')}\n"
     return [TextContent(type="text", text=result_text)]

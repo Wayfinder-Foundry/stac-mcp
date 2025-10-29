@@ -5,17 +5,54 @@ from __future__ import annotations
 import json
 import logging
 import os
-import ssl
-import urllib.error
-import urllib.request
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+import random
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
 
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
+import requests
 from pystac_client.exceptions import APIError
-from shapely.geometry import shape
+
+from .sensor_dtypes import SensorDtypeRegistry
+
+# Optional odc.stac/xarray path for more accurate, dtype-aware size estimates.
+try:
+    # Detect optional runtime availability without importing heavy modules at
+    # module import time. Prefer specific import errors to avoid catching
+    # unrelated exceptions.
+    import odc.stac  # noqa: F401
+    import xarray  # noqa: F401
+
+    ODC_STAC_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):  # pragma: no cover - optional dependency
+    ODC_STAC_AVAILABLE = False
+
+# Ensure Session.request enforces a default timeout when one is not provided.
+# This is a conservative safeguard for environments where sessions may be
+# constructed by third-party libraries (pystac_client) without an explicit
+# timeout. We wrap at the class level so all Session instances pick this up.
+try:
+    _original_session_request = requests.Session.request
+
+    def _session_request_with_default_timeout(
+        self, method, url, *args, timeout=None, **kwargs
+    ):
+        default_timeout = int(os.getenv("STAC_MCP_REQUEST_TIMEOUT", "30"))
+        if timeout is None:
+            timeout = default_timeout
+        return _original_session_request(
+            self, method, url, *args, timeout=timeout, **kwargs
+        )
+
+    # Only set if not already wrapped (avoid double-wrapping in test environments)
+    if requests.Session.request is not _session_request_with_default_timeout:
+        requests.Session.request = _session_request_with_default_timeout
+except (AttributeError, TypeError) as exc:  # pragma: no cover - defensive
+    # logger may not be defined yet; use module-level logging as a fallback
+    logging.getLogger(__name__).debug(
+        "Could not install Session.request timeout wrapper: %s", exc
+    )
+
 
 # HTTP status code constants (avoid magic numbers - PLR2004)
 HTTP_400 = 400
@@ -43,6 +80,7 @@ CONFORMANCE_TRANSACTION = [
 ]
 
 
+# Initialized earlier for the timeout wrapper fallback
 logger = logging.getLogger(__name__)
 
 
@@ -82,45 +120,284 @@ class STACClient:
 
     def __init__(
         self,
-        catalog_url: str = "https://planetarycomputer.microsoft.com/api/stac/v1",
+        catalog_url: str | None = "https://planetarycomputer.microsoft.com/api/stac/v1",
         headers: dict[str, str] | None = None,
+        head_timeout_seconds: int | None = None,
+        head_max_workers: int | None = None,
     ) -> None:
-        self.catalog_url = catalog_url.rstrip("/")
+        # Lightweight per-client search cache keyed by a deterministic
+        # representation of search parameters. This serves as a session-scoped
+        # representation of search parameters. This serves as a session-scoped
+        # cache (FastMCP session context maps to a reused STACClient instance
+        # via the execution layer) so multiple tools invoked within the same
+        # session can reuse search results and avoid duplicate network calls.
+        # Key -> (timestamp_seconds, value)
+        self._search_cache: dict[
+            str, tuple[float, list[Any] | list[dict[str, Any]]]
+        ] = {}
+        # TTL for cached search results (seconds). Default is 5 minutes but
+        # can be tuned via env var STAC_MCP_SEARCH_CACHE_TTL_SECONDS.
+        try:
+            self.search_cache_ttl_seconds = int(
+                os.getenv("STAC_MCP_SEARCH_CACHE_TTL_SECONDS", "300")
+            )
+        except (TypeError, ValueError):
+            self.search_cache_ttl_seconds = 300
+        # Catalog URL and request headers for this client instance.
+        # If the caller passed None, fall back to the package default so
+        # transaction helpers can safely build URLs.
+        self.catalog_url = (
+            catalog_url
+            if catalog_url is not None
+            else "https://planetarycomputer.microsoft.com/api/stac/v1"
+        )
         self.headers = headers or {}
-        self._client: Any | None = None
-        self._conformance: list[str] | None = None
+        # Lazy-initialized underlying pystac-client instance and cached
+        # conformance metadata.
+        self._client = None
+        self._conformance = None
         # Internal meta flags (used by execution layer for experimental meta)
         self._last_retry_attempts = 0  # number of retry attempts performed (int)
         self._last_insecure_ssl = False  # whether unsafe SSL was used (bool)
+        # HEAD request configuration: timeout and parallel workers. Values may be
+        # provided programmatically or through environment variables for
+        # runtime tuning.
+        if head_timeout_seconds is None:
+            try:
+                head_timeout_seconds = int(
+                    os.getenv("STAC_MCP_HEAD_TIMEOUT_SECONDS", "20")
+                )
+            except (TypeError, ValueError):
+                head_timeout_seconds = 20
+        self.head_timeout_seconds = head_timeout_seconds
+
+        if head_max_workers is None:
+            try:
+                head_max_workers = int(os.getenv("STAC_MCP_HEAD_MAX_WORKERS", "4"))
+            except (TypeError, ValueError):
+                head_max_workers = 4
+        self.head_max_workers = head_max_workers
+
+        # Number of retries for HEAD probes on transient failures. A value of
+        # 0 disables retries; default is read from STAC_MCP_HEAD_RETRIES.
+        try:
+            head_retries = int(os.getenv("STAC_MCP_HEAD_RETRIES", "1"))
+        except (TypeError, ValueError):
+            head_retries = 1
+        self.head_retries = max(0, head_retries)
+
+        # Backoff base (seconds) for exponential backoff calculation. Small
+        # default keeps tests fast but is tunable in production.
+        try:
+            head_backoff_base = float(os.getenv("STAC_MCP_HEAD_BACKOFF_BASE", "0.05"))
+        except (TypeError, ValueError):
+            head_backoff_base = 0.05
+        self.head_backoff_base = max(0.0, head_backoff_base)
+
+        # Whether to apply jitter to backoff delays to reduce thundering herd
+        # effects. Controlled via env var STAC_MCP_HEAD_JITTER ("1"/"0").
+        self.head_backoff_jitter = os.getenv("STAC_MCP_HEAD_JITTER", "1") in (
+            "1",
+            "true",
+            "True",
+        )
+
+        # Dedicated session for lightweight HEAD requests to avoid creating a
+        # new Session per call and to allow the global Session.request wrapper
+        # (installed above) to apply defaults consistently.
+        self._head_session = requests.Session()
+        # Lightweight per-client search cache keyed by a deterministic
+        # representation of search parameters. This serves as a session-scoped
+        # cache (FastMCP session context maps to a reused STACClient instance
+        # via the execution layer) so multiple tools invoked within the same
+        # session can reuse search results and avoid duplicate network calls.
+        # Key -> (timestamp_seconds, value)
+        self._search_cache: dict[
+            str, tuple[float, list[Any] | list[dict[str, Any]]]
+        ] = {}
+
+    def _search_cache_key(
+        self,
+        collections: list[str] | None,
+        bbox: list[float] | None,
+        datetime: str | None,
+        query: dict[str, Any] | None,
+        limit: int,
+    ) -> str:
+        """Create a deterministic cache key for search parameters."""
+        # Include the identity of the underlying client object so that tests
+        # which patch `STACClient.client` get distinct cache entries.
+        try:
+            client_id = id(self.client)
+        except Exception:  # noqa: BLE001
+            client_id = 0
+        key_obj = {
+            "collections": collections or [],
+            "bbox": bbox,
+            "datetime": datetime,
+            "query": query,
+            "limit": limit,
+            "client_id": client_id,
+        }
+        # Use json.dumps with sort_keys for deterministic serialization.
+        return json.dumps(key_obj, sort_keys=True, default=str)
+
+    def _cached_search(
+        self,
+        collections: list[str] | None = None,
+        bbox: list[float] | None = None,
+        datetime: str | None = None,
+        query: dict[str, Any] | None = None,
+        sortby: list[dict[str, str]] | None = None,
+        limit: int = 10,
+    ) -> list[Any]:
+        """Run a search and cache the resulting item list per-client.
+
+        Returns a list of pystac.Item objects (as returned by the underlying
+        client's search.items()).
+        """
+        key = self._search_cache_key(collections, bbox, datetime, query, limit)
+        now = time.time()
+        cached = self._search_cache.get(key)
+        if cached is not None:
+            ts, val = cached
+            # Read TTL from the environment dynamically so tests can adjust
+            # the TTL even when a shared client was instantiated earlier.
+            try:
+                ttl = int(
+                    os.getenv(
+                        "STAC_MCP_SEARCH_CACHE_TTL_SECONDS",
+                        str(self.search_cache_ttl_seconds),
+                    )
+                )
+            except (TypeError, ValueError):
+                ttl = getattr(self, "search_cache_ttl_seconds", 300)
+            if now - ts <= ttl:
+                return val
+            # expired
+            self._search_cache.pop(key, None)
+
+        search = self.client.search(
+            collections=collections,
+            bbox=bbox,
+            datetime=datetime,
+            query=query,
+            sortby=sortby,
+            limit=limit,
+        )
+        items = list(search.items())
+        # Store the list for reuse within this client/session along with timestamp.
+        self._search_cache[key] = (now, items)
+        return items
+
+    def _cached_collections(self, limit: int = 10) -> list[dict[str, Any]]:
+        key = f"collections:limit={int(limit)}"
+        now = time.time()
+        cached = self._search_cache.get(key)
+        if cached is not None:
+            ts, val = cached
+            try:
+                ttl = int(
+                    os.getenv(
+                        "STAC_MCP_SEARCH_CACHE_TTL_SECONDS",
+                        str(self.search_cache_ttl_seconds),
+                    )
+                )
+            except (TypeError, ValueError):
+                ttl = getattr(self, "search_cache_ttl_seconds", 300)
+            if now - ts <= ttl:
+                return val  # type: ignore[return-value]
+            self._search_cache.pop(key, None)
+
+        collections = []
+        for collection in self.client.get_collections():
+            collections.append(
+                {
+                    "id": collection.id,
+                    "title": collection.title or collection.id,
+                    "description": collection.description,
+                    "extent": (
+                        collection.extent.to_dict() if collection.extent else None
+                    ),
+                    "license": collection.license,
+                    "providers": (
+                        [p.to_dict() for p in collection.providers]
+                        if collection.providers
+                        else []
+                    ),
+                }
+            )
+            if limit > 0 and len(collections) >= limit:
+                break
+
+        self._search_cache[key] = (now, collections)
+        return collections
+
+    def _invalidate_cache(self, affected_collections: list[str] | None = None) -> None:
+        if not self._search_cache:
+            return
+        if not affected_collections:
+            self._search_cache.clear()
+            return
+        to_remove = []
+        for k in list(self._search_cache.keys()):
+            for coll in affected_collections:
+                if coll and coll in k:
+                    to_remove.append(k)
+                    break
+        for k in to_remove:
+            self._search_cache.pop(k, None)
 
     @property
     def client(self) -> Any:
         if self._client is None:
-            # Dynamic import avoids circular import; server may set Client.
-            from stac_mcp import server as _server  # noqa: PLC0415
-
-            client_ref = getattr(_server, "Client", None)
-            if client_ref is None:  # Fallback if dependency missing
-                # Import inside branch so tests can simulate missing dependency.
-                from pystac_client import (  # noqa: PLC0415
-                    Client as client_ref,  # noqa: N813
-                )
-
-            self._client = client_ref.open(  # type: ignore[attr-defined]
-                self.catalog_url,
+            from pystac_client import (  # noqa: PLC0415 local import (guarded)
+                Client as _client,  # noqa: N813
             )
+            from pystac_client.stac_api_io import (  # noqa: PLC0415 local import (guarded)
+                StacApiIO,
+            )
+
+            stac_io = StacApiIO(headers=self.headers)
+            self._client = _client.open(self.catalog_url, stac_io=stac_io)
+            # Ensure the underlying requests session used by pystac_client
+            # enforces a sensible default timeout to avoid indefinite hangs.
+            # Some HTTP libraries or network environments may drop or stall
+            # connections; wrapping the session.request call provides a
+            # portable safeguard without changing call sites.
+            try:
+                session = getattr(stac_io, "session", None)
+                if session is not None and hasattr(session, "request"):
+                    original_request = session.request
+
+                    def _request_with_default_timeout(
+                        method, url, *args, timeout=None, **kwargs
+                    ):
+                        # Default timeout (seconds) can be overridden via env var
+                        default_timeout = int(
+                            os.getenv("STAC_MCP_REQUEST_TIMEOUT", "30")
+                        )
+                        if timeout is None:
+                            timeout = default_timeout
+                        return original_request(
+                            method, url, *args, timeout=timeout, **kwargs
+                        )
+
+                    # Monkey-patch the session.request to apply default timeout
+                    session.request = _request_with_default_timeout
+            except (AttributeError, TypeError, RuntimeError) as exc:
+                # Be conservative: if wrapping fails, fall back to original behavior
+                logger.debug(
+                    "Could not wrap pystac_client session.request with timeout: %s",
+                    exc,
+                )
         return self._client
 
     @property
     def conformance(self) -> list[str]:
         """Lazy-loads and caches STAC API conformance classes."""
         if self._conformance is None:
-            conf = self._http_json("/conformance")
-            if conf and "conformsTo" in conf:
-                self._conformance = conf["conformsTo"]
-            else:  # Fallback to root document
-                root = self.get_root_document()
-                self._conformance = root.get("conformsTo", []) or []
+            self._conformance = self.client.to_dict().get("conformsTo", [])
         return self._conformance
 
     def _check_conformance(self, capability_uris: list[str]) -> None:
@@ -137,43 +414,14 @@ class STACClient:
             )
             raise ConformanceError(msg)
 
-    # ----------------------------- Utility Methods ------------------------- #
-    def _url_scheme_is_permitted(
-        self,
-        request: urllib.request.Request,
-        allowed: Sequence[str] = ("http", "https"),
-    ) -> bool:
-        """Return True when the request URL uses a permitted scheme."""
-        url = getattr(request, "full_url", request.get_full_url())
-        return urllib.parse.urlparse(url).scheme in allowed
-
     # ----------------------------- Collections ----------------------------- #
     def search_collections(self, limit: int = 10) -> list[dict[str, Any]]:
+        # Use cached collections when possible
         try:
-            collections = []
-            for collection in self.client.get_collections():
-                collections.append(
-                    {
-                        "id": collection.id,
-                        "title": collection.title or collection.id,
-                        "description": collection.description,
-                        "extent": (
-                            collection.extent.to_dict() if collection.extent else None
-                        ),
-                        "license": collection.license,
-                        "providers": (
-                            [p.to_dict() for p in collection.providers]
-                            if collection.providers
-                            else []
-                        ),
-                    },
-                )
-                if limit > 0 and len(collections) >= limit:
-                    break
+            return self._cached_collections(limit=limit)
         except APIError:  # pragma: no cover - network dependent
             logger.exception("Error fetching collections")
             raise
-        return collections
 
     def get_collection(self, collection_id: str) -> dict[str, Any]:
         try:
@@ -218,7 +466,8 @@ class STACClient:
         if sortby:
             self._check_conformance(CONFORMANCE_SORT)
         try:
-            search = self.client.search(
+            # Use cached search results (per-client) when available.
+            pystac_items = self._cached_search(
                 collections=collections,
                 bbox=bbox,
                 datetime=datetime,
@@ -227,19 +476,28 @@ class STACClient:
                 limit=limit,
             )
             items = []
-            for item in search.items():
+            for item in pystac_items:
+                # Be permissive when normalizing items: tests and alternate
+                # client implementations may provide SimpleNamespace-like
+                # objects without all attributes. Use getattr with sensible
+                # defaults to avoid AttributeError during normalization.
                 items.append(
                     {
-                        "id": item.id,
-                        "collection": item.collection_id,
-                        "geometry": item.geometry,
-                        "bbox": item.bbox,
+                        "id": getattr(item, "id", None),
+                        "collection": getattr(item, "collection_id", None),
+                        "geometry": getattr(item, "geometry", None),
+                        "bbox": getattr(item, "bbox", None),
                         "datetime": (
-                            item.datetime.isoformat() if item.datetime else None
+                            item.datetime.isoformat()
+                            if getattr(item, "datetime", None)
+                            else None
                         ),
-                        "properties": item.properties,
-                        "assets": {k: v.to_dict() for k, v in item.assets.items()},
-                    },
+                        "properties": getattr(item, "properties", {}) or {},
+                        "assets": {
+                            k: v.to_dict()
+                            for k, v in getattr(item, "assets", {}).items()
+                        },
+                    }
                 )
                 if limit and limit > 0 and len(items) >= limit:
                     break
@@ -260,60 +518,203 @@ class STACClient:
             )
             raise
         else:
+            if item is None:
+                return None
+            # Normalize defensively as above
             return {
-                "id": item.id,
-                "collection": item.collection_id,
-                "geometry": item.geometry,
-                "bbox": item.bbox,
-                "datetime": item.datetime.isoformat() if item.datetime else None,
-                "properties": item.properties,
-                "assets": {k: v.to_dict() for k, v in item.assets.items()},
+                "id": getattr(item, "id", None),
+                "collection": getattr(item, "collection_id", None),
+                "geometry": getattr(item, "geometry", None),
+                "bbox": getattr(item, "bbox", None),
+                "datetime": (
+                    item.datetime.isoformat()
+                    if getattr(item, "datetime", None)
+                    else None
+                ),
+                "properties": getattr(item, "properties", {}) or {},
+                "assets": {
+                    k: v.to_dict() for k, v in getattr(item, "assets", {}).items()
+                },
             }
 
     # --------------------------- Transactions --------------------------- #
+    def _do_transaction(
+        self,
+        method: str,
+        url: str,
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
+        **kwargs,
+    ) -> dict[str, Any] | None:
+        """Centralized transaction request handling with error mapping."""
+        request_headers = self.headers.copy()
+        if headers:
+            request_headers.update(headers)
+        request_headers["Accept"] = "application/json"
+        if not self.client:
+            client_not_initialized = (
+                "STACClient 'client' property not initialized before transaction."
+            )
+            raise RuntimeError(client_not_initialized)
+        try:
+            # Prefer using the underlying session used by pystac_client when
+            # available (tests monkeypatch that session). Fall back to using
+            # requests.request when no underlying session is present.
+            session = None
+            try:
+                session = getattr(self.client, "_stac_io", None)
+                session = getattr(session, "session", None)
+            except Exception:  # noqa: BLE001
+                session = None
+
+            if session is not None and hasattr(session, "request"):
+                response = session.request(
+                    method, url, headers=request_headers, timeout=timeout, **kwargs
+                )
+            else:
+                response = requests.request(
+                    method, url, headers=request_headers, timeout=timeout, **kwargs
+                )
+            if response.status_code == HTTP_404:
+                return None
+            response.raise_for_status()
+            # If this transaction modified server state, invalidate cache.
+            if method.lower() in ("post", "put", "delete"):
+                affected = None
+                try:
+                    # Try to extract a collection id from the URL when present
+                    # e.g., .../collections/{collection_id}/items
+                    # or .../collections/{collection_id}
+                    base = self.catalog_url.replace("catalog.json", "")
+                    path = url.split(base, 1)[-1]
+                    if "/collections/" in path:
+                        tail = path.split("/collections/", 1)[1]
+                        coll = tail.split("/", 1)[0]
+                        if coll:
+                            affected = [coll]
+                except Exception:  # noqa: BLE001
+                    affected = None
+                try:
+                    self._invalidate_cache(affected)
+                except Exception:  # noqa: BLE001
+                    # Invalidation is best-effort; don't fail the transaction on
+                    # cache errors
+                    logger.debug("Cache invalidation failed", exc_info=True)
+            # Some endpoints may return no content (204) — treat as None
+            if not getattr(response, "content", None):
+                return None
+            # Prefer a native .json() method when present but fall back to
+            # decoding the response content when tests provide simple fakes
+            # that implement 'content' but not .json(). This keeps tests
+            # lightweight while remaining robust for real HTTP responses.
+            try:
+                return response.json()
+            except Exception:  # noqa: BLE001
+                try:
+                    raw = response.content
+                    if isinstance(raw, (bytes, bytearray)):
+                        import json as _json  # noqa: PLC0415
+
+                        return _json.loads(raw.decode("utf-8"))
+                    if isinstance(raw, str):
+                        import json as _json  # noqa: PLC0415
+
+                        return _json.loads(raw)
+                except Exception:  # noqa: BLE001
+                    # Final fallback: return a simple dict indicating raw
+                    # content was present but could not be parsed as JSON.
+                    return {"raw_content": getattr(response, "content", None)}
+        except requests.exceptions.Timeout as exc:  # pragma: no cover - network
+            logger.exception("Request timed out %s %s", method, url)
+            raise STACTimeoutError(str(exc)) from exc
+        except requests.exceptions.ConnectionError as exc:  # pragma: no cover - network
+            logger.exception("Failed to connect %s %s", method, url)
+            raise ConnectionFailedError(str(exc)) from exc
+        except requests.exceptions.RequestException:
+            # Keep logging/raise behavior consistent with previous implementation
+            logger.exception("Transaction failed %s %s", method, url)
+            raise
+
     def create_item(
         self,
         collection_id: str,
         item: dict[str, Any],
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
         """Creates a new STAC Item in a collection."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
-        path = f"/collections/{collection_id}/items"
-        return self._http_json(path, method="POST", payload=item)
+        # Remove any double slashes from URL after http:// or https://
+        path = f"collections/{collection_id}/items"
+        url = f"{self.catalog_url.replace('catalog.json', '')}{path}"
+        return self._do_transaction(
+            "post", url, json=item, timeout=timeout, headers=headers
+        )
 
-    def update_item(self, item: dict[str, Any]) -> dict[str, Any] | None:
+    def update_item(
+        self,
+        item: dict[str, Any],
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
         """Updates an existing STAC Item."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
         collection_id = item.get("collection")
         item_id = item.get("id")
         if not collection_id or not item_id:
             msg = "Item must have 'collection' and 'id' fields for update."
             raise ValueError(msg)
         path = f"/collections/{collection_id}/items/{item_id}"
-        return self._http_json(path, method="PUT", payload=item)
+        url = f"{self.catalog_url.replace('catalog.json', '')}{path}"
+        return self._do_transaction(
+            "put", url, json=item, timeout=timeout, headers=headers
+        )
 
-    def delete_item(self, collection_id: str, item_id: str) -> dict[str, Any] | None:
+    def delete_item(
+        self,
+        collection_id: str,
+        item_id: str,
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
         """Deletes a STAC Item."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
         path = f"/collections/{collection_id}/items/{item_id}"
-        return self._http_json(path, method="DELETE")
+        url = f"{self.catalog_url.replace('catalog.json', '')}{path}"
+        return self._do_transaction("delete", url, timeout=timeout, headers=headers)
 
-    def create_collection(self, collection: dict[str, Any]) -> dict[str, Any] | None:
+    def create_collection(
+        self,
+        collection: dict[str, Any],
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
         """Creates a new STAC Collection."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
-        return self._http_json("/collections", method="POST", payload=collection)
+        url = f"{self.catalog_url.replace('catalog.json', '')}/collections"
+        return self._do_transaction(
+            "post", url, json=collection, timeout=timeout, headers=headers
+        )
 
-    def update_collection(self, collection: dict[str, Any]) -> dict[str, Any] | None:
+    def update_collection(
+        self,
+        collection: dict[str, Any],
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
         """Updates an existing STAC Collection."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
         # Per spec, PUT is to /collections, not /collections/{id}
-        return self._http_json("/collections", method="PUT", payload=collection)
+        url = f"{self.catalog_url.replace('catalog.json', '')}/collections"
+        return self._do_transaction(
+            "put", url, json=collection, timeout=timeout, headers=headers
+        )
 
-    def delete_collection(self, collection_id: str) -> dict[str, Any] | None:
+    def delete_collection(
+        self,
+        collection_id: str,
+        timeout: int = 30,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any] | None:
         """Deletes a STAC Collection."""
-        self._check_conformance(CONFORMANCE_TRANSACTION)
         path = f"/collections/{collection_id}"
-        return self._http_json(path, method="DELETE")
+        url = f"{self.catalog_url.replace('catalog.json', '')}{path}"
+        return self._do_transaction("delete", url, timeout=timeout, headers=headers)
 
     # ------------------------- Data Size Estimation ----------------------- #
     def estimate_data_size(
@@ -323,27 +724,35 @@ class STACClient:
         datetime: str | None = None,
         query: dict[str, Any] | None = None,
         aoi_geojson: dict[str, Any] | None = None,
-        limit: int = 100,
+        limit: int = 10,
+        force_metadata_only: bool = False,
     ) -> dict[str, Any]:
-        # Local import (intentional) lets tests patch server.ODC_STAC_AVAILABLE.
-        from stac_mcp import server as _server  # noqa: PLC0415
+        """Simplified estimator: prefer odc.stac + xarray to compute eager size.
 
-        if not getattr(_server, "ODC_STAC_AVAILABLE", False):
-            msg = (
-                "odc.stac is not available. Please install it to use data size "
-                "estimation."
-            )
-            raise RuntimeError(msg)
-        from odc import stac as odc_stac  # noqa: PLC0415 local import (guarded)
+        This implementation is intentionally minimal: when odc.stac and
+        xarray are available it loads the matching items into an
+        xarray.Dataset and computes an eager size estimate by summing the
+        number of elements across data variables. For simplicity we assume
+        1 byte per element (ignore dtype/itemsize). If optional libraries
+        are missing we return a helpful message.
+        """
 
-        search = self.client.search(
+        # Retrieve matching items (pystac.Item objects). Keep this small and
+        # deterministic. The underlying search may return more items than the
+        # requested `limit` due to provider behavior or cached results, so
+        # enforce truncation here before any expensive work (odc.stac.load).
+        items = self._cached_search(
             collections=collections,
             bbox=bbox,
             datetime=datetime,
             query=query,
             limit=limit,
         )
-        items = list(search.items())
+
+        # Respect the caller-provided limit strictly.
+        if limit and limit > 0 and len(items) > limit:
+            items = items[:limit]
+
         if not items:
             return {
                 "item_count": 0,
@@ -353,408 +762,366 @@ class STACClient:
                 "bbox_used": bbox,
                 "temporal_extent": datetime,
                 "collections": collections or [],
-                "clipped_to_aoi": False,
+                "clipped_to_aoi": bool(aoi_geojson),
                 "message": "No items found for the given query parameters",
             }
 
-        effective_bbox = bbox
-        clipped_to_aoi = False
-        if aoi_geojson:
-            geom = shape(aoi_geojson)
-            aoi_bounds = geom.bounds
-            if bbox:
-                effective_bbox = [
-                    max(bbox[0], aoi_bounds[0]),
-                    max(bbox[1], aoi_bounds[1]),
-                    min(bbox[2], aoi_bounds[2]),
-                    min(bbox[3], aoi_bounds[3]),
-                ]
-            else:
-                effective_bbox = list(aoi_bounds)
-            clipped_to_aoi = True
-
-        try:
-            ds = odc_stac.load(items, bbox=effective_bbox, chunks={})
-            estimated_bytes = 0
-            data_vars_info: list[dict[str, Any]] = []
-            for var_name, data_array in ds.data_vars.items():
-                # Use original dtype from encoding if available (before nodata
-                # conversion). This prevents overestimation when nodata values
-                # cause dtype upcast to float64
-                original_dtype = (
-                    data_array.encoding.get("dtype")
-                    if hasattr(data_array, "encoding")
-                    else None
-                )
-                effective_dtype = (
-                    original_dtype if original_dtype is not None else data_array.dtype
-                )
-
-                # Calculate bytes using original dtype to avoid overestimation
-                import numpy as np  # noqa: PLC0415
-
-                dtype_obj = np.dtype(effective_dtype)
-                var_nbytes = dtype_obj.itemsize * data_array.size
-
-                estimated_bytes += var_nbytes
-                data_vars_info.append(
-                    {
-                        "variable": var_name,
-                        "shape": list(data_array.shape),
-                        "dtype": str(effective_dtype),
-                        "size_bytes": var_nbytes,
-                        "size_mb": round(var_nbytes / (1024 * 1024), 2),
-                    },
-                )
-            estimated_mb = estimated_bytes / (1024 * 1024)
-            estimated_gb = estimated_bytes / (1024 * 1024 * 1024)
-            dates = [item.datetime for item in items if item.datetime]
-            temporal_extent = None
-            if dates:
-                temporal_extent = (
-                    f"{min(dates).isoformat()} to {max(dates).isoformat()}"
-                )
+        # If the optional odc.stac/xarray path is not available and the
+        # caller did not request metadata-only behaviour, return a helpful
+        # message explaining how to enable dataset-based estimates. If the
+        # caller requested `force_metadata_only=True` we skip this early
+        # return and fall back to metadata/HEAD aggregation below.
+        if not ODC_STAC_AVAILABLE and not force_metadata_only:
             return {
                 "item_count": len(items),
-                "estimated_size_bytes": estimated_bytes,
-                "estimated_size_mb": round(estimated_mb, 2),
-                "estimated_size_gb": round(estimated_gb, 4),
-                "bbox_used": effective_bbox,
-                "temporal_extent": temporal_extent or datetime,
+                "estimated_size_bytes": 0,
+                "estimated_size_mb": 0,
+                "estimated_size_gb": 0,
+                "bbox_used": bbox,
+                "temporal_extent": datetime,
                 "collections": collections
-                or list({item.collection_id for item in items}),
-                "clipped_to_aoi": clipped_to_aoi,
-                "data_variables": data_vars_info,
-                "spatial_dims": (
-                    {"x": ds.dims.get("x", 0), "y": ds.dims.get("y", 0)}
-                    if "x" in ds.dims and "y" in ds.dims
-                    else {}
+                or [getattr(item, "collection_id", None) for item in items],
+                "clipped_to_aoi": bool(aoi_geojson),
+                "message": (
+                    "odc.stac/xarray not available; install 'odc-stac' "
+                    "and 'xarray' to enable dataset-based estimates"
                 ),
-                "message": f"Successfully estimated data size for {len(items)} items",
             }
-        except (
-            RuntimeError,
-            ValueError,
-            AttributeError,
-            KeyError,
-            TypeError,
-        ) as exc:  # pragma: no cover - fallback path
-            logger.warning(
-                "odc.stac loading failed, using fallback estimation: %s",
-                exc,
-            )
-            return self._fallback_size_estimation(
-                items,
-                effective_bbox,
-                datetime,
-                collections,
-                clipped_to_aoi,
-            )
 
-    def _fallback_size_estimation(
-        self,
-        items: list[Any],
-        effective_bbox: list[float] | None,
-        datetime: str | None,
-        collections: list[str] | None,
-        clipped_to_aoi: bool,
-    ) -> dict[str, Any]:
-        total_estimated_bytes = 0
-        assets_info = []
-        for item in items:
-            for asset_name, asset in item.assets.items():
-                asset_size = 0
-                if hasattr(asset, "extra_fields"):
-                    asset_size = asset.extra_fields.get("file:size", 0)
-                if asset_size == 0:
-                    media_type = getattr(asset, "media_type", "") or ""
-                    if "tiff" in media_type.lower() or "geotiff" in media_type.lower():
-                        if effective_bbox:
-                            bbox_area = (effective_bbox[2] - effective_bbox[0]) * (
-                                effective_bbox[3] - effective_bbox[1]
-                            )
-                            asset_size = int(bbox_area * 10 * 1024 * 1024)
-                        else:
-                            asset_size = 50 * 1024 * 1024
-                    else:
-                        asset_size = 5 * 1024 * 1024
-                total_estimated_bytes += asset_size
-                assets_info.append(
-                    {
-                        "asset": asset_name,
-                        "media_type": getattr(asset, "media_type", "unknown"),
-                        "estimated_size_bytes": asset_size,
-                        "estimated_size_mb": round(asset_size / (1024 * 1024), 2),
-                    },
+        # If the caller requested metadata-only behaviour, skip the odc/xarray
+        # eager load path and jump straight to the metadata/HEAD fallback
+        # implemented later in this function.
+        odc_exc = False
+        if not force_metadata_only:
+            # Try to perform a per-item odc.stac load and compute sizes.
+            try:
+                import xarray as xr  # type: ignore[import]  # noqa: PLC0415
+                from odc.stac import (  # noqa: PLC0415
+                    load as _odc_load,  # type: ignore[import]
                 )
-        dates = [item.datetime for item in items if item.datetime]
-        temporal_extent = None
-        if dates:
-            temporal_extent = f"{min(dates).isoformat()} to {max(dates).isoformat()}"
-        estimated_mb = total_estimated_bytes / (1024 * 1024)
-        estimated_gb = total_estimated_bytes / (1024 * 1024 * 1024)
+
+                # Load items one-by-one so sensor registry overrides can be
+                # applied per-item and to keep memory usage predictable.
+                total_bytes = 0
+                sensor_native_total_bytes = 0
+                data_variables: list[dict[str, Any]] = []
+                dtype_registry = SensorDtypeRegistry()
+
+                for item in items:
+                    ds_item = _odc_load([item], chunks={})
+                    if not isinstance(ds_item, xr.Dataset):
+                        continue
+
+                    collection_id = getattr(item, "collection_id", None)
+                    sensor_info = dtype_registry.get_info(collection_id)
+
+                    for name, da in ds_item.data_vars.items():
+                        try:
+                            shape = tuple(int(s) for s in getattr(da, "shape", ()))
+                            elems = 1
+                            for s in shape:
+                                elems *= s
+
+                            underlying = getattr(da, "data", None)
+                            nbytes = getattr(underlying, "nbytes", None)
+                            method = "computed"
+                            override_applied = False
+                            if nbytes is not None:
+                                size_bytes = int(nbytes)
+                                method = "nbytes"
+                                # Softer heuristic: if the reported dtype is a
+                                # floating type but the sensor registry suggests
+                                # an integer native dtype for this asset, produce
+                                # both reported and registry-corrected sizes so
+                                # callers can see both views and choose.
+                                try:
+                                    import numpy as np  # type: ignore[import]  # noqa: PLC0415 - guarded import
+
+                                    reported_dtype = getattr(da, "dtype", None)
+                                    override_dtype = None
+                                    if sensor_info is not None:
+                                        try:
+                                            override_dtype = (
+                                                sensor_info.get_dtype_for_asset(name)
+                                            )
+                                        except (AttributeError, TypeError, ValueError):
+                                            override_dtype = None
+
+                                    # Only consider registry correction when the
+                                    # reported dtype is a float and the registry
+                                    # suggests an integer dtype for this asset.
+                                    if (
+                                        reported_dtype is not None
+                                        and hasattr(reported_dtype, "kind")
+                                        and reported_dtype.kind == "f"
+                                        and override_dtype is not None
+                                        and np.issubdtype(override_dtype, np.integer)
+                                    ):
+                                        # Compute registry-corrected bytes (no
+                                        # side-effects on total_bytes; we keep the
+                                        # estimator's numeric total based on what
+                                        # xarray reports unless a caller requests
+                                        # otherwise).
+                                        try:
+                                            sensor_itemsize = int(
+                                                np.dtype(override_dtype).itemsize
+                                            )
+                                        except (TypeError, ValueError):
+                                            sensor_itemsize = 1
+                                        sensor_native_bytes = int(
+                                            elems * sensor_itemsize
+                                        )
+                                    else:
+                                        sensor_native_bytes = None
+                                except (ImportError, ModuleNotFoundError):
+                                    # If numpy missing, skip registry check.
+                                    sensor_native_bytes = None
+                            else:
+                                override_dtype = None
+                                if sensor_info is not None:
+                                    try:
+                                        override_dtype = (
+                                            sensor_info.get_dtype_for_asset(name)
+                                        )
+                                    except (AttributeError, TypeError, ValueError):
+                                        override_dtype = None
+
+                                dtype = getattr(da, "dtype", None)
+                                if override_dtype is not None:
+                                    dtype = override_dtype
+                                    override_applied = True
+
+                                itemsize = getattr(dtype, "itemsize", None)
+                                if itemsize is None:
+                                    try:
+                                        import numpy as np  # type: ignore[import]  # noqa: PLC0415 - guarded import
+
+                                        itemsize = (
+                                            np.dtype(dtype).itemsize
+                                            if dtype is not None
+                                            else 1
+                                        )
+                                    except (
+                                        ImportError,
+                                        ModuleNotFoundError,
+                                        TypeError,
+                                        ValueError,
+                                    ):
+                                        itemsize = 1
+                                size_bytes = int(elems * int(itemsize))
+
+                            total_bytes += size_bytes
+                            # sensor_native_total accumulates the sensor-native
+                            # bytes when available; otherwise fall back to the
+                            # reported/computed size_bytes so the sensor-native
+                            # total is a complete estimate.
+                            if (
+                                "sensor_native_bytes" in locals()
+                                and sensor_native_bytes is not None
+                            ):
+                                sensor_native_total_bytes += int(sensor_native_bytes)
+                            else:
+                                sensor_native_total_bytes += int(size_bytes)
+                            var_entry: dict[str, Any] = {
+                                "variable": name,
+                                "shape": shape,
+                                "elements": elems,
+                                "estimated_bytes": int(size_bytes),
+                                "dtype": str(getattr(da, "dtype", None)),
+                                "method": method,
+                                "override_applied": bool(override_applied),
+                            }
+                            # If we computed a registry-corrected bytes value
+                            # for float->integer recommendations, include both
+                            # values so callers can inspect and choose.
+                            if (
+                                "sensor_native_bytes" in locals()
+                                and sensor_native_bytes is not None
+                            ):
+                                var_entry["reported_bytes"] = int(size_bytes)
+                                var_entry["sensor_native_bytes"] = int(
+                                    sensor_native_bytes
+                                )
+                                var_entry["sensor_native_dtype"] = str(override_dtype)
+                                # Recommend the sensor-native value for
+                                # storage/instrument-native use-cases but do not
+                                # change the estimator total by default.
+                                var_entry["recommended"] = "sensor_native"
+                                var_entry["sensor_native_recommended"] = True
+
+                            data_variables.append(var_entry)
+                        except Exception as exc:  # noqa: BLE001 - defensive skip
+                            # Skip variables we cannot introspect but emit a
+                            # debug-level message so failures are visible in
+                            # debugging runs while avoiding noisy user logs.
+                            logger.debug(
+                                "Skipping variable %s due to error: %s", name, exc
+                            )
+                            continue
+                estimated_mb = total_bytes / (1024 * 1024)
+                estimated_gb = total_bytes / (1024 * 1024 * 1024)
+                sensor_native_estimated_mb = sensor_native_total_bytes / (1024 * 1024)
+                sensor_native_estimated_gb = sensor_native_total_bytes / (
+                    1024 * 1024 * 1024
+                )
+
+                # Summarize how many variables reported native .nbytes and how
+                # many have a sensor-native alternative included.
+                reported_nbytes_count = sum(
+                    1 for v in data_variables if v.get("method") == "nbytes"
+                )
+                sensor_native_corrections_count = sum(
+                    1
+                    for v in data_variables
+                    if v.get("sensor_native_bytes") is not None
+                )
+
+                parts = [
+                    "Estimated sizes computed using odc.stac/xarray.",
+                    f"Numeric total uses .data.nbytes: {int(total_bytes)} bytes",
+                    f"(~{round(estimated_gb, 4)} GB);",
+                    "sensor-native total (instrument-native) is",
+                    f"{int(sensor_native_total_bytes)} bytes",
+                    f"(~{round(sensor_native_estimated_gb, 4)} GB).",
+                    f"Reported .data.nbytes count: {reported_nbytes_count};",
+                    f"Sensor-native corrections: {sensor_native_corrections_count}.",
+                ]
+                message = " ".join(parts)
+
+                return {
+                    "item_count": len(items),
+                    "estimated_size_bytes": int(total_bytes),
+                    "estimated_size_mb": round(estimated_mb, 2),
+                    "estimated_size_gb": round(estimated_gb, 4),
+                    "sensor_native_estimated_size_bytes": int(
+                        sensor_native_total_bytes
+                    ),
+                    "sensor_native_estimated_size_mb": round(
+                        sensor_native_estimated_mb, 2
+                    ),
+                    "sensor_native_estimated_size_gb": round(
+                        sensor_native_estimated_gb, 4
+                    ),
+                    "bbox_used": bbox,
+                    "temporal_extent": datetime,
+                    "collections": collections
+                    or [getattr(item, "collection_id", None) for item in items],
+                    "clipped_to_aoi": bool(aoi_geojson),
+                    "data_variables": data_variables,
+                    "message": message,
+                }
+            except Exception:  # pragma: no cover - best-effort
+                # odc may fail when tests pass in lightweight objects; log and
+                # fall back to metadata/HEAD-based aggregation below.
+                logger.exception("odc.stac eager estimate failed")
+                odc_exc = True
+
+        # Fallback estimator: aggregate sizes from asset metadata (file:size)
+        # and, when missing, use HEAD requests to probe Content-Length. This
+        # path is exercised by unit tests and serves as a robust fallback
+        # when odc/xarray-based introspection is unavailable or fails.
+        total_bytes = 0
+        assets_analyzed: list[dict[str, Any]] = []
+        hrefs_to_probe: list[str] = []
+
+        for item in items:
+            # Accept both dict-like and object items (tests use MagicMock)
+            assets = getattr(item, "assets", None) or {}
+            # assets may be a dict of asset objects or dicts
+            for name, asset in assets.items() if isinstance(assets, dict) else []:
+                try:
+                    a = self._asset_to_dict(asset)
+                    # First, try metadata-based size hints
+                    meta_size = self._size_from_metadata(a)
+                    if meta_size is not None:
+                        assets_analyzed.append(
+                            {
+                                "asset": name,
+                                "href": a.get("href"),
+                                "method": "metadata",
+                                "size": int(meta_size),
+                            }
+                        )
+                        total_bytes += int(meta_size)
+                        continue
+
+                    # If no metadata size, and we have an href, queue for HEAD
+                    href = a.get("href")
+                    if href:
+                        hrefs_to_probe.append(href)
+                        assets_analyzed.append(
+                            {
+                                "asset": name,
+                                "href": href,
+                                "method": "head",
+                                "size": None,
+                            }
+                        )
+                        continue
+
+                    # Otherwise we couldn't analyze this asset
+                    assets_analyzed.append(
+                        {"asset": name, "href": None, "method": "failed", "size": None}
+                    )
+                except (AttributeError, TypeError, ValueError) as exc:
+                    logger.debug("Failed to normalize asset %s: %s", name, exc)
+                    assets_analyzed.append(
+                        {"asset": name, "href": None, "method": "failed", "size": None}
+                    )
+
+        # Probe hrefs in parallel (HEAD requests). _parallel_head_content_lengths
+        # returns a mapping href -> size | None.
+        if hrefs_to_probe:
+            try:
+                head_results = self._parallel_head_content_lengths(hrefs_to_probe)
+            except Exception as exc:  # pragma: no cover - defensive  # noqa: BLE001
+                logger.debug("HEAD probing failed: %s", exc)
+                head_results = dict.fromkeys(hrefs_to_probe)
+
+            # Fill in sizes for analyzed assets
+            for a in assets_analyzed:
+                if a.get("method") == "head" and a.get("href"):
+                    size = head_results.get(a["href"])
+                    if size is None:
+                        a["method"] = "failed"
+                        a["size"] = None
+                    else:
+                        a["size"] = int(size)
+                        total_bytes += int(size)
+
+        estimated_mb = total_bytes / (1024 * 1024)
+        estimated_gb = total_bytes / (1024 * 1024 * 1024) if total_bytes else 0
+
+        message = (
+            "Estimated sizes computed using metadata/HEAD fallback. "
+            f"Total (metadata+HEAD) is {int(total_bytes)} bytes "
+            f"(~{round(estimated_gb, 4)} GB)."
+        )
         return {
             "item_count": len(items),
-            "estimated_size_bytes": total_estimated_bytes,
+            "estimated_size_bytes": int(total_bytes),
             "estimated_size_mb": round(estimated_mb, 2),
             "estimated_size_gb": round(estimated_gb, 4),
-            "bbox_used": effective_bbox,
-            "temporal_extent": temporal_extent or datetime,
-            "collections": collections or list({item.collection_id for item in items}),
-            "clipped_to_aoi": clipped_to_aoi,
-            "assets_analyzed": assets_info,
-            "estimation_method": "fallback",
-            "message": (
-                "Estimated data size for "
-                f"{len(items)} items using fallback method (odc.stac unavailable)"
-            ),
+            "bbox_used": bbox,
+            "temporal_extent": datetime,
+            "collections": collections
+            or [getattr(item, "collection_id", None) for item in items],
+            "clipped_to_aoi": bool(aoi_geojson),
+            "assets_analyzed": assets_analyzed,
+            "message": message,
         }
 
-    # ----------------------- Capabilities & Discovery -------------------- #
-    def _http_json(
-        self,
-        path: str,
-        method: str = "GET",
-        payload: dict | None = None,
-        headers: dict[str, str] | None = None,
-        timeout: int | None = None,
-    ) -> dict | None:
-        """Lightweight HTTP helper using stdlib (avoids extra deps).
-
-        Returns parsed JSON dict or None on 404 for capability endpoints where
-        absence is acceptable.
-
-        Args:
-            path: URL path relative to catalog_url
-            method: HTTP method (GET, POST, etc.)
-            payload: Optional JSON payload for POST/PUT requests
-            headers: Optional headers to merge with default headers
-            timeout: Optional timeout in seconds (defaults to 30)
-        """
-        url = self.catalog_url.rstrip("/") + path
-        data = None
-        request_headers = self.headers.copy()
-        request_headers.update(headers or {})
-        request_headers["Accept"] = "application/json"
-
-        if payload is not None:
-            data = json.dumps(payload).encode("utf-8")
-            request_headers["Content-Type"] = "application/json"
-        if not url.startswith(("http://", "https://")):
-            msg = f"Unsupported URL scheme in {url}"
-            raise ValueError(msg)
-        # Request object creation is safe: url validated to http/https only.
-        req = urllib.request.Request(  # noqa: S310
-            url,
-            data=data,
-            headers=request_headers,
-            method=method,
-        )
-        if not self._url_scheme_is_permitted(req):
-            msg = f"Unsupported URL scheme in {url}"
-            raise ValueError(msg)
-        # ---------------- SSL Context Handling ---------------- #
-        context: ssl.SSLContext | None = None
-        disable_ssl = os.getenv("STAC_MCP_UNSAFE_DISABLE_SSL") == "1"
-        # New: opportunistic fallback when encountering a certificate validation
-        # failure for read-only endpoints (GET) if explicitly allowed.
-        insecure_fallback_enabled = os.getenv("STAC_MCP_SSL_INSECURE_FALLBACK") == "1"
-        insecure_retry_performed = False
-        ca_bundle = os.getenv("STAC_MCP_CA_BUNDLE")
-        if disable_ssl:
-            context = ssl.create_default_context()
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE  # type: ignore[assignment]
-            logger.warning(
-                "SSL verification DISABLED via STAC_MCP_UNSAFE_DISABLE_SSL=1. "
-                "Not for production use.",
-            )
-            self._last_insecure_ssl = True
-        elif ca_bundle and Path(ca_bundle).is_file():
-            try:
-                context = ssl.create_default_context(cafile=ca_bundle)
-            except OSError as ctx_exc:  # pragma: no cover - unlikely
-                logger.warning(
-                    "Failed to load custom CA bundle '%s': %s",
-                    ca_bundle,
-                    ctx_exc,
-                )
-
-        # ---------------- Retry / Backoff Logic ---------------- #
-        max_attempts = 3
-        base_delay = 0.2
-        self._last_retry_attempts = 0
-        effective_timeout = timeout if timeout is not None else 30
-
-        for attempt in range(1, max_attempts + 1):
-            try:
-                with urllib.request.urlopen(  # noqa: S310
-                    req,
-                    timeout=effective_timeout,
-                    context=context,
-                ) as resp:
-                    raw = resp.read().decode("utf-8")
-                    return json.loads(raw) if raw else {}
-            except urllib.error.HTTPError as exc:  # pragma: no cover - network specific
-                if exc.code == HTTP_404:
-                    return None
-                # Non-404 HTTP errors are not retried (server responded definitively)
-                raise
-            except urllib.error.URLError as exc:  # pragma: no cover - network
-                reason = getattr(exc, "reason", None)
-                if isinstance(reason, ssl.SSLCertVerificationError):
-                    # Attempt a one-time insecure fallback if explicitly enabled
-                    # and criteria met (GET + read-only path) and not already tried.
-                    read_only = method == "GET"
-                    safe_path = path in ("/conformance", "") or path.endswith(
-                        "/conformance",
-                    )
-                    if (
-                        insecure_fallback_enabled
-                        and not insecure_retry_performed
-                        and read_only
-                        and safe_path
-                        and not disable_ssl
-                    ):
-                        logger.warning(
-                            (
-                                "SSL verification failed for %s: %s. Retrying once "
-                                "INSECURE (fallback env enabled)."
-                            ),
-                            url,
-                            reason,
-                        )
-                        insecure_retry_performed = True
-                        # Build insecure context and retry immediately (no backoff)
-                        insecure_ctx = ssl.create_default_context()
-                        insecure_ctx.check_hostname = False
-                        insecure_ctx.verify_mode = ssl.CERT_NONE
-                        try:
-                            with urllib.request.urlopen(  # noqa: S310
-                                req,
-                                timeout=effective_timeout,
-                                context=insecure_ctx,
-                            ) as resp:
-                                raw = resp.read().decode("utf-8")
-                                self._last_insecure_ssl = True
-                                return json.loads(raw) if raw else {}
-                        except (
-                            urllib.error.URLError,
-                            ssl.SSLError,
-                            ssl.SSLCertVerificationError,
-                            OSError,
-                            ValueError,
-                        ):  # pragma: no cover - network
-                            logger.exception(
-                                "Insecure fallback attempt also failed",
-                            )
-                            # Fall through to raise canonical error below
-                    msg = (
-                        f"SSL certificate verification failed for {url}: {reason}. "
-                        "Set STAC_MCP_CA_BUNDLE to a custom CA bundle, use "
-                        "STAC_MCP_SSL_INSECURE_FALLBACK=1 for a one-time read-only "
-                        "retry, or (unsafe) STAC_MCP_UNSAFE_DISABLE_SSL=1 to fully "
-                        "bypass verification for all requests (diagnostics only)."
-                    )
-                    raise SSLVerificationError(msg) from exc
-                # Retry only on the first (max_attempts-1) attempts
-                if attempt < max_attempts:
-                    self._last_retry_attempts = attempt
-                    delay = base_delay * (2 ** (attempt - 1))
-                    import time  # noqa: PLC0415
-
-                    time.sleep(delay)
-                    continue
-                # Map remaining URLErrors to actionable error types
-                msg = self._map_connection_error(url, exc, effective_timeout)
-                logger.exception(
-                    "Connection failed after %d attempts: %s",
-                    max_attempts,
-                    msg,
-                )
-                raise ConnectionFailedError(msg) from exc
-            except OSError as exc:  # pragma: no cover - network
-                # Catch socket.timeout (which is subclass of OSError) and
-                # other OS errors.
-                # Use builtin TimeoutError for isinstance check (Python 3.10+)
-                import socket  # noqa: PLC0415
-
-                if "timed out" in str(exc).lower() or isinstance(
-                    exc,
-                    (socket.timeout, TimeoutError),
-                ):
-                    if attempt < max_attempts:
-                        self._last_retry_attempts = attempt
-                        delay = base_delay * (2 ** (attempt - 1))
-                        import time  # noqa: PLC0415
-
-                        time.sleep(delay)
-                        continue
-                    msg = (
-                        f"Request to {url} timed out after {effective_timeout}s"
-                        f"(attempted {max_attempts} times). "
-                        "Consider increasing timeout parameter or checking "
-                        "network connectivity."
-                    )
-                    logger.exception("Request timeout: %s", msg)
-                    raise STACTimeoutError(msg) from exc
-                raise
-        return None  # Should not reach here; loop either returns or raises
-
-    def _map_connection_error(
-        self,
-        url: str,
-        exc: urllib.error.URLError,
-        timeout: int,
-    ) -> str:
-        """Map URLError to actionable error message.
-
-        Args:
-            url: The URL that failed
-            exc: The URLError exception
-            timeout: The timeout value used
-
-        Returns:
-            Actionable error message with guidance
-        """
-        reason = getattr(exc, "reason", None)
-        reason_str = str(reason) if reason else str(exc)
-
-        # Common error patterns and their messages
-        if (
-            "Name or service not known" in reason_str
-            or "nodename nor servname" in reason_str
-        ):
-            return (
-                f"DNS lookup failed for {url}. "
-                "Check the catalog URL and network connectivity."
-            )
-        if "Connection refused" in reason_str:
-            return (
-                f"Connection refused by {url}. "
-                "The server may be down or the URL may be incorrect."
-            )
-        if "Network is unreachable" in reason_str or "No route to host" in reason_str:
-            return (
-                f"Network unreachable for {url}. "
-                "Check network connectivity and firewall settings."
-            )
-        if "timed out" in reason_str.lower():
-            return (
-                f"Connection to {url} timed out after {timeout}s. "
-                "Consider increasing timeout parameter or checking "
-                "network connectivity."
-            )
-
-        # Generic fallback
-        return (
-            f"Failed to connect to {url}: {reason_str}. "
-            "Check network connectivity and catalog URL."
-        )
-
     def get_root_document(self) -> dict[str, Any]:
-        root = self._http_json("")  # base endpoint already ends with /stac/v1
-        if not root:  # Unexpected but keep consistent shape
+        # Some underlying client implementations do not provide a
+        # get_root_document() convenience. Use to_dict() as a stable
+        # fallback and normalize the keys we care about.
+        try:
+            raw = self.client.to_dict() if hasattr(self.client, "to_dict") else {}
+        except (AttributeError, APIError):
+            # to_dict() may not be available or the underlying client raised an
+            # APIError; swallow those specific errors and return an empty dict.
+            raw = {}
+        if not raw:  # Unexpected but keep consistent shape
             return {
                 "id": None,
                 "title": None,
@@ -764,11 +1131,11 @@ class STACClient:
             }
         # Normalize subset we care about
         return {
-            "id": root.get("id"),
-            "title": root.get("title"),
-            "description": root.get("description"),
-            "links": root.get("links", []),
-            "conformsTo": root.get("conformsTo", root.get("conforms_to", [])),
+            "id": raw.get("id"),
+            "title": raw.get("title"),
+            "description": raw.get("description"),
+            "links": raw.get("links", []),
+            "conformsTo": raw.get("conformsTo", raw.get("conforms_to", [])),
         }
 
     def get_conformance(
@@ -789,14 +1156,26 @@ class STACClient:
             if collection_id
             else "/queryables"
         )
-        q = self._http_json(path)
-        if not q:
+        base = self.catalog_url.replace("catalog.json", "").rstrip("/")
+        url = f"{base}{path}"
+        request_headers = self.headers.copy()
+        request_headers.setdefault("Accept", "application/json")
+        try:
+            res = requests.get(url, headers=request_headers, timeout=30)
+            if res.status_code == HTTP_404 or not res.ok:
+                return {
+                    "queryables": {},
+                    "collection_id": collection_id,
+                    "message": "Queryables not available",
+                }
+            q = res.json() if res.content else {}
+        except requests.RequestException:
+            logger.exception("Failed to fetch queryables %s", url)
             return {
                 "queryables": {},
                 "collection_id": collection_id,
                 "message": "Queryables not available",
             }
-        # STAC Queryables spec nests properties under 'properties' in newer versions
         props = q.get("properties") or q.get("queryables") or {}
         return {"queryables": props, "collection_id": collection_id}
 
@@ -810,8 +1189,15 @@ class STACClient:
         operations: list[str] | None = None,
         limit: int = 0,
     ) -> dict[str, Any]:
+        # Use the STAC API search endpoint via requests rather than relying on
+        # private pystac_client IO helpers. This uses the public HTTP contract.
+        # Ensure the server advertises aggregation capability
         self._check_conformance(CONFORMANCE_AGGREGATION)
-        # Build STAC search body with aggregations extension
+        base = self.catalog_url.replace("catalog.json", "").rstrip("/")
+        url = f"{base}/search"
+        request_headers = self.headers.copy()
+        request_headers["Accept"] = "application/json"
+        # Construct the search request body according to STAC Search API
         body: dict[str, Any] = {}
         if collections:
             body["collections"] = collections
@@ -821,59 +1207,196 @@ class STACClient:
             body["datetime"] = datetime
         if query:
             body["query"] = query
-        if limit:
+        if limit and limit > 0:
             body["limit"] = limit
-        aggs: dict[str, Any] = {}
-        # Simple default: count of items
-        requested_ops = operations or ["count"]
-        target_fields = fields or []
-        for op in requested_ops:
-            if op == "count":
-                aggs["count"] = {"type": "count"}
-            else:
-                # Field operations require fields (e.g., stats/histogram)
-                for f in target_fields:
-                    aggs[f"{f}_{op}"] = {"type": op, "field": f}
-        if aggs:
-            body["aggregations"] = aggs
+
+        # Aggregation request shape is not strictly standardized across
+        # implementations; include a simple aggregations object when fields
+        # or operations are provided. Servers supporting aggregation will
+        # respond with an `aggregations` field in the search response.
+        if fields or operations:
+            body["aggregations"] = {
+                "fields": fields or [],
+                "operations": operations or [],
+            }
+
         try:
-            res = self._http_json("/search", method="POST", payload=body)
-            if not res:
+            resp = requests.post(url, json=body, headers=request_headers, timeout=30)
+            if not resp.ok:
                 return {
                     "supported": False,
                     "aggregations": {},
                     "message": "Search endpoint unavailable",
                     "parameters": body,
                 }
-            aggs_result = res.get("aggregations") or {}
+            res_json = resp.json() if resp.content else {}
+            aggs_result = res_json.get("aggregations") or {}
             return {
                 "supported": bool(aggs_result),
                 "aggregations": aggs_result,
-                "message": "OK" if aggs_result else "No aggregations returned",
-                "parameters": body,
+                # any additional metadata preserved
             }
-        except urllib.error.HTTPError as exc:  # pragma: no cover - network
-            if exc.code in (HTTP_400, HTTP_404):
-                return {
-                    "supported": False,
-                    "aggregations": {},
-                    "message": f"Aggregations unsupported ({exc.code})",
-                    "parameters": body,
-                }
-            raise
-        except (
-            RuntimeError,
-            ValueError,
-            KeyError,
-            TypeError,
-        ) as exc:  # pragma: no cover - network
+        except requests.RequestException:
+            logger.exception("Aggregation request failed %s", url)
             return {
                 "supported": False,
                 "aggregations": {},
-                "message": f"Aggregation request failed: {exc}",
+                "message": "Search endpoint unavailable",
                 "parameters": body,
             }
 
+    # ---- Fallback helpers for estimate_data_size ----
 
-# Global instance preserved for backward compatibility (imported by server)
-stac_client = STACClient()
+    def _size_from_metadata(self, asset_obj: Any) -> int | None:
+        keys = [
+            "file:size",
+            "file:bytes",
+            "bytes",
+            "size",
+            "byte_size",
+            "content_length",
+        ]
+        if isinstance(asset_obj, dict):
+            extra = asset_obj.get("extra_fields") or {}
+        else:
+            extra = getattr(asset_obj, "extra_fields", None) or {}
+        for k in keys:
+            v = extra.get(k)
+            if v is not None:
+                try:
+                    return int(v)
+                except (TypeError, ValueError):
+                    continue
+        try:
+            for k in keys:
+                v = asset_obj.get(k)  # type: ignore[attr-defined]
+                if v is not None:
+                    try:
+                        return int(v)
+                    except (TypeError, ValueError):
+                        continue
+        except AttributeError:
+            pass
+        return None
+
+    def _asset_to_dict(self, asset: Any) -> dict[str, Any]:
+        """Normalize asset representations to a dict.
+
+        Accepts dicts, objects with to_dict(), or objects with attributes.
+        This helper is intentionally permissive to handle multiple STAC
+        provider styles and test fixtures.
+        """
+        if isinstance(asset, dict):
+            return asset
+        # Try to use a to_dict() method if available
+        # Prefer calling a to_dict() method when available, but guard it and
+        # log failures rather than silently swallowing them so lint rules
+        # (S110) are satisfied while keeping behavior permissive for tests
+        # and different provider representations.
+        to_dict = getattr(asset, "to_dict", None)
+        if callable(to_dict):
+            try:
+                return to_dict()
+            except Exception:  # noqa: BLE001
+                logger.debug(
+                    "asset.to_dict() failed during normalization", exc_info=True
+                )
+
+        # Fallback: extract common attributes
+        out: dict[str, Any] = {}
+        for k in ("href", "media_type", "type", "extra_fields"):
+            v = getattr(asset, k, None)
+            if v is not None:
+                out[k] = v
+        return out
+
+    def _sign_href(self, href: str) -> str:
+        """Return a signed href when possible (Planetary Computer assets).
+
+        This is best-effort: if the optional `planetary_computer` package is
+        available, use it to sign blob URLs so HEAD/rasterio can access them.
+        If signing fails or the package is unavailable, return the original
+        href unchanged.
+        """
+        if not isinstance(href, str) or not href:
+            return href
+        try:
+            import planetary_computer as pc  # noqa: PLC0415
+
+            signed = pc.sign(href)
+            # pc.sign may return a string or a mapping with a 'url' field
+            if isinstance(signed, str):
+                return signed
+            if isinstance(signed, dict):
+                return signed.get("url", href)
+        except (
+            ImportError,
+            ModuleNotFoundError,
+            AttributeError,
+            TypeError,
+            ValueError,
+        ):
+            # Best-effort: leave href unchanged when signing is not possible
+            return href
+        return href
+
+    def _head_content_length(self, href: str) -> int | None:
+        # Simple retry with exponential backoff for transient failures.
+        attempt = 0
+        signed_href = self._sign_href(href)
+        while attempt <= self.head_retries:
+            try:
+                resp = self._head_session.request(
+                    "HEAD",
+                    signed_href,
+                    headers=self.headers or {},
+                    timeout=self.head_timeout_seconds,
+                )
+                if resp is None or not resp.headers:
+                    return None
+                cl = resp.headers.get("Content-Length") or resp.headers.get(
+                    "content-length"
+                )
+                if cl:
+                    try:
+                        return int(cl)
+                    except (TypeError, ValueError):
+                        return None
+                else:
+                    # No content-length header present
+                    return None
+            except requests.RequestException:
+                # Transient network error: will retry based on head_retries
+                pass
+
+            # Exponential backoff with optional jitter
+            attempt += 1
+            self._last_retry_attempts = attempt
+            if attempt > self.head_retries:
+                break
+            backoff = self.head_backoff_base * (2 ** (attempt - 1))
+            if self.head_backoff_jitter:
+                backoff = backoff * (1.0 + random.random())  # noqa: S311
+            time.sleep(backoff)
+
+        return None
+
+    def _parallel_head_content_lengths(self, hrefs: list[str]) -> dict[str, int | None]:
+        """Run HEAD requests in parallel and return a mapping of href -> bytes or None.
+
+        Respects client.head_max_workers and client.head_timeout_seconds via the
+        shared head session and the session.request wrapper.
+        """
+        if not hrefs:
+            return {}
+        results: dict[str, int | None] = {}
+        with ThreadPoolExecutor(max_workers=self.head_max_workers) as ex:
+            future_to_href = {ex.submit(self._head_content_length, h): h for h in hrefs}
+            for fut in as_completed(future_to_href):
+                href = future_to_href[fut]
+                try:
+                    results[href] = fut.result()
+                except Exception:  # noqa: BLE001
+                    # Keep failure modes simple for the estimator; record None
+                    results[href] = None
+        return results

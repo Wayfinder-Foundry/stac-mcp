@@ -1,81 +1,93 @@
-"""Tests for STACClient low-level HTTP error handling and APIError branch.
+"""Tests for STACClient low-level HTTP error handling and APIError branch."""
 
-These focus on branches previously un-covered:
- - _http_json 404 returns None
- - _http_json 500 raises HTTPError
- - _http_json propagates URLError
- - search_collections APIError path (logged then re-raised)
-"""
-
-from __future__ import annotations
-
-import json
-from unittest.mock import patch
-from urllib.error import HTTPError, URLError
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pystac_client.exceptions import APIError
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import Timeout
 
-from stac_mcp.tools.client import ConnectionFailedError, STACClient
-
-
-class _FakeResponse:
-    def __init__(self, body: dict[str, object] | None, code: int = 200):
-        self._body = body
-        self.code = code
-
-    def read(self):
-        return json.dumps(self._body or {}).encode("utf-8")
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
+from stac_mcp.tools.client import ConnectionFailedError, STACClient, STACTimeoutError
+from tests import HTTP_INTERNAL_SERVER_ERROR, HTTP_NOT_FOUND_ERROR
 
 
-@patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_http_json_404_returns_none(mock_urlopen, http_error_factory):
+def stac_catalog_factory():
+    return {
+        "type": "Catalog",
+        "id": "test-catalog",
+        "stac_version": "1.0.0",
+        "description": "Test Catalog",
+        "links": [],
+    }
+
+
+@patch("pystac_client.stac_api_io.StacApiIO.read_json")
+def test_http_json_404_returns_none(mock_read_json):
+    """Test that a 404 returns None."""
+    mock_read_json.return_value = stac_catalog_factory()
+    client = STACClient("https://example.com")
+    with patch.object(client.client._stac_io.session, "request") as mock_request:  # noqa: SLF001
+        mock_response = MagicMock()
+        mock_response.status_code = HTTP_NOT_FOUND_ERROR
+        mock_request.return_value = mock_response
+        assert client.delete_item("test", "test") is None
+
+
+@patch("pystac_client.stac_api_io.StacApiIO.read_json")
+def test_http_json_500_raises(mock_read_json):
+    """Test that a 500 raises an HTTPError."""
+    mock_read_json.return_value = stac_catalog_factory()
+    client = STACClient("https://example.com")
+    with patch.object(client.client._stac_io.session, "request") as mock_request:  # noqa: SLF001
+        mock_response = MagicMock()
+        mock_response.status_code = HTTP_INTERNAL_SERVER_ERROR
+        mock_response.raise_for_status.side_effect = Exception("test")
+        mock_request.return_value = mock_response
+        with pytest.raises(Exception):  # noqa: PT011 B017
+            client.delete_item("test", "test")
+
+
+@patch("pystac_client.stac_api_io.StacApiIO.read_json")
+def test_http_json_url_error_retries(mock_read_json):
+    """Test that a URLError is retried."""
+    mock_read_json.return_value = stac_catalog_factory()
+    client = STACClient("https://example.com")
+    with patch.object(
+        client.client._stac_io.session,  # noqa: SLF001
+        "request",
+        side_effect=Timeout,
+    ) as mock_request:
+        with pytest.raises(STACTimeoutError):
+            client.delete_item("test", "test")
+        assert mock_request.call_count == 1
+
+
+@patch("pystac_client.stac_api_io.StacApiIO.read_json")
+def test_http_json_url_error(mock_read_json):
+    """Test that a URLError is mapped to a ConnectionFailedError."""
+    mock_read_json.return_value = stac_catalog_factory()
+    client = STACClient("https://example.com")
+    with (
+        patch.object(
+            client.client._stac_io.session,  # noqa: SLF001
+            "request",
+            side_effect=RequestsConnectionError,
+        ),
+        pytest.raises(ConnectionFailedError),
+    ):
+        client.delete_item("test", "test")
+
+
+@patch("pystac_client.stac_api_io.StacApiIO.read_json")
+def test_search_collections_api_error(mock_read_json):
+    """Simulate underlying client raising APIError."""
+    mock_read_json.return_value = stac_catalog_factory()
     client = STACClient("https://example.com")
 
-    def raise_404(*_, **__):
-        raise http_error_factory(404)
-
-    mock_urlopen.side_effect = raise_404
-    # 404 should yield None
-    assert client._http_json("/missing") is None  # noqa: SLF001
-
-
-@patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_http_json_500_raises(mock_urlopen, http_error_factory):
-    client = STACClient("https://example.com")
-
-    def raise_500(*_, **__):
-        raise http_error_factory(500)
-
-    mock_urlopen.side_effect = raise_500
-    with pytest.raises(HTTPError):
-        client._http_json("/boom")  # noqa: SLF001
-
-
-@patch("stac_mcp.tools.client.urllib.request.urlopen")
-def test_http_json_url_error(mock_urlopen):
-    client = STACClient("https://example.com")
-    mock_urlopen.side_effect = URLError("down")
-    with pytest.raises(ConnectionFailedError, match="Failed to connect"):
-        client._http_json("/boom")  # noqa: SLF001
-
-
-def test_search_collections_api_error(monkeypatch):
-    # Simulate underlying client raising APIError
-    client = STACClient("https://example.com")
-
-    # Inject fake underlying client
-    class _FakeInner:
-        def get_collections(self):
-            msg = "api failure"
-            raise APIError(msg)
-
-    monkeypatch.setattr(client, "_client", _FakeInner())
-    with pytest.raises(APIError, match="api failure"):
+    with (
+        patch.object(
+            client.client, "get_collections", side_effect=APIError("api failure")
+        ),
+        pytest.raises(APIError, match="api failure"),
+    ):
         client.search_collections(limit=1)

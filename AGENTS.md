@@ -11,13 +11,56 @@ Core principles
 - Always import generics from the `typing` module (List, Dict, Optional, Union, Tuple, Set, Iterable, Callable, etc.) instead of using builtin collection annotations like `list[str]` unless an ADR supersedes this rule. This maintains consistency across the codebase and clarifies intent for contributors and automated agents.
 - Keep functions small and single-responsibility. Favor composition over inheritance when appropriate.
 
-Formatting & linting
-- Use Ruff for both formatting (`ruff format`) and linting (`ruff check`); resolve any outstanding issues manually.
-- Commands:
-  - pip install -e ".[dev]"
-  - ruff format stac_mcp/ tests/ examples/
-  - ruff check stac_mcp/ tests/ examples/ --fix
-- After ANY code edit (even small), re-run Ruff format and check locally before committing to keep diffs clean and surface issues early.
+Public-API-first rule
+- Prefer using public, documented APIs of third-party libraries. Do not reach into private or underscore-prefixed attributes or functions (for example, avoid accessing objects like `client._stac_io`, `session._pool`, or other internals).
+- When interacting with STAC libraries prefer the public Client/IO abstractions (for example, `pystac_client.Client` and `pystac.stac_io.StacIO`/`StacApiIO`) or perform explicit HTTP calls with `requests` rather than reading or mutating private internals.
+- If you need custom IO behavior (signing, caching, alternative transports), implement a public `StacIO` subclass and pass it into the public `Client` constructor rather than monkey-patching internal attributes.
+- Prefer dependency injection for testability: accept an explicit `requests.Session`, `stac_io`, or client object via a constructor parameter or execution wrapper so tests can provide fakes/mocks without touching internals.
+- Example (preferred):
+  - Use the public Client API:
+
+    ```py
+    from pystac_client import Client
+    from pystac_client.stac_api_io import StacApiIO
+
+    stac_io = StacApiIO(headers={"X-API-Key": "..."})
+    client = Client.open("https://example.com/stac", stac_io=stac_io)
+    # call public methods like client.search(), client.get_collection(), etc.
+    ```
+
+  - If you need to make a direct HTTP call for a feature not exposed by the client, use `requests` and pass explicit headers/timeouts instead of poking into private attributes:
+
+    ```py
+    import requests
+
+    resp = requests.post("https://example.com/stac/search", json=body, headers={"Accept": "application/json"}, timeout=30)
+    ```
+
+These rules keep behavior stable across upstream library upgrades and make code easier to test and maintain.
+
+**Formatting & Linting: Pre-Commit/Pre-Push Checklist**
+
+**MUST** run these commands and ensure they pass before every `git commit` and `git push`.
+
+1.  **Format Code:**
+    ```bash
+    uv run ruff format stac_mcp/ tests/ examples/
+    ```
+2.  **Lint and Auto-Fix:**
+    ```bash
+    uv run ruff check stac_mcp/ tests/ examples/ --fix --no-cache
+    ```
+3.  **Run Tests:**
+    ```bash
+    uv run pytest -q
+    ```
+4.  **Verify Test Coverage:**
+    ```bash
+    uv run coverage run -m pytest -v
+    uv run coverage report --fail-under=85
+    ```
+
+**IMPORTANT:** Run the `ruff format` and `ruff check` commands multiple times in sequence to ensure all issues are resolved, as auto-fixing can sometimes introduce new formatting needs.
 
 Testing & validation
 - Write tests for behavior, not implementation; prefer parametrized tests for similar cases.
@@ -29,6 +72,7 @@ Testing & validation
   - All tests pass.
 - Validate MCP server functionality (example usage):
   - python examples/example_usage.py
+  - Debug runners and short scripts were moved into the `debug/` directory; use those when present (e.g., `python debug/debug_estimate_run_pc.py`).
 
 Logging & errors
 - Use the standard logging module; configure logging at entrypoints only.

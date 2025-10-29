@@ -7,6 +7,7 @@ can hook here centrally.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Callable, Iterable
@@ -14,7 +15,6 @@ from typing import Any, NoReturn
 
 from mcp.types import TextContent
 
-from stac_mcp import server as _server
 from stac_mcp.observability import instrument_tool_execution, record_tool_result_size
 from stac_mcp.tools.client import STACClient
 from stac_mcp.tools.estimate_data_size import handle_estimate_data_size
@@ -24,6 +24,24 @@ from stac_mcp.tools.get_conformance import handle_get_conformance
 from stac_mcp.tools.get_item import handle_get_item
 from stac_mcp.tools.get_queryables import handle_get_queryables
 from stac_mcp.tools.get_root import handle_get_root
+from stac_mcp.tools.pystac_handlers import (
+    handle_pystac_create_catalog,
+    handle_pystac_create_collection,
+    handle_pystac_create_item,
+    handle_pystac_delete_catalog,
+    handle_pystac_delete_collection,
+    handle_pystac_delete_item,
+    handle_pystac_list_catalogs,
+    handle_pystac_list_collections,
+    handle_pystac_list_items,
+    handle_pystac_read_catalog,
+    handle_pystac_read_collection,
+    handle_pystac_read_item,
+    handle_pystac_update_catalog,
+    handle_pystac_update_collection,
+    handle_pystac_update_item,
+)
+from stac_mcp.tools.pystac_management import PySTACManager
 from stac_mcp.tools.search_collections import handle_search_collections
 from stac_mcp.tools.search_items import handle_search_items
 from stac_mcp.tools.transactions import (
@@ -36,6 +54,22 @@ from stac_mcp.tools.transactions import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class Session:
+    """A session for a tool execution."""
+
+    def __init__(self, client: Any):
+        """Initialize the session."""
+        self.client = client
+        self._stac_client = None
+
+    @property
+    def stac_client(self) -> STACClient:
+        """Return a STAC client."""
+        if self._stac_client is None:
+            self._stac_client = STACClient()
+        return self._stac_client
 
 
 Handler = Callable[
@@ -62,12 +96,57 @@ _TOOL_HANDLERS: dict[str, Handler] = {
     "delete_collection": handle_delete_collection,
 }
 
+# PySTAC-based CRUDL handlers (use PySTACManager instead of STACClient)
+_PYSTAC_TOOL_HANDLERS: dict[str, Callable] = {
+    "pystac_create_catalog": handle_pystac_create_catalog,
+    "pystac_read_catalog": handle_pystac_read_catalog,
+    "pystac_update_catalog": handle_pystac_update_catalog,
+    "pystac_delete_catalog": handle_pystac_delete_catalog,
+    "pystac_list_catalogs": handle_pystac_list_catalogs,
+    "pystac_create_collection": handle_pystac_create_collection,
+    "pystac_read_collection": handle_pystac_read_collection,
+    "pystac_update_collection": handle_pystac_update_collection,
+    "pystac_delete_collection": handle_pystac_delete_collection,
+    "pystac_list_collections": handle_pystac_list_collections,
+    "pystac_create_item": handle_pystac_create_item,
+    "pystac_read_item": handle_pystac_read_item,
+    "pystac_update_item": handle_pystac_update_item,
+    "pystac_delete_item": handle_pystac_delete_item,
+    "pystac_list_items": handle_pystac_list_items,
+}
+
 
 def _raise_unknown_tool(name: str) -> NoReturn:
     """Raise a standardized error for unknown tool names."""
-    _tools = list(_TOOL_HANDLERS.keys())
+    _tools = list(_TOOL_HANDLERS.keys()) + list(_PYSTAC_TOOL_HANDLERS.keys())
     msg = f"Unknown tool: {name}. Available tools: {_tools}"
     raise ValueError(msg)
+
+
+# Simple cache of STACClient instances keyed by (catalog_url, headers)
+# This enables a lightweight session/context reuse across tool calls so
+# handlers share connection/session state instead of creating a new
+# client per tool invocation.
+_CLIENT_CACHE: dict[tuple[str | None, tuple[tuple[str, str], ...]], STACClient] = {}
+
+
+def _client_cache_key(catalog_url: str | None, headers: dict[str, str] | None):
+    headers_tuple: tuple[tuple[str, str], ...] = ()
+    if headers:
+        # Sort items for deterministic key
+        headers_tuple = tuple(sorted((str(k), str(v)) for k, v in headers.items()))
+    return (catalog_url, headers_tuple)
+
+
+def _get_cached_client(
+    catalog_url: str | None, headers: dict[str, str] | None
+) -> STACClient:
+    key = _client_cache_key(catalog_url, headers)
+    client = _CLIENT_CACHE.get(key)
+    if client is None:
+        client = STACClient(catalog_url, headers=headers)
+        _CLIENT_CACHE[key] = client
+    return client
 
 
 def _as_text_content_list(result: Any) -> list[TextContent]:
@@ -93,16 +172,18 @@ def _as_text_content_list(result: Any) -> list[TextContent]:
         for item in result:
             normalized.append(_single(item))
         return normalized
-    if isinstance(result, Iterable) and not isinstance(result, (str, bytes, dict)):
+    if isinstance(result, Iterable) and not isinstance(result, str | bytes | dict):
         return [_single(item) for item in result]
     return [_single(result)]
 
 
 async def execute_tool(
     tool_name: str,
+    arguments: dict[str, Any] | None = None,
+    catalog_url: str | None = None,
+    headers: dict[str, str] | None = None,
     handler: Handler | None = None,
     client: STACClient | None = None,
-    arguments: dict[str, Any] | None = None,
 ):
     """Execute a tool handler with optional overrides for tests.
 
@@ -111,39 +192,54 @@ async def execute_tool(
     handler and shared client are used. The return value is always normalized
     to a ``list[TextContent]`` for compatibility with existing tooling.
     """
-
-    # Backward compatibility: legacy callers passed only (tool_name, arguments).
-    if handler is not None and not callable(handler):
-        if arguments is None:
-            arguments = dict(handler)
-        handler = None
-    if (
-        client is not None
-        and not isinstance(client, STACClient)
-        and isinstance(client, dict)
-    ):
-        if arguments is None:
-            arguments = dict(client)
-        client = None
-
     arguments = dict(arguments or {})
+
+    # Check if this is a pystac tool
+    is_pystac_tool = tool_name in _PYSTAC_TOOL_HANDLERS
+
     if handler is None:
-        handler = _TOOL_HANDLERS.get(tool_name)
+        if is_pystac_tool:
+            handler = _PYSTAC_TOOL_HANDLERS.get(tool_name)
+        else:
+            handler = _TOOL_HANDLERS.get(tool_name)
         if handler is None:
             _raise_unknown_tool(tool_name)
-    catalog_url = arguments.get("catalog_url")
-    if client is None:
-        client = STACClient(catalog_url) if catalog_url else _server.stac_client
+
+    # PySTAC tools use PySTACManager instead of STACClient
+    # Offload handler execution to a thread to avoid blocking the async event loop
+    # (handlers may perform network I/O or heavy CPU work like odc.stac.load).
+
+    if is_pystac_tool:
+        manager = PySTACManager()
+        # Run the handler under the instrumented wrapper in a thread
+        instrumented = await asyncio.to_thread(
+            instrument_tool_execution,
+            tool_name,
+            catalog_url,
+            handler,
+            manager,
+            arguments,
+        )
+        raw_result = instrumented.value
+    else:
+        if client is None:
+            # Reuse a cached STACClient when possible so multiple tool calls
+            # within the same session/context share connection and session
+            # state (HTTP sessions, timeout wrappers, etc.). This keeps
+            # tools lightweight and consistent across invocations.
+            client = _get_cached_client(catalog_url, headers)
+        # Run the handler under the instrumented wrapper in a thread
+        instrumented = await asyncio.to_thread(
+            instrument_tool_execution,
+            tool_name,
+            catalog_url,
+            handler,
+            client,
+            arguments,
+        )
+        raw_result = instrumented.value
 
     output_format = arguments.get("output_format", "text")
-    instrumented = instrument_tool_execution(
-        tool_name,
-        catalog_url,
-        handler,
-        client,
-        arguments,
-    )
-    raw_result = instrumented.value
     if output_format == "json":
         if isinstance(raw_result, list):
             normalized = _as_text_content_list(raw_result)

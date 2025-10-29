@@ -41,6 +41,39 @@ All tools accept an optional `output_format` parameter (`"text"` default, or `"j
 - **`get_item`**: Get detailed information about a specific STAC item
 - **`estimate_data_size`**: Estimate data size for STAC items using lazy loading (XArray + odc.stac)
 
+### PySTAC-based CRUDL Tools
+
+The server also provides a comprehensive set of PySTAC-based tools for managing STAC resources with full Create, Read, Update, Delete, and List (CRUDL) operations. These tools work with both local filesystems and remote STAC servers:
+
+**Catalog Management:**
+- **`pystac_create_catalog`**: Create a new STAC Catalog (local or remote)
+- **`pystac_read_catalog`**: Read an existing STAC Catalog
+- **`pystac_update_catalog`**: Update a STAC Catalog
+- **`pystac_delete_catalog`**: Delete a STAC Catalog
+- **`pystac_list_catalogs`**: List STAC Catalogs in a directory or endpoint
+
+**Collection Management:**
+- **`pystac_create_collection`**: Create a new STAC Collection (local or remote)
+- **`pystac_read_collection`**: Read an existing STAC Collection
+- **`pystac_update_collection`**: Update a STAC Collection
+- **`pystac_delete_collection`**: Delete a STAC Collection
+- **`pystac_list_collections`**: List STAC Collections in a directory or endpoint
+
+**Item Management:**
+- **`pystac_create_item`**: Create a new STAC Item (local or remote)
+- **`pystac_read_item`**: Read an existing STAC Item
+- **`pystac_update_item`**: Update a STAC Item
+- **`pystac_delete_item`**: Delete a STAC Item
+- **`pystac_list_items`**: List STAC Items in a directory or endpoint
+
+**Key Features:**
+- **Local Operations**: Manage STAC resources on the filesystem
+- **Remote Operations**: Interact with remote STAC servers via HTTP/HTTPS
+- **API Key Authentication**: Set `STAC_API_KEY` environment variable for authenticated requests
+- **Complementary**: Works alongside existing transaction tools without replacing them
+
+For detailed documentation and examples, see [PySTAC CRUDL Tools Documentation](docs/pystac_crudl_tools.md).
+
 ### Capability Discovery & Aggregations
 
 The new capability tools (ADR 0004) allow adaptive client behavior:
@@ -60,126 +93,33 @@ The `estimate_data_size` tool provides accurate size estimates for geospatial da
 - **Detailed Metadata**: Returns information about data variables, spatial dimensions, and individual assets
 - **Batch Support**: Retains structured metadata for efficient batch processing
 
-Example usage:
+## Usage
+
+### MCP Protocol / Server Configuration
+
+The server implements the [Model Context Protocol (MCP)](https://github.com/Model-Context-Protocol/MCP) for standardized communication.
+
 ```json
 {
-  "collections": ["landsat-c2l2-sr"],
-  "bbox": [-122.5, 37.7, -122.3, 37.8],
-  "datetime": "2023-01-01/2023-01-31",
-  "aoi_geojson": {
-    "type": "Polygon",
-    "coordinates": [[...]]
-  },
-  "limit": 50
+  "stac": {
+    "command": "uvx",
+    "args": [
+      "--from",
+      "git+https://github.com/wayfinder-foundry/stac-mcp",
+      "stac-mcp"
+    ],
+    "transport": "stdio",
+  }
 }
 ```
 
-### Supported STAC Catalogs
+### Command Line
 
-By default, the server connects to Microsoft Planetary Computer STAC API, but it can be configured to work with any STAC-compliant catalog.
-
-## Installation
-
-### PyPI Package
+#### Native Installation
 
 ```bash
 pip install stac-mcp
 ```
-
-### Development Installation
-
-```bash
-git clone https://github.com/BnJam/stac-mcp.git
-cd stac-mcp
-pip install -e .
-```
-
-### Container
-
-The STAC MCP server publishes multi-arch container images (linux/amd64, linux/arm64) via GitHub Actions workflow (`.github/workflows/container.yml`). The current build uses a Python 3.12 slim Debian base (not distroless) with GDAL-related libs for raster IO and odc-stac compatibility.
-
-```bash
-# Pull the latest stable version
-docker pull ghcr.io/bnjam/stac-mcp:latest
-
-# Pull a specific version (recommended for production)
-docker pull ghcr.io/bnjam/stac-mcp:0.2.0
-
-# Run the container (uses stdio transport for MCP)
-docker run --rm -i ghcr.io/bnjam/stac-mcp:latest
-```
-
-Container images are tagged with semantic versions when version bumps occur on `main`:
-- `ghcr.io/bnjam/stac-mcp:X.Y.Z` (exact version)
-- `ghcr.io/bnjam/stac-mcp:X.Y` (major.minor convenience tag)
-- `ghcr.io/bnjam/stac-mcp:X` (major convenience tag)
-- `ghcr.io/bnjam/stac-mcp:latest` (points at current main version)
-Pull request builds (without version bump) also produce ephemeral PR/ref tags via the metadata action.
-
-#### Building the Container
-
-To build the container locally using the provided Containerfile:
-
-```bash
-# Build with Docker
-docker build -f Containerfile -t stac-mcp .
-
-# Or build with Podman  
-podman build -f Containerfile -t stac-mcp .
-```
-
-The Containerfile currently performs a single-stage build based on `python:3.12-slim` (future optimization could reintroduce a distroless runtime stage). It installs system GDAL/PROJ dependencies and then installs the package.
-
-## Usage
-
-### As an MCP Server
-
-#### Native Installation
-
-Configure your MCP client to connect to this server:
-
-```json
-{
-  "mcpServers": {
-    "stac": {
-      "command": "stac-mcp"
-    }
-  }
-}
-```
-
-#### Container Usage
-
-To use the containerized version with an MCP client:
-
-```json
-{
-  "mcpServers": {
-    "stac": {
-      "command": "docker",
-      "args": ["run", "--rm", "-i", "ghcr.io/bnjam/stac-mcp:latest"]
-    }
-  }
-}
-```
-
-Or with Podman:
-
-```json
-{
-  "mcpServers": {
-    "stac": {
-      "command": "podman", 
-      "args": ["run", "--rm", "-i", "ghcr.io/bnjam/stac-mcp:latest"]
-    }
-  }
-}
-```
-
-docker run --rm -i ghcr.io/bnjam/stac-mcp:latest
-### Command Line
-
-#### Native Installation
 
 ```bash
 stac-mcp
@@ -187,7 +127,25 @@ stac-mcp
 
 Each invocation starts an MCP stdio server; it waits for protocol messages (see `examples/example_usage.py`).
 
+### Repository Usage
+
+```bash
+pip install -e .
+```
+
 #### Container Usage
+
+##### Local
+
+```bash
+docker build -t stac-mcp .
+```
+
+```bash
+docker run --rm -i stac-mcp
+```
+
+##### Published Image
 
 ```bash
 # With Docker
@@ -392,7 +350,7 @@ python scripts/version.py set 1.2.3
 The version system maintains consistency across:
 - `pyproject.toml` (project version)
 - `stac_mcp/__init__.py` (__version__)
-- `stac_mcp/server.py` (server_version in MCP initialization)
+- `stac_mcp/fast_server.py` (server_version in MCP initialization)
 
 ### Container Development
 
@@ -418,6 +376,29 @@ Current Containerfile (single-stage) notes:
 - Installs the package with `pip install .`
 - Entrypoint: `python -m stac_mcp.server` (stdio MCP transport)
 - Multi-stage/distroless hardening can be reintroduced later (tracked by potential future ADR)
+
+## Documentation
+
+### FastMCP Guidelines and Architecture
+
+STAC MCP includes comprehensive documentation for FastMCP patterns and agentic geospatial reasoning:
+
+- **[FastMCP Documentation](docs/fastmcp/)**: Complete guide to MCP decorators, resources, tools, and prompts for STAC workflows
+  - [DECORATORS.md](docs/fastmcp/DECORATORS.md): Choosing the right decorator for STAC operations
+  - [GUIDELINES.md](docs/fastmcp/GUIDELINES.md): FastMCP architecture and usage patterns
+  - [PROMPTS.md](docs/fastmcp/PROMPTS.md): Agentic STAC search reasoning and methodology
+  - [RESOURCES.md](docs/fastmcp/RESOURCES.md): STAC catalog discovery and metadata patterns
+  - [CONTEXT.md](docs/fastmcp/CONTEXT.md): Context usage for logging and progress tracking
+
+These documents provide guidance for:
+- AI agents reasoning about STAC catalog searches
+- Developers implementing STAC MCP features
+- Understanding the planned FastMCP integration (issues #69, #78)
+
+### Additional Documentation
+
+- [PySTAC CRUDL Tools Documentation](docs/pystac_crudl_tools.md): Detailed guide to PySTAC-based CRUD operations
+- [Test Coverage Strategy](docs/TEST_COVERAGE_STRATEGY.md): Testing approach and coverage goals
 
 ## STAC Resources
 
@@ -546,6 +527,25 @@ result = client._http_json("/search", headers={"X-API-Key": "different-key"})
 **Behavior**: Per-call headers are merged with instance headers, with per-call values taking precedence for duplicate keys. The `Accept: application/json` header is always set automatically.
 
 **Note**: These configuration options are for programmatic use. MCP tool calls use the default client configuration.
+### HEAD request tuning (estimate_data_size fallback)
+
+The `estimate_data_size` tool uses metadata-first heuristics but will fall back to HTTP HEAD requests to collect `Content-Length` when metadata is missing. These HEAD requests are timeboxed and parallelized; tune the behavior with the following environment variables:
+
+- `STAC_MCP_HEAD_TIMEOUT_SECONDS` (default: 20)
+  - Per-request timeout (in seconds) used for HTTP HEAD requests during fallback estimation.
+  - Lower this value to fail fast against unresponsive hosts (for example, `5`).
+- `STAC_MCP_HEAD_MAX_WORKERS` (default: 4)
+  - Number of concurrent HEAD requests used when the estimator needs to probe multiple asset HREFs.
+  - Raising this value reduces wall-clock time for estimation at the cost of more concurrent connections.
+
+Agent tuning guidance:
+
+- For short-running agent chains that need quick, best-effort estimates, set `STAC_MCP_HEAD_TIMEOUT_SECONDS=5` and `STAC_MCP_HEAD_MAX_WORKERS=8`.
+- For conservative workloads (avoid load on remote catalogs), keep `STAC_MCP_HEAD_MAX_WORKERS` small (1-4) and use a moderate timeout (10-20s).
+
+You can also force metadata-only estimation from clients by passing `force_metadata_only=True` to `estimate_data_size`, which avoids HEAD/zarr inspection entirely.
+
+These knobs let agent orchestrators choose the right balance between responsiveness and thoroughness.
 
 ### Error Handling
 

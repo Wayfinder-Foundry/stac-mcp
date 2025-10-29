@@ -1,55 +1,55 @@
 """Tests for execution fallback branches in tools.execution."""
 
-from __future__ import annotations
-
 import json
+from typing import Any
 
 import pytest
-from mcp.types import TextContent
+from fastmcp.client import Client
 
-from stac_mcp import server as _server
-from stac_mcp.tools import execution
+from stac_mcp.fast_server import app
 
 
-class DummyClient:
-    pass
+@pytest.fixture
+def test_app():
+    """Return a clean app for each test."""
+    original_tools = app._tool_manager._tools.copy()  # noqa: SLF001
+    yield app
+    app._tool_manager._tools = original_tools  # noqa: SLF001
 
 
 @pytest.mark.asyncio
-async def test_json_fallback_mode(monkeypatch):
-    def handler(_client, _args):
+async def test_json_fallback_mode(test_app):
+    """Test that text content is correctly wrapped in a JSON fallback response."""
+
+    def dummy_tool_func(output_format: str = "text") -> list[dict[str, Any]]:  # noqa: ARG001
         return [
-            TextContent(type="text", text="Line1"),
-            TextContent(type="text", text="Line2"),
+            {"type": "text", "text": "Line1"},
+            {"type": "text", "text": "Line2"},
         ]
 
-    monkeypatch.setitem(
-        execution._TOOL_HANDLERS,  # noqa: SLF001
-        "dummy_tool",
-        handler,
-    )
+    test_app.tool(name="dummy_tool")(dummy_tool_func)
 
-    monkeypatch.setattr(_server, "stac_client", DummyClient())
-    result = await execution.execute_tool("dummy_tool", {"output_format": "json"})
-    assert len(result) == 1
-    payload = json.loads(result[0].text)
-    assert payload["mode"] == "text_fallback"
-    assert payload["content"] == ["Line1", "Line2"]
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool("dummy_tool", {"output_format": "json"})
+    response_data = json.loads(result.content[0].text)
+    assert response_data[0]["text"] == "Line1"
+    assert response_data[1]["text"] == "Line2"
 
 
 @pytest.mark.asyncio
-async def test_dict_to_text_conversion(monkeypatch):
-    def handler(_client, _args):
-        return {"a": 1, "b": 2}
+async def test_dict_to_text_conversion(test_app):
+    """Test that dictionary results are correctly serialized to text."""
 
-    monkeypatch.setitem(
-        execution._TOOL_HANDLERS,  # noqa: SLF001
-        "dict_tool",
-        handler,
-    )
+    def dummy_dict_tool(output_format: str = "text") -> list[dict[str, Any]]:  # noqa: ARG001
+        return [{"a": 1, "b": 2}]
 
-    monkeypatch.setattr(_server, "stac_client", DummyClient())
-    result = await execution.execute_tool("dict_tool", {"output_format": "text"})
-    assert isinstance(result, list)
-    assert "\n" in result[0].text or result[0].text.startswith("{")
-    assert '"a"' in result[0].text or "'a'" in result[0].text
+    test_app.tool(name="dict_tool")(dummy_dict_tool)
+
+    client = Client(test_app)
+    async with client:
+        result = await client.call_tool("dict_tool", {"output_format": "text"})
+    # The result from fastmcp for a list of dicts will be a single TextContent
+    # block containing the JSON representation of the list.
+    response_data = json.loads(result.content[0].text)
+    assert response_data == [{"a": 1, "b": 2}]
