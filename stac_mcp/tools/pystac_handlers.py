@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from stac_mcp.tools.client import STACClient
     from stac_mcp.tools.crudl import CRUDL
 
 
@@ -18,10 +16,7 @@ def handle_create_catalog(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle creating a STAC Catalog using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        path = f"{base_url}/catalogs"
+    path = arguments["path"]
     catalog_id = arguments["catalog_id"]
     description = arguments["description"]
     title = arguments.get("title")
@@ -33,11 +28,7 @@ def handle_read_catalog(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle reading a STAC Catalog using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        catalog_id = arguments["catalog_id"]
-        path = f"{base_url}/catalogs/{catalog_id}"
+    path = arguments["path"]
     return manager.read_catalog(path)
 
 
@@ -46,11 +37,7 @@ def handle_update_catalog(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle updating a STAC Catalog using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        catalog_id = arguments["catalog_id"]
-        path = f"{base_url}/catalogs/{catalog_id}"
+    path = arguments["path"]
     catalog = arguments["catalog"]
     return manager.update_catalog(path, catalog)
 
@@ -60,11 +47,7 @@ def handle_delete_catalog(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle deleting a STAC Catalog using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        catalog_id = arguments["catalog_id"]
-        path = f"{base_url}/catalogs/{catalog_id}"
+    path = arguments["path"]
     return manager.delete_catalog(path)
 
 
@@ -73,10 +56,7 @@ def handle_list_catalogs(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle listing STAC Catalogs using pystac."""
-    base_path = arguments.get("base_path")
-    if not base_path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        base_path = f"{base_url}/catalogs"
+    base_path = arguments["base_path"]
     catalogs = manager.list_catalogs(base_path)
     return {"catalogs": catalogs, "count": len(catalogs)}
 
@@ -89,10 +69,7 @@ def handle_create_collection(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle creating a STAC Collection using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        path = f"{base_url}/collections"
+    path = arguments["path"]
     collection = arguments["collection"]
     return manager.create_collection(path, collection)
 
@@ -102,11 +79,7 @@ def handle_read_collection(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle reading a STAC Collection using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        collection_id = arguments["collection_id"]
-        path = f"{base_url}/collections/{collection_id}"
+    path = arguments["path"]
     return manager.read_collection(path)
 
 
@@ -115,10 +88,7 @@ def handle_update_collection(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle updating a STAC Collection using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        path = f"{base_url}/collections"
+    path = arguments["path"]
     collection = arguments["collection"]
     return manager.update_collection(path, collection)
 
@@ -128,11 +98,7 @@ def handle_delete_collection(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle deleting a STAC Collection using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        collection_id = arguments["collection_id"]
-        path = f"{base_url}/collections/{collection_id}"
+    path = arguments["path"]
     return manager.delete_collection(path)
 
 
@@ -141,10 +107,7 @@ def handle_list_collections(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle listing STAC Collections using pystac."""
-    base_path = arguments.get("base_path")
-    if not base_path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        base_path = f"{base_url}/collections"
+    base_path = arguments["base_path"]
     collections = manager.list_collections(base_path)
     return {"collections": collections, "count": len(collections)}
 
@@ -155,21 +118,11 @@ def handle_list_collections(
 def handle_create_item(
     manager: CRUDL,
     arguments: dict[str, Any],
-    client: STACClient | None = None,
 ) -> dict[str, Any]:
     """Handle creating a STAC Item using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        collection_id = arguments["collection_id"]
-        path = f"{base_url}/collections/{collection_id}/items"
+    path = arguments["path"]
     item = arguments["item"]
-    result = manager.create_item(path, item)
-    if result and client:
-        collection_id = arguments.get("collection_id")
-        with suppress(Exception):
-            client._invalidate_cache(affected_collections=[collection_id])  # noqa: SLF001
-    return result
+    return manager.create_item(path, item)
 
 
 def handle_read_item(
@@ -177,55 +130,27 @@ def handle_read_item(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle reading a STAC Item using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        collection_id = arguments["collection_id"]
-        item_id = arguments["item_id"]
-        path = f"{base_url}/collections/{collection_id}/items/{item_id}"
+    path = arguments["path"]
     return manager.read_item(path)
 
 
 def handle_update_item(
     manager: CRUDL,
     arguments: dict[str, Any],
-    client: STACClient | None = None,
 ) -> dict[str, Any]:
     """Handle updating a STAC Item using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        item = arguments["item"]
-        collection_id = item.get("collection")
-        item_id = item.get("id")
-        path = f"{base_url}/collections/{collection_id}/items/{item_id}"
+    path = arguments["path"]
     item = arguments["item"]
-    result = manager.update_item(path, item)
-    if result and client:
-        collection_id = arguments.get("item", {}).get("collection")
-        with suppress(Exception):
-            client._invalidate_cache(affected_collections=[collection_id])  # noqa: SLF001
-    return result
+    return manager.update_item(path, item)
 
 
 def handle_delete_item(
     manager: CRUDL,
     arguments: dict[str, Any],
-    client: STACClient | None = None,
 ) -> dict[str, Any]:
     """Handle deleting a STAC Item using pystac."""
-    path = arguments.get("path")
-    if not path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        collection_id = arguments["collection_id"]
-        item_id = arguments["item_id"]
-        path = f"{base_url}/collections/{collection_id}/items/{item_id}"
-    result = manager.delete_item(path)
-    if result and client:
-        collection_id = arguments.get("collection_id")
-        with suppress(Exception):
-            client._invalidate_cache(affected_collections=[collection_id])  # noqa: SLF001
-    return result
+    path = arguments["path"]
+    return manager.delete_item(path)
 
 
 def handle_list_items(
@@ -233,10 +158,6 @@ def handle_list_items(
     arguments: dict[str, Any],
 ) -> dict[str, Any]:
     """Handle listing STAC Items using pystac."""
-    base_path = arguments.get("base_path")
-    if not base_path and manager.catalog_url:
-        base_url = manager.catalog_url.replace("catalog.json", "").rstrip("/")
-        collection_id = arguments["collection_id"]
-        base_path = f"{base_url}/collections/{collection_id}/items"
+    base_path = arguments["base_path"]
     items = manager.list_items(base_path)
     return {"items": items, "count": len(items)}

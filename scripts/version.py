@@ -17,10 +17,9 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Tuple
 
 
-def parse_version(version_str: str) -> Tuple[int, int, int]:
+def parse_version(version_str: str) -> tuple[int, int, int]:
     """Parse semantic version string into major, minor, patch."""
     match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:-.*)?(?:\+.*)?$", version_str)
     if not match:

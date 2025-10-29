@@ -3,6 +3,7 @@ Debug runner: find an item with a .zarr asset and run estimate_data_size to exer
 """
 import asyncio
 from pprint import pprint
+
 from stac_mcp.tools.client import STACClient
 
 
@@ -52,6 +53,7 @@ async def main():
     if href:
         try:
             import urllib.parse
+
             import fsspec
 
             parsed = urllib.parse.urlsplit(href)

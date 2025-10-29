@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
-
-import requests
 
 logger = logging.getLogger(__name__)
 
@@ -18,60 +15,25 @@ class CRUDL:
 
     def __init__(
         self,
-        catalog_url: str | None = None,
-        api_key: str | None = None,
-        headers: dict[str, str] | None = None,
+        base_path: str,
     ) -> None:
         """Initialize the CRUDL class."""
-        self.catalog_url = catalog_url
-        self.api_key = api_key or os.getenv("STAC_API_KEY")
-        self.headers = headers
-
-    def _get_headers(self) -> dict[str, str]:
-        """Get HTTP headers including API key if available."""
-        if self.headers:
-            return self.headers
-
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
-
-    def _is_remote(self, path: str) -> bool:
-        """Check if path is a remote URL."""
-        return path.startswith(("http://", "https://"))
+        self.base_path = Path(base_path)
 
     def _read_json_file(self, path: str) -> dict[str, Any]:
-        """Read JSON from local file or remote URL."""
-        if self._is_remote(path):
-            response = requests.get(path, headers=self._get_headers(), timeout=30)
-            response.raise_for_status()
-            return response.json()
+        """Read JSON from local file."""
         with Path(path).open("r") as f:
             return json.load(f)
 
     def _write_json_file(self, path: str, data: dict[str, Any]) -> None:
-        """Write JSON to local file or remote URL."""
-        if self._is_remote(path):
-            response = requests.put(
-                path,
-                data=json.dumps(data).encode("utf-8"),
-                headers=self._get_headers(),
-                timeout=30,
-            )
-            response.raise_for_status()
-        else:
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
-            with Path(path).open("w") as f:
-                json.dump(data, f, indent=2)
+        """Write JSON to local file."""
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with Path(path).open("w") as f:
+            json.dump(data, f, indent=2)
 
     def _delete_file(self, path: str) -> None:
-        """Delete local file or remote resource."""
-        if self._is_remote(path):
-            response = requests.delete(path, headers=self._get_headers(), timeout=30)
-            response.raise_for_status()
-        else:
-            Path(path).unlink(missing_ok=True)
+        """Delete local file."""
+        Path(path).unlink(missing_ok=True)
 
     # ======================== Catalog Operations ========================
 
@@ -85,7 +47,7 @@ class CRUDL:
         """Create a new STAC Catalog.
 
         Args:
-            path: Path to save catalog (local file or remote URL)
+            path: Path to save catalog
             catalog_id: Catalog identifier
             description: Catalog description
             title: Optional catalog title
@@ -104,28 +66,16 @@ class CRUDL:
             description=description,
             title=title or catalog_id,
         )
-        catalog_dict = catalog.to_dict()
-
-        if self._is_remote(path):
-            # For remote, POST to endpoint
-            response = requests.post(
-                path,
-                data=json.dumps(catalog_dict).encode("utf-8"),
-                headers=self._get_headers(),
-                timeout=30,
-            )
-            response.raise_for_status()
-            return response.json()
-        # For local, save to file
+        catalog.set_self_href(path)
         catalog.normalize_hrefs(str(Path(path).parent))
         catalog.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
-        return catalog_dict
+        return catalog.to_dict()
 
     def read_catalog(self, path: str) -> dict[str, Any]:
         """Read a STAC Catalog.
 
         Args:
-            path: Path to catalog (local file or remote URL)
+            path: Path to catalog
 
         Returns:
             Catalog as dictionary
@@ -136,10 +86,7 @@ class CRUDL:
             msg = "pystac is required for catalog management operations"
             raise ImportError(msg) from e
 
-        if self._is_remote(path):
-            catalog = pystac.Catalog.from_file(path)
-        else:
-            catalog = pystac.Catalog.from_file(path)
+        catalog = pystac.Catalog.from_file(path)
         return catalog.to_dict()
 
     def update_catalog(
@@ -150,7 +97,7 @@ class CRUDL:
         """Update a STAC Catalog.
 
         Args:
-            path: Path to catalog (local file or remote URL)
+            path: Path to catalog
             catalog_dict: Updated catalog dictionary
 
         Returns:
@@ -163,16 +110,8 @@ class CRUDL:
             raise ImportError(msg) from e
 
         catalog = pystac.Catalog.from_dict(catalog_dict)
-
-        if self._is_remote(path):
-            response = requests.put(
-                path,
-                data=json.dumps(catalog_dict).encode("utf-8"),
-                headers=self._get_headers(),
-                timeout=30,
-            )
-            response.raise_for_status()
-            return response.json()
+        catalog.set_self_href(path)
+        catalog.normalize_hrefs(str(Path(path).parent))
         catalog.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
         return catalog.to_dict()
 
@@ -180,7 +119,7 @@ class CRUDL:
         """Delete a STAC Catalog.
 
         Args:
-            path: Path to catalog (local file or remote URL)
+            path: Path to catalog
 
         Returns:
             Success message
@@ -189,31 +128,14 @@ class CRUDL:
         return {"status": "success", "message": f"Catalog deleted: {path}"}
 
     def list_catalogs(self, base_path: str) -> list[dict[str, Any]]:
-        """List STAC Catalogs in a directory or remote endpoint.
+        """List STAC Catalogs in a directory.
 
         Args:
-            base_path: Base path to search (local directory or remote URL)
+            base_path: Base path to search
 
         Returns:
             List of catalog dictionaries
         """
-        if self._is_remote(base_path):
-            # For remote, fetch catalog list from API
-            response = requests.get(base_path, headers=self._get_headers(), timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            # Handle different API responses
-            if "catalogs" in data:
-                return data["catalogs"]
-            if "links" in data:
-                # Extract child catalogs from links
-                return [
-                    link
-                    for link in data["links"]
-                    if link.get("rel") in ("child", "catalog")
-                ]
-            return [data]
-        # For local, scan directory for catalog.json files
         catalogs = []
         base = Path(base_path)
         if base.is_dir():
@@ -234,7 +156,7 @@ class CRUDL:
         """Create a new STAC Collection.
 
         Args:
-            path: Path to save collection (local file or remote URL)
+            path: Path to save collection
             collection_dict: Collection dictionary following STAC spec
 
         Returns:
@@ -247,16 +169,7 @@ class CRUDL:
             raise ImportError(msg) from e
 
         collection = pystac.Collection.from_dict(collection_dict)
-
-        if self._is_remote(path):
-            response = requests.post(
-                path,
-                data=json.dumps(collection_dict).encode("utf-8"),
-                headers=self._get_headers(),
-                timeout=30,
-            )
-            response.raise_for_status()
-            return response.json()
+        collection.set_self_href(path)
         collection.normalize_hrefs(str(Path(path).parent))
         collection.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
         return collection.to_dict()
@@ -265,7 +178,7 @@ class CRUDL:
         """Read a STAC Collection.
 
         Args:
-            path: Path to collection (local file or remote URL)
+            path: Path to collection
 
         Returns:
             Collection as dictionary
@@ -287,7 +200,7 @@ class CRUDL:
         """Update a STAC Collection.
 
         Args:
-            path: Path to collection (local file or remote URL)
+            path: Path to collection
             collection_dict: Updated collection dictionary
 
         Returns:
@@ -300,17 +213,8 @@ class CRUDL:
             raise ImportError(msg) from e
 
         collection = pystac.Collection.from_dict(collection_dict)
-
-        if self._is_remote(path):
-            # The test server uses POST for collection updates
-            response = requests.post(
-                path,
-                data=json.dumps(collection_dict).encode("utf-8"),
-                headers=self._get_headers(),
-                timeout=30,
-            )
-            response.raise_for_status()
-            return response.json()
+        collection.set_self_href(path)
+        collection.normalize_hrefs(str(Path(path).parent))
         collection.save(catalog_type=pystac.CatalogType.SELF_CONTAINED)
         return collection.to_dict()
 
@@ -318,7 +222,7 @@ class CRUDL:
         """Delete a STAC Collection.
 
         Args:
-            path: Path to collection (local file or remote URL)
+            path: Path to collection
 
         Returns:
             Success message
@@ -327,23 +231,14 @@ class CRUDL:
         return {"status": "success", "message": f"Collection deleted: {path}"}
 
     def list_collections(self, base_path: str) -> list[dict[str, Any]]:
-        """List STAC Collections in a catalog or remote endpoint.
+        """List STAC Collections in a catalog.
 
         Args:
-            base_path: Base path to search (local directory or remote URL)
+            base_path: Base path to search
 
         Returns:
             List of collection dictionaries
         """
-        if self._is_remote(base_path):
-            # For remote, fetch collections from API
-            response = requests.get(base_path, headers=self._get_headers(), timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            if "collections" in data:
-                return data["collections"]
-            return [data]
-        # For local, scan directory for collection.json files
         collections = []
         base = Path(base_path)
         if base.is_dir():
@@ -366,7 +261,7 @@ class CRUDL:
         """Create a new STAC Item.
 
         Args:
-            path: Path to save item (local file or remote URL)
+            path: Path to save item
             item_dict: Item dictionary following STAC spec
 
         Returns:
@@ -379,24 +274,15 @@ class CRUDL:
             raise ImportError(msg) from e
 
         item = pystac.Item.from_dict(item_dict)
-
-        if self._is_remote(path):
-            response = requests.post(
-                path,
-                data=json.dumps(item_dict).encode("utf-8"),
-                headers=self._get_headers(),
-                timeout=30,
-            )
-            response.raise_for_status()
-            return response.json()
-        item.save_object(dest_href=path)
+        item.set_self_href(path)
+        item.save_object()
         return item.to_dict()
 
     def read_item(self, path: str) -> dict[str, Any]:
         """Read a STAC Item.
 
         Args:
-            path: Path to item (local file or remote URL)
+            path: Path to item
 
         Returns:
             Item as dictionary
@@ -418,7 +304,7 @@ class CRUDL:
         """Update a STAC Item.
 
         Args:
-            path: Path to item (local file or remote URL)
+            path: Path to item
             item_dict: Updated item dictionary
 
         Returns:
@@ -431,24 +317,15 @@ class CRUDL:
             raise ImportError(msg) from e
 
         item = pystac.Item.from_dict(item_dict)
-
-        if self._is_remote(path):
-            response = requests.put(
-                path,
-                data=json.dumps(item_dict).encode("utf-8"),
-                headers=self._get_headers(),
-                timeout=30,
-            )
-            response.raise_for_status()
-            return response.json()
-        item.save_object(dest_href=path)
+        item.set_self_href(path)
+        item.save_object()
         return item.to_dict()
 
     def delete_item(self, path: str) -> dict[str, Any]:
         """Delete a STAC Item.
 
         Args:
-            path: Path to item (local file or remote URL)
+            path: Path to item
 
         Returns:
             Success message
@@ -457,25 +334,14 @@ class CRUDL:
         return {"status": "success", "message": f"Item deleted: {path}"}
 
     def list_items(self, base_path: str) -> list[dict[str, Any]]:
-        """List STAC Items in a collection or remote endpoint.
+        """List STAC Items in a collection.
 
         Args:
-            base_path: Base path to search (local directory or remote URL)
+            base_path: Base path to search
 
         Returns:
             List of item dictionaries
         """
-        if self._is_remote(base_path):
-            # For remote, fetch items from API
-            response = requests.get(base_path, headers=self._get_headers(), timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            if "features" in data:
-                return data["features"]
-            if "items" in data:
-                return data["items"]
-            return [data]
-        # For local, scan directory for item JSON files
         items = []
         base = Path(base_path)
         if base.is_dir():
@@ -490,4 +356,4 @@ class CRUDL:
 
 
 # Global instance for convenience
-crudl_manager = CRUDL()
+crudl_manager = CRUDL(base_path=".")

@@ -3,7 +3,9 @@ Quick runner to call STACClient.estimate_data_size against Planetary Computer se
 Placed in `debug/` for convenience.
 """
 import asyncio
+
 from stac_mcp.tools.client import STACClient
+
 
 async def main():
     client = STACClient()
@@ -25,7 +27,7 @@ if __name__ == "__main__":
 Quick runner to call STACClient.estimate_data_size against Planetary Computer sentinel-2 example.
 """
 import asyncio
-from stac_mcp.tools.client import STACClient
+
 
 async def main():
     client = STACClient()

@@ -4,6 +4,7 @@ using metadata-only fallback to demonstrate parquet handling.
 """
 import asyncio
 from pprint import pprint
+
 from stac_mcp.tools.client import STACClient
 
 

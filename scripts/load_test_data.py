@@ -1,9 +1,9 @@
 """Load local `test-data/vancouver_subaoi_catalog/items/` into a running STAC API using the Transactions /bulk endpoint if available, or POST /collections/{id}/items as fallback."""
 import json
-from pathlib import Path
-import requests
-
 import os
+from pathlib import Path
+
+import requests
 
 BASE_URL = os.environ.get("STAC_API_BASE_URL", "http://localhost:8080")
 COLLECTION_ID = os.environ.get("STAC_API_COLLECTION_ID", "vancouver-subaoi-collection")
