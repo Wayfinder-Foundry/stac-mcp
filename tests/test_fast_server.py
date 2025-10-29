@@ -308,6 +308,20 @@ async def test_call_search_collections_tool(test_app):
             {"type": "text", "text": "mocked search_collections response"}
         ]
 
+        result = await client.call_tool(
+            "search_collections", {"catalog_url": "https://example.com"}
+        )
+        response_data = json.loads(result.content[0].text)
+        assert response_data == [
+            {"type": "text", "text": "mocked search_collections response"}
+        ]
+
+        result = await client.call_tool("search_collections", {"limit": 5})
+        response_data = json.loads(result.content[0].text)
+        assert response_data == [
+            {"type": "text", "text": "mocked search_collections response"}
+        ]
+
 
 @pytest.mark.asyncio
 async def test_call_search_items_tool(test_app):

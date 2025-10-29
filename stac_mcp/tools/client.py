@@ -411,6 +411,8 @@ class STACClient:
             logger.exception("Error fetching collection %s", collection_id)
             raise
         else:
+            if collection is None:
+                return None
             return {
                 "id": collection.id,
                 "title": collection.title or collection.id,
