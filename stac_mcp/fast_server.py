@@ -378,6 +378,108 @@ def _prompt_estimate_data_size() -> PromptMessage:
     )
 
 
+@app.prompt(
+    name="tool_get_queryables_prompt",
+    description="Usage for get_queryables tool",
+    meta={
+        "schema": {
+            "type": "object",
+            "properties": {
+                "collection_id": {"type": "string"},
+                "catalog_url": {"type": "string"},
+            },
+            "required": [],
+        },
+        "example": {"collection_id": "my-collection"},
+    },
+)
+def _prompt_get_queryables() -> PromptMessage:
+    schema = {
+        "type": "object",
+        "properties": {
+            "collection_id": {"type": "string"},
+            "catalog_url": {"type": "string"},
+        },
+        "required": [],
+    }
+    payload = {
+        "name": "get_queryables",
+        "description": "Fetch STAC API (or collection) queryables.",
+        "parameters": schema,
+        "example": {"collection_id": "my-collection"},
+    }
+    human = (
+        f"Tool: get_queryables\nDescription: {payload['description']}\n\n"
+        "Parameters:\n"
+        f"{json.dumps(schema, indent=2)}\n\n"
+        "Example:\n"
+        f"{json.dumps(payload['example'], indent=2)}"
+    )
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
+
+@app.prompt(
+    name="tool_get_aggregations_prompt",
+    description="Usage for get_aggregations tool",
+    meta={
+        "schema": {
+            "type": "object",
+            "properties": {
+                "collections": {"type": "array", "items": {"type": "string"}},
+                "bbox": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 4,
+                    "maxItems": 4,
+                },
+                "datetime": {"type": "string"},
+                "query": {"type": "object"},
+                "catalog_url": {"type": "string"},
+            },
+            "required": ["collections"],
+        },
+        "example": {"collections": ["c1"], "datetime": "2020-01-01/2020-12-31"},
+    },
+)
+def _prompt_get_aggregations() -> PromptMessage:
+    schema = {
+        "type": "object",
+        "properties": {
+            "collections": {"type": "array", "items": {"type": "string"}},
+            "bbox": {
+                "type": "array",
+                "items": {"type": "number"},
+                "minItems": 4,
+                "maxItems": 4,
+            },
+            "datetime": {"type": "string"},
+            "query": {"type": "object"},
+            "catalog_url": {"type": "string"},
+        },
+        "required": ["collections"],
+    }
+    payload = {
+        "name": "get_aggregations",
+        "description": "Get STAC aggregations.",
+        "parameters": schema,
+        "example": {"collections": ["c1"], "datetime": "2020-01-01/2020-12-31"},
+    }
+    human = (
+        f"Tool: get_aggregations\nDescription: {payload['description']}\n\n"
+        "Parameters:\n"
+        f"{json.dumps(schema, indent=2)}\n\n"
+        "Example:\n"
+        f"{json.dumps(payload['example'], indent=2)}"
+    )
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
+
 @app.tool
 async def get_root() -> list[dict[str, Any]]:
     """Get the root STAC catalog document."""
@@ -487,6 +589,40 @@ async def estimate_data_size(
             "limit": limit,
             "force_metadata_only": force_metadata_only,
             "output_format": output_format,
+        },
+        catalog_url=catalog_url,
+        headers=None,
+    )
+
+@app.tool
+async def get_queryables(
+    collection_id: str,
+    catalog_url: str | None = None,
+) -> list[dict[str, Any]]:
+    """Get the queryable properties for a specific STAC collection by its ID."""
+    return await execution.execute_tool(
+        "get_queryables",
+        {"collection_id": collection_id},
+        catalog_url=catalog_url,
+        headers=None,
+    )
+
+@app.tool
+async def get_aggregations(
+    collections: list[str],
+    bbox: list[float] | None = None,
+    datetime: str | None = None,
+    query: dict[str, Any] | None = None,
+    catalog_url: str | None = None,
+) -> list[dict[str, Any]]:
+    """Get aggregations for STAC items."""
+    return await execution.execute_tool(
+        "get_aggregations",
+        arguments={
+            "collections": collections,
+            "bbox": bbox,
+            "datetime": datetime,
+            "query": query,
         },
         catalog_url=catalog_url,
         headers=None,
