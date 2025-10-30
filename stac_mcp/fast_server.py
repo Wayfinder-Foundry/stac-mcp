@@ -8,6 +8,7 @@ from fastmcp.prompts.prompt import PromptMessage, TextContent
 from fastmcp.server.server import FastMCP
 
 from stac_mcp.tools import execution
+from stac_mcp.tools.params import preprocess_parameters
 
 app = FastMCP()
 
@@ -439,25 +440,28 @@ async def get_item(
 
 @app.tool
 async def search_items(
-    collections: list[str],
-    bbox: list[float] | None = None,
+    collections: list[str] | str,
+    bbox: list[float] | str | None = None,
     datetime: str | None = None,
     limit: int | None = 10,
-    query: dict[str, Any] | None = None,
+    query: dict[str, Any] | str | None = None,
     output_format: str | None = "text",
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search for STAC items."""
-    return await execution.execute_tool(
-        "search_items",
-        arguments={
+    arguments = preprocess_parameters(
+        {
             "collections": collections,
             "bbox": bbox,
             "datetime": datetime,
             "limit": limit,
             "query": query,
             "output_format": output_format,
-        },
+        }
+    )
+    return await execution.execute_tool(
+        "search_items",
+        arguments=arguments,
         catalog_url=catalog_url,
         headers=None,
     )
@@ -465,20 +469,19 @@ async def search_items(
 
 @app.tool
 async def estimate_data_size(
-    collections: list[str],
-    bbox: list[float] | None = None,
+    collections: list[str] | str,
+    bbox: list[float] | str | None = None,
     datetime: str | None = None,
-    query: dict[str, Any] | None = None,
-    aoi_geojson: dict[str, Any] | None = None,
+    query: dict[str, Any] | str | None = None,
+    aoi_geojson: dict[str, Any] | str | None = None,
     limit: int | None = 10,
     force_metadata_only: bool | None = False,
     output_format: str | None = "text",
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Estimate the data size for a STAC query."""
-    return await execution.execute_tool(
-        "estimate_data_size",
-        arguments={
+    arguments = preprocess_parameters(
+        {
             "collections": collections,
             "bbox": bbox,
             "datetime": datetime,
@@ -487,7 +490,11 @@ async def estimate_data_size(
             "limit": limit,
             "force_metadata_only": force_metadata_only,
             "output_format": output_format,
-        },
+        }
+    )
+    return await execution.execute_tool(
+        "estimate_data_size",
+        arguments=arguments,
         catalog_url=catalog_url,
         headers=None,
     )
