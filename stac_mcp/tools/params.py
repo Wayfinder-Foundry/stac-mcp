@@ -32,13 +32,13 @@ def preprocess_parameters(arguments: dict[str, Any]) -> dict[str, Any]:
             try:
                 # Try to parse as JSON
                 parsed = json.loads(bbox)
-                if isinstance(parsed, list) and len(parsed) == 4:
+                if isinstance(parsed, list) and len(parsed) == 4:  # noqa: PLR2004
                     processed["bbox"] = [float(x) for x in parsed]
                     logger.debug(
-                        f"Converted bbox from string to list: {processed['bbox']}"
+                        "Converted bbox from string to list: %s", processed["bbox"]
                     )
             except (json.JSONDecodeError, ValueError, TypeError) as e:
-                logger.warning(f"Failed to parse bbox string: {bbox}, error: {e}")
+                logger.warning("Failed to parse bbox string: %s, error: %s", bbox, e)
 
     # Handle collections parameter - should be a list of strings
     if "collections" in processed and processed["collections"] is not None:
@@ -49,11 +49,12 @@ def preprocess_parameters(arguments: dict[str, Any]) -> dict[str, Any]:
                 if isinstance(parsed, list):
                     processed["collections"] = parsed
                     logger.debug(
-                        f"Converted collections from string to list: {processed['collections']}"
+                        "Converted collections from string to list: %s",
+                        processed["collections"],
                     )
             except (json.JSONDecodeError, ValueError, TypeError) as e:
                 logger.warning(
-                    f"Failed to parse collections string: {collections}, error: {e}"
+                    "Failed to parse collections string: %s, error: %s", collections, e
                 )
 
     # Handle aoi_geojson parameter - should be a dict/object
@@ -66,7 +67,9 @@ def preprocess_parameters(arguments: dict[str, Any]) -> dict[str, Any]:
                     processed["aoi_geojson"] = parsed
                     logger.debug("Converted aoi_geojson from string to dict")
             except (json.JSONDecodeError, ValueError, TypeError) as e:
-                logger.warning(f"Failed to parse aoi_geojson string: {aoi}, error: {e}")
+                logger.warning(
+                    "Failed to parse aoi_geojson string: %s, error: %s", aoi, e
+                )
 
     # Handle query parameter - should be a dict/object
     if "query" in processed and processed["query"] is not None:
@@ -78,15 +81,19 @@ def preprocess_parameters(arguments: dict[str, Any]) -> dict[str, Any]:
                     processed["query"] = parsed
                     logger.debug("Converted query from string to dict")
             except (json.JSONDecodeError, ValueError, TypeError) as e:
-                logger.warning(f"Failed to parse query string: {query}, error: {e}")
-    
+                logger.warning("Failed to parse query string: %s, error: %s", query, e)
+
     if "limit" in processed and processed["limit"] is not None:
         limit = processed["limit"]
         if isinstance(limit, str):
             try:
                 processed["limit"] = int(limit)
-                logger.debug(f"Converted limit from string to int: {processed['limit']}")
+                logger.debug(
+                    "Converted limit from string to int: %d", processed["limit"]
+                )
             except ValueError as e:
-                logger.warning(f"Failed to convert limit string to int: {limit}, error: {e}")
+                logger.warning(
+                    "Failed to convert limit string to int: %s, error: %s", limit, e
+                )
 
     return processed

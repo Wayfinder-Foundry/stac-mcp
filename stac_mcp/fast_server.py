@@ -449,14 +449,16 @@ async def search_items(
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Search for STAC items."""
-    arguments = preprocess_parameters({
-        "collections": collections,
-        "bbox": bbox,
-        "datetime": datetime,
-        "limit": limit,
-        "query": query,
-        "output_format": output_format,
-    })
+    arguments = preprocess_parameters(
+        {
+            "collections": collections,
+            "bbox": bbox,
+            "datetime": datetime,
+            "limit": limit,
+            "query": query,
+            "output_format": output_format,
+        }
+    )
     return await execution.execute_tool(
         "search_items",
         arguments=arguments,
@@ -478,16 +480,18 @@ async def estimate_data_size(
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Estimate the data size for a STAC query."""
-    arguments = preprocess_parameters({
-        "collections": collections,
-        "bbox": bbox,
-        "datetime": datetime,
-        "query": query,
-        "aoi_geojson": aoi_geojson,
-        "limit": limit,
-        "force_metadata_only": force_metadata_only,
-        "output_format": output_format,
-    })
+    arguments = preprocess_parameters(
+        {
+            "collections": collections,
+            "bbox": bbox,
+            "datetime": datetime,
+            "query": query,
+            "aoi_geojson": aoi_geojson,
+            "limit": limit,
+            "force_metadata_only": force_metadata_only,
+            "output_format": output_format,
+        }
+    )
     return await execution.execute_tool(
         "estimate_data_size",
         arguments=arguments,

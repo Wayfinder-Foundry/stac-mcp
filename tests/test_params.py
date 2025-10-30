@@ -1,6 +1,6 @@
 """Test parameter preprocessing for various input formats."""
 
-import pytest
+import json
 
 from stac_mcp.tools.params import preprocess_parameters
 
@@ -29,6 +29,14 @@ def test_bbox_none():
     assert result["bbox"] is None
 
 
+def test_limit_as_string():
+    """Test that limit as string is converted to int."""
+    args = {"limit": "5"}
+    result = preprocess_parameters(args)
+    assert result["limit"] == 5  # noqa: PLR2004
+    assert isinstance(result["limit"], int)
+
+
 def test_collections_as_string():
     """Test that collections as JSON string is converted to list."""
     args = {"collections": '["sentinel-2-l2a", "landsat-c2-l2"]'}
@@ -46,9 +54,10 @@ def test_collections_as_list():
 
 def test_aoi_geojson_as_string():
     """Test that aoi_geojson as JSON string is converted to dict."""
-    args = {
-        "aoi_geojson": '{"type": "Polygon", "coordinates": [[[-123, 49], [-122, 49], [-122, 50], [-123, 50], [-123, 49]]]}'
-    }
+    coords = [[[-123, 49], [-122, 49], [-122, 50], [-123, 50], [-123, 49]]]
+    geom = {"type": "Polygon", "coordinates": coords}
+    aoi_str = json.dumps(geom)
+    args = {"aoi_geojson": aoi_str}
     result = preprocess_parameters(args)
     assert isinstance(result["aoi_geojson"], dict)
     assert result["aoi_geojson"]["type"] == "Polygon"
@@ -119,4 +128,4 @@ def test_mixed_parameters():
     assert isinstance(result["bbox"], list)
     assert isinstance(result["query"], dict)
     assert result["datetime"] == "2025-01-01/2025-01-31"
-    assert result["limit"] == 10
+    assert result["limit"] == 10  # noqa: PLR2004
