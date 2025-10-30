@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 def test_get_queryables():
     """Verify get_queryables for a collection."""
-    from stac_mcp.tools.client import STACClient
+    from stac_mcp.tools.client import STACClient  # noqa: PLC0415
 
     with patch("requests.get") as mock_get:
         mock_response = MagicMock()
@@ -30,7 +30,7 @@ def test_get_queryables():
 
 def test_get_aggregations():
     """Verify get_aggregations with expanded search parameters."""
-    from stac_mcp.tools.client import STACClient
+    from stac_mcp.tools.client import STACClient  # noqa: PLC0415
 
     with patch("requests.post") as mock_post:
         mock_response = MagicMock()
