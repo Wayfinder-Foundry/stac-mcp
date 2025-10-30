@@ -963,25 +963,28 @@ class STACClient:
             if collection_id
             else "/queryables"
         )
-        base = self.catalog_url.replace("catalog.json", "").rstrip("/")
+        base = self.catalog_url
+        if base.endswith("/catalog.json"):
+            base = base[: -len("/catalog.json")]
+        base = base.rstrip("/")
         url = f"{base}{path}"
         request_headers = self.headers.copy()
         request_headers.setdefault("Accept", "application/json")
         try:
             res = requests.get(url, headers=request_headers, timeout=30)
-            if res.status_code == HTTP_404 or not res.ok:
+            if not res.ok:
                 return {
                     "queryables": {},
                     "collection_id": collection_id,
-                    "message": "Queryables not available",
+                    "message": f"Queryables not available (HTTP {res.status_code})",
                 }
             q = res.json() if res.content else {}
-        except requests.RequestException:
+        except requests.RequestException as e:
             logger.exception("Failed to fetch queryables %s", url)
             return {
                 "queryables": {},
                 "collection_id": collection_id,
-                "message": "Queryables not available",
+                "message": f"Queryables not available (request failed: {e})",
             }
         props = q.get("properties") or q.get("queryables") or {}
         return {"queryables": props, "collection_id": collection_id}
@@ -989,66 +992,72 @@ class STACClient:
     def get_aggregations(
         self,
         collections: list[str] | None = None,
+        ids: list[str] | None = None,
         bbox: list[float] | None = None,
+        intersects: dict[str, Any] | None = None,
         datetime: str | None = None,
         query: dict[str, Any] | None = None,
+        filter_lang: str | None = None,  # noqa: ARG002
+        filter_expr: dict[str, Any] | None = None,  # noqa: ARG002
         fields: list[str] | None = None,
-        operations: list[str] | None = None,
+        sortby: list[dict[str, Any]] | None = None,
         limit: int = 0,
     ) -> dict[str, Any]:
-        # Use the STAC API search endpoint via requests rather than relying on
-        # private pystac_client IO helpers. This uses the public HTTP contract.
-        # Ensure the server advertises aggregation capability
         self._check_conformance(CONFORMANCE_AGGREGATION)
-        base = self.catalog_url.replace("catalog.json", "").rstrip("/")
+        base = self.catalog_url
+        if base.endswith("/catalog.json"):
+            base = base[: -len("/catalog.json")]
+        base = base.rstrip("/")
         url = f"{base}/search"
+
         request_headers = self.headers.copy()
         request_headers["Accept"] = "application/json"
-        # Construct the search request body according to STAC Search API
+
         body: dict[str, Any] = {}
         if collections:
             body["collections"] = collections
+        if ids:
+            body["ids"] = ids
         if bbox:
             body["bbox"] = bbox
+        if intersects:
+            body["intersects"] = intersects
         if datetime:
             body["datetime"] = datetime
         if query:
             body["query"] = query
+        if sortby:
+            body["sortby"] = sortby
         if limit and limit > 0:
             body["limit"] = limit
 
-        # Aggregation request shape is not strictly standardized across
-        # implementations; include a simple aggregations object when fields
-        # or operations are provided. Servers supporting aggregation will
-        # respond with an `aggregations` field in the search response.
-        if fields or operations:
-            body["aggregations"] = {
-                "fields": fields or [],
-                "operations": operations or [],
-            }
+        # Aggregation-specific part of the request
+        if fields:
+            body["aggregations"] = [{"name": f, "params": {}} for f in fields]
 
         try:
-            resp = requests.post(url, json=body, headers=request_headers, timeout=30)
+            resp = requests.post(url, json=body, headers=request_headers, timeout=60)
             if not resp.ok:
                 return {
                     "supported": False,
                     "aggregations": {},
-                    "message": "Search endpoint unavailable",
+                    "message": f"Search endpoint unavailable (HTTP {resp.status_code})",
                     "parameters": body,
                 }
             res_json = resp.json() if resp.content else {}
             aggs_result = res_json.get("aggregations") or {}
             return {
-                "supported": bool(aggs_result),
+                "supported": "aggregations" in res_json,
                 "aggregations": aggs_result,
-                # any additional metadata preserved
+                "meta": res_json.get("meta", {}),
+                "links": res_json.get("links", []),
             }
-        except requests.RequestException:
+        except requests.RequestException as e:
             logger.exception("Aggregation request failed %s", url)
             return {
                 "supported": False,
                 "aggregations": {},
-                "message": "Search endpoint unavailable",
+                "message": f"Search endpoint unavailable (request failed: {e})",
                 "parameters": body,
             }
 

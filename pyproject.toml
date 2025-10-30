@@ -58,7 +58,8 @@ dev = [
     "fastapi",
     "httpx",
     "pytest-cov",
-    "requests"
+    "requests",
+    "respx"
 ]
 
 [project.scripts]
