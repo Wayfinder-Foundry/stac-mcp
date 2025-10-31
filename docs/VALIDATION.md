@@ -19,7 +19,7 @@ The FastMCP documentation in `docs/fastmcp/` has been validated against the curr
 The STAC MCP server uses a **delegated tool execution pattern**:
 
 ```python
-# stac_mcp/fast_server.py
+# stac_mcp/server.py
 @server.call_tool()
 async def handle_call_tool(tool_name: str, arguments: dict):
     return await execution.execute_tool(tool_name, arguments)

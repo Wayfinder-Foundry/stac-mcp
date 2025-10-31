@@ -4,7 +4,7 @@
 This script helps maintain version consistency across:
 - pyproject.toml
 - stac_mcp/__init__.py
-- stac_mcp/fast_server.py
+- stac_mcp/server.py
 
 Usage:
     python scripts/version.py current        # Show current version
@@ -84,8 +84,8 @@ def update_init_version(new_version: str) -> None:
 
 
 def update_server_version(new_version: str) -> None:
-    """Update version in stac_mcp/fast_server.py."""
-    server_path = Path("stac_mcp/fast_server.py")
+    """Update version in stac_mcp/server.py."""
+    server_path = Path("stac_mcp/server.py")
     content = server_path.read_text()
 
     # Update server_version in InitializationOptions
@@ -96,7 +96,7 @@ def update_server_version(new_version: str) -> None:
     )
 
     server_path.write_text(new_content)
-    print(f"Updated stac_mcp/fast_server.py version to {new_version}")
+    print(f"Updated stac_mcp/server.py version to {new_version}")
 
 
 def update_all_versions(new_version: str) -> None:

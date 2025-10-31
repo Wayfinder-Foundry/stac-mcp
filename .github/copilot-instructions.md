@@ -139,7 +139,7 @@ Following these patterns improves maintainability and reduces brittle dependenci
 ```
 
 ### Key Files
-- **stac_mcp/fast_server.py**: Main MCP server implementation with 4 STAC tools
+- **stac_mcp/server.py**: Main MCP server implementation with 4 STAC tools
 - **pyproject.toml**: Defines dependencies, build system, and tool configuration
 - **tests/**: Comprehensive test suite with 9 tests covering MCP protocol and server functionality
 
@@ -297,6 +297,6 @@ Examples:
 The version management script maintains consistency across:
 - `pyproject.toml` (project version)
 - `stac_mcp/__init__.py` (__version__)
-- `stac_mcp/fast_server.py` (server_version in MCP initialization)
+- `stac_mcp/server.py` (server_version in MCP initialization)
 
 Never manually edit versions in individual files - always use the script to ensure synchronization.

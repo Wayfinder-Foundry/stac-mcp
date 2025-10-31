@@ -1,7 +1,7 @@
 import pytest
 from fastmcp.client import Client
 
-from stac_mcp.fast_server import app
+from stac_mcp.server import app
 
 NEW_PROMPTS = [
     "catalog_discovery_prompt",

@@ -5,7 +5,7 @@ from unittest.mock import PropertyMock, patch
 import pytest
 from fastmcp import Client
 
-from stac_mcp.fast_server import app
+from stac_mcp.server import app
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 import pytest
 from fastmcp.prompts.prompt import PromptMessage
 
-from stac_mcp import fast_server
+from stac_mcp import server
 
 PROMPT_NAMES = [
     "_prompt_get_root",
@@ -22,8 +22,8 @@ def test_prompt_functions_exist_and_return_helpful_text(name: str):
     they contain at least an Example section and Parameters/Notes guidance so
     agent callers can parse them.
     """
-    assert hasattr(fast_server, name), f"Missing prompt function: {name}"
-    func = getattr(fast_server, name)
+    assert hasattr(server, name), f"Missing prompt function: {name}"
+    func = getattr(server, name)
     # The decorator may replace the original function with a prompt object
     # (FunctionPrompt). Try multiple strategies to obtain human-help text.
     text = None
