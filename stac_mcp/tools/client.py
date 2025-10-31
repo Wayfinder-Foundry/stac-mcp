@@ -458,32 +458,32 @@ class STACClient:
                 sortby=sortby,
                 limit=limit,
             )
-            items = []
-            for item in pystac_items:
-                # Be permissive when normalizing items: tests and alternate
-                # client implementations may provide SimpleNamespace-like
-                # objects without all attributes. Use getattr with sensible
-                # defaults to avoid AttributeError during normalization.
-                items.append(
-                    {
-                        "id": getattr(item, "id", None),
-                        "collection": getattr(item, "collection_id", None),
-                        "geometry": getattr(item, "geometry", None),
-                        "bbox": getattr(item, "bbox", None),
-                        "datetime": (
-                            item.datetime.isoformat()
-                            if getattr(item, "datetime", None)
-                            else None
-                        ),
-                        "properties": getattr(item, "properties", {}) or {},
-                        "assets": {
-                            k: v.to_dict()
-                            for k, v in getattr(item, "assets", {}).items()
-                        },
-                    }
-                )
-                if limit and limit > 0 and len(items) >= limit:
-                    break
+            items = pystac_items.items_as_dicts()
+            # for item in pystac_items:
+            #     # Be permissive when normalizing items: tests and alternate
+            #     # client implementations may provide SimpleNamespace-like
+            #     # objects without all attributes. Use getattr with sensible
+            #     # defaults to avoid AttributeError during normalization.
+            #     items.append(
+            #         {
+            #             "id": getattr(item, "id", None),
+            #             "collection": getattr(item, "collection_id", None),
+            #             "geometry": getattr(item, "geometry", None),
+            #             "bbox": getattr(item, "bbox", None),
+            #             "datetime": (
+            #                 item.datetime.isoformat()
+            #                 if getattr(item, "datetime", None)
+            #                 else None
+            #             ),
+            #             "properties": getattr(item, "properties", {}) or {},
+            #             "assets": {
+            #                 k: v.to_dict()
+            #                 for k, v in getattr(item, "assets", {}).items()
+            #             },
+            #         }
+            #     )
+            #     if limit and limit > 0 and len(items) >= limit:
+            #         break
         except APIError:  # pragma: no cover - network dependent
             logger.exception("Error searching items")
             raise
