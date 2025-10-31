@@ -38,6 +38,11 @@ def test_cached_search_expiry_and_refresh():
         def items(self):
             return iter(self._items)
 
+        def items_as_dict(self):
+            # Return items in the form the client expects from a real
+            # ItemSearch when items_as_dict() is called (list of objects)
+            return self._items
+
     def _search_a(**_kw):
         return FakeSearch([SimpleNamespace(id="a")])
 

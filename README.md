@@ -215,7 +215,7 @@ python scripts/version.py set 1.2.3
 The version system maintains consistency across:
 - `pyproject.toml` (project version)
 - `stac_mcp/__init__.py` (__version__)
-- `stac_mcp/fast_server.py` (server_version in MCP initialization)
+- `stac_mcp/server.py` (server_version in MCP initialization)
 
 ### Container Development
 

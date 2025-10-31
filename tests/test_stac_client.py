@@ -62,6 +62,16 @@ def _mk_item(id_: str, collection_id: str):
     itm.assets = {
         "B01": SimpleNamespace(to_dict=lambda: {"href": "u", "type": "image/tiff"}),
     }
+    # Provide a to_dict so client code that calls item.to_dict() works in tests
+    itm.to_dict = lambda: {
+        "id": id_,
+        "collection": collection_id,
+        "geometry": None,
+        "bbox": [0, 0, 1, 1],
+        "datetime": itm.datetime.isoformat(),
+        "properties": itm.properties,
+        "assets": {k: v.to_dict() for k, v in itm.assets.items()},
+    }
     return itm
 
 
@@ -88,12 +98,19 @@ def test_get_collection(stac_client, monkeypatch):
 
 def test_search_items(stac_client, monkeypatch):
     search_mock = MagicMock()
-    search_mock.items.return_value = [_mk_item("i1", "c1"), _mk_item("i2", "c1")]
+    # Underlying pystac-client search may provide an object with items() or
+    # items_as_dict(). Ensure our mock exposes items_as_dict() as used by code.
+    search_mock.items_as_dict.return_value = [
+        _mk_item("i1", "c1"),
+        _mk_item("i2", "c1"),
+    ]
     mock_client = MagicMock()
     mock_client.search.return_value = search_mock
     monkeypatch.setattr(stac_client, "_client", mock_client)
     res = stac_client.search_items(collections=["c1"], limit=5)
     assert len(res) == NUM_ITEMS
+    assert isinstance(res, list)
+    assert isinstance(res[0], dict)
     assert res[0]["id"] == "i1"
 
 

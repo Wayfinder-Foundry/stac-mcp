@@ -1,6 +1,6 @@
 # ADR 0003: Expand Search to Parity with pystac-client
 
-Status: Proposed
+Status: Accepted
 Date: 2025-09-18
 
 ## Context

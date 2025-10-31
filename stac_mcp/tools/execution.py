@@ -26,6 +26,7 @@ from stac_mcp.tools.get_queryables import handle_get_queryables
 from stac_mcp.tools.get_root import handle_get_root
 from stac_mcp.tools.search_collections import handle_search_collections
 from stac_mcp.tools.search_items import handle_search_items
+from stac_mcp.tools.sensor_dtypes import handle_sensor_registry_info
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ _TOOL_HANDLERS: dict[str, Handler] = {
     "get_conformance": handle_get_conformance,
     "get_queryables": handle_get_queryables,
     "get_aggregations": handle_get_aggregations,
+    "sensor_registry_info": handle_sensor_registry_info,
 }
 
 

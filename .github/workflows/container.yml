@@ -117,7 +117,7 @@ jobs:
           git config --local user.name "GitHub Action"
 
           # Commit version changes
-          git add pyproject.toml stac_mcp/__init__.py stac_mcp/fast_server.py
+          git add pyproject.toml stac_mcp/__init__.py stac_mcp/server.py
           git commit -m "chore: bump version to $NEW_VERSION (auto-increment from $BRANCH_NAME branch)"
 
           # Pull latest changes from main to avoid push conflicts

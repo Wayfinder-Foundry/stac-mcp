@@ -17,7 +17,7 @@ import pytest
 from fastmcp import Client
 
 from stac_mcp import observability
-from stac_mcp.fast_server import app
+from stac_mcp.server import app
 from tests import HTTP_OK
 
 

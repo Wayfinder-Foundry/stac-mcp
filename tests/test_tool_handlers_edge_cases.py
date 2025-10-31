@@ -7,7 +7,7 @@ from fastmcp.client import Client
 from fastmcp.tools.tool import ToolResult
 from mcp.types import TextContent
 
-from stac_mcp.fast_server import app
+from stac_mcp.server import app
 
 
 @pytest.fixture

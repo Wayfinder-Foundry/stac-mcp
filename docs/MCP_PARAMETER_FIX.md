@@ -27,7 +27,7 @@ We implemented a two-part fix:
 
 ### 1. Accept String Parameters in Function Signatures
 
-Modified the type hints in `fast_server.py` to accept both native types AND strings:
+Modified the type hints in `server.py` to accept both native types AND strings:
 
 ```python
 # Before
@@ -116,7 +116,7 @@ await search_items(
 1. `stac_mcp/tools/params.py` (new)
    - Parameter preprocessing utilities
 
-2. `stac_mcp/fast_server.py` (modified)
+2. `stac_mcp/server.py` (modified)
    - Updated type hints for `search_items` and `estimate_data_size`
    - Added calls to `preprocess_parameters()`
 

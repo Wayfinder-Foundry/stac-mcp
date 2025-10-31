@@ -76,11 +76,13 @@ def test_handle_get_aggregations():
     mock_client = MagicMock()
     mock_client.get_aggregations.return_value = {
         "supported": True,
-        "aggregations": {"total_count": 100},
+        "aggregations": [{"name": "total_count", "value": 100}],
         "message": "OK",
     }
     result = handle_get_aggregations(mock_client, {})
-    assert "aggregations" in result[0].text
+    text_content = " ".join([item.text for item in result])
+    assert "Supported: Yes" in text_content
+    assert "total_count" in text_content
 
 
 def test_handle_get_collection():

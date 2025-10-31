@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from stac_mcp.fast_server import (
+from stac_mcp.server import (
     get_collection,
     get_conformance,
     get_item,
