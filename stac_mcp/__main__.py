@@ -5,7 +5,7 @@ from stac_mcp.server import app
 
 def main() -> None:
     """Launch the STAC MCP server CLI."""
-    app.run()
+    app.run(transport="streamable-http")
 
 
 if __name__ == "__main__":
