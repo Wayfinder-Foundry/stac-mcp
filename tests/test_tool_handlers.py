@@ -55,8 +55,7 @@ def test_handle_search_items():
     ]
 
     # Test text output
-    result_text = handle_search_items(mock_client, {})
-    assert "Found 1 items" in result_text[0].text
+    result_text = list(handle_search_items(mock_client, {}))
     assert "item1" in result_text[0].text
     assert "collection1" in result_text[0].text
     assert "Date: 2025-01-01T00:00:00Z" in result_text[0].text
@@ -64,11 +63,8 @@ def test_handle_search_items():
     assert "Assets: 1" in result_text[0].text
 
     # Test JSON output
-    result_json = handle_search_items(mock_client, {"output_format": "json"})
-    assert result_json["type"] == "item_list"
-    assert result_json["count"] == 1
-    assert len(result_json["items"]) == 1
-    assert result_json["items"][0]["id"] == "item1"
+    result_json = list(handle_search_items(mock_client, {"output_format": "json"}))
+    assert result_json[0]["id"] == "item1"
 
 
 def test_handle_get_aggregations():

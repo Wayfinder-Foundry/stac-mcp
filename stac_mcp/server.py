@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, AsyncIterator
 
 from fastmcp.server.server import FastMCP
 
@@ -89,7 +89,7 @@ async def search_items(
     query: dict[str, Any] | str | None = None,
     output_format: str | None = "text",
     catalog_url: str | None = None,
-) -> list[dict[str, Any]]:
+) -> AsyncIterator[dict[str, Any]]:
     """Search for STAC items."""
     arguments = preprocess_parameters(
         {
@@ -101,12 +101,13 @@ async def search_items(
             "output_format": output_format,
         }
     )
-    return await execution.execute_tool(
+    async for item in await execution.execute_tool(
         "search_items",
         arguments=arguments,
         catalog_url=catalog_url,
         headers=None,
-    )
+    ):
+        yield item
 
 
 @app.tool

@@ -8,7 +8,7 @@ import os
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any
+from typing import Any, Iterator
 
 import requests
 from pystac_client.exceptions import APIError
@@ -246,7 +246,7 @@ class STACClient:
         query: dict[str, Any] | None = None,
         sortby: list[str] | list[dict[str, str]] | None = None,
         limit: int = 10,
-    ) -> list[Any]:
+    ) -> Iterator[dict[str, Any]]:
         """Run a search and cache the resulting item list per-client.
 
         Returns a list of pystac.Item objects (as returned by the underlying
@@ -269,7 +269,8 @@ class STACClient:
             except (TypeError, ValueError):
                 ttl = getattr(self, "search_cache_ttl_seconds", 300)
             if now - ts <= ttl:
-                return val
+                yield from val
+                return
             # expired
             self._search_cache.pop(key, None)
 
@@ -281,10 +282,10 @@ class STACClient:
             sortby=sortby,
             limit=limit,
         )
-        items = search.items_as_dicts()
+        items = list(search.items_as_dicts())
         # Store the list for reuse within this client/session along with timestamp.
         self._search_cache[key] = (now, items)
-        return items
+        yield from items
 
     def _cached_collections(self, limit: int = 10) -> list[dict[str, Any]]:
         key = f"collections:limit={int(limit)}"
@@ -443,7 +444,7 @@ class STACClient:
         query: dict[str, Any] | None = None,
         sortby: list[str] | list[dict[str, str]] | None = None,
         limit: int = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> Iterator[dict[str, Any]]:
         if query:
             self._check_conformance(CONFORMANCE_QUERY)
         if sortby:
@@ -458,17 +459,8 @@ class STACClient:
                 sortby=sortby,
                 limit=limit,
             )
-        except APIError:  # pragma: no cover - network dependent
-            logger.exception("Error searching items")
-            raise
-
-        if not items:
-            return []
-        # Normalize items to dicts for consistent output.
-        normalized_items = []
-        for item in items:
-            normalized_items.append(
-                {
+            for item in items:
+                yield {
                     "id": item.get("id"),
                     "collection": item.get("collection"),
                     "geometry": item.get("geometry"),
@@ -477,8 +469,9 @@ class STACClient:
                     "properties": item.get("properties", {}),
                     "assets": item.get("assets", {}),
                 }
-            )
-        return normalized_items
+        except APIError:  # pragma: no cover - network dependent
+            logger.exception("Error searching items")
+            raise
 
     def get_item(self, collection_id: str, item_id: str) -> dict[str, Any]:
         try:

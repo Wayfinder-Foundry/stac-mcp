@@ -24,6 +24,8 @@ async def call_tool(tool, *a, **kw):
             coro = fn(*a, **kw)
             if asyncio.iscoroutine(coro):
                 return await coro
+            if hasattr(coro, "__aiter__"):
+                return [item async for item in coro]
             return coro
 
     # As a fallback, scan attributes for a callable defined in this module
@@ -64,14 +66,24 @@ class DummyCall:
             }
         )
         # return a simple predictable payload
-        return [
-            {
-                "tool": name,
-                "args": arguments or {},
-                "catalog_url": catalog_url,
-                "headers": headers,
-            }
-        ]
+        if name == "search_items":
+            async def _dummy_generator():
+                yield {
+                    "tool": name,
+                    "args": arguments or {},
+                    "catalog_url": catalog_url,
+                    "headers": headers,
+                }
+            return _dummy_generator()
+        else:
+            return [
+                {
+                    "tool": name,
+                    "args": arguments or {},
+                    "catalog_url": catalog_url,
+                    "headers": headers,
+                }
+            ]
 
 
 @pytest.mark.asyncio

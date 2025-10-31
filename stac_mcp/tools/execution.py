@@ -8,10 +8,11 @@ can hook here centrally.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 from collections.abc import Callable, Iterable
-from typing import Any, NoReturn
+from typing import Any, AsyncIterator, Iterator, NoReturn
 
 from mcp.types import TextContent
 
@@ -49,7 +50,7 @@ class Session:
 
 Handler = Callable[
     [STACClient, dict[str, Any]],
-    list[TextContent] | dict[str, Any],
+    list[TextContent] | dict[str, Any] | Iterator[TextContent | dict[str, Any]],
 ]
 
 
@@ -135,7 +136,7 @@ async def execute_tool(
     headers: dict[str, str] | None = None,
     handler: Handler | None = None,
     client: STACClient | None = None,
-):
+) -> AsyncIterator[TextContent]:
     """Execute a tool handler with optional overrides for tests.
 
     Parameters mirror the comprehensive execution tests: when *handler* or
@@ -170,19 +171,38 @@ async def execute_tool(
     raw_result = instrumented.value
 
     output_format = arguments.get("output_format", "text")
-    if output_format == "json":
-        if isinstance(raw_result, list):
-            normalized = _as_text_content_list(raw_result)
-            payload = {
-                "mode": "text_fallback",
-                "content": [item.text for item in normalized],
-            }
+    if inspect.isgenerator(raw_result):
+        if output_format == "json":
+            for item in raw_result:
+                payload = {"mode": "json", "data": item}
+                payload_text = json.dumps(payload, separators=(",", ":"))
+                record_tool_result_size(tool_name, len(payload_text.encode("utf-8")))
+                yield TextContent(type="text", text=payload_text)
         else:
-            payload = {"mode": "json", "data": raw_result}
-        payload_text = json.dumps(payload, separators=(",", ":"))
-        record_tool_result_size(tool_name, len(payload_text.encode("utf-8")))
-        return [TextContent(type="text", text=payload_text)]
-    normalized = _as_text_content_list(raw_result)
-    total_bytes = sum(len(item.text.encode("utf-8")) for item in normalized)
-    record_tool_result_size(tool_name, total_bytes)
-    return normalized
+            for item in raw_result:
+                normalized = _as_text_content_list(item)
+                total_bytes = sum(
+                    len(item.text.encode("utf-8")) for item in normalized
+                )
+                record_tool_result_size(tool_name, total_bytes)
+                for item in normalized:
+                    yield item
+    else:
+        if output_format == "json":
+            if isinstance(raw_result, list):
+                normalized = _as_text_content_list(raw_result)
+                payload = {
+                    "mode": "text_fallback",
+                    "content": [item.text for item in normalized],
+                }
+            else:
+                payload = {"mode": "json", "data": raw_result}
+            payload_text = json.dumps(payload, separators=(",", ":"))
+            record_tool_result_size(tool_name, len(payload_text.encode("utf-8")))
+            yield TextContent(type="text", text=payload_text)
+        else:
+            normalized = _as_text_content_list(raw_result)
+            total_bytes = sum(len(item.text.encode("utf-8")) for item in normalized)
+            record_tool_result_size(tool_name, total_bytes)
+            for item in normalized:
+                yield item
