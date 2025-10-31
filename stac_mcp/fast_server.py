@@ -7,6 +7,7 @@ from typing import Any
 from fastmcp.prompts.prompt import PromptMessage, TextContent
 from fastmcp.server.server import FastMCP
 
+from stac_mcp.prompts import register_prompts
 from stac_mcp.tools import execution
 from stac_mcp.tools.params import preprocess_parameters
 
@@ -14,64 +15,11 @@ app = FastMCP()
 
 _LOGGER = logging.getLogger(__name__)
 
-# Prompts to guide agents how to call tools correctly.
-#
-# Notes on metadata locations (why both `meta` and `_meta` exist):
-# - The `@app.prompt(..., meta=...)` decorator accepts a `meta` kwarg which
-#   FastMCP stores on the prompt descriptor returned by `client.list_prompts()`
-#   as `.meta`. This is the decorator-provided metadata (schema/example).
-# - When the prompt function returns a `PromptMessage`, we attach the
-#   machine-readable payload (the JSON schema + example used to generate the
-#   human-facing prompt) under the MCP aliased metadata field `_meta` on the
-#   PromptMessage instance. Clients retrieving a rendered prompt (`get_prompt`)
-#   should therefore look for `message._meta["machine_payload"]` for the
-#   machine payload, while discovery via `list_prompts()` will find decorator
-#   metadata under `.meta`.
-#
-# This dual-mapping keeps decorator metadata discoverable via prompt listing
-# while making the specific per-message machine payload available on the
-# returned PromptMessage under `_meta` so agents can programmatically inspect
-# the exact payload used to render the human text.
+# Prompts are registered separately to keep the server module small and
+# avoid import cycles. See `stac_mcp.prompts.register_prompts` for details.
+register_prompts(app)
 
 
-@app.prompt(
-    name="tool_get_root_prompt",
-    description="Usage for get_root tool",
-    meta={
-        "schema": {"type": "object", "properties": {}, "required": []},
-        "example": {},
-    },
-)
-def _prompt_get_root() -> PromptMessage:
-    schema = {"type": "object", "properties": {}, "required": []}
-    payload = {
-        "name": "get_root",
-        "description": "Return the STAC root document.",
-        "parameters": schema,
-        "example": {},
-    }
-    human = (
-        f"Tool: get_root\nDescription: {payload['description']}\n\n"
-        "Parameters:\n"
-        f"{json.dumps(schema, indent=2)}\n\n"
-        "Example:\n"
-        f"{json.dumps(payload['example'], indent=2)}"
-    )
-    return PromptMessage(
-        role="user",
-        content=TextContent(type="text", text=human),
-        _meta={"machine_payload": payload},
-    )
-
-
-@app.prompt(
-    name="tool_get_conformance_prompt",
-    description="Usage for get_conformance tool",
-    meta={
-        "schema": {"type": "object", "properties": {}, "required": []},
-        "example": {},
-    },
-)
 def _prompt_get_conformance() -> PromptMessage:
     schema = {"type": "object", "properties": {}, "required": []}
     payload = {
@@ -94,21 +42,35 @@ def _prompt_get_conformance() -> PromptMessage:
     )
 
 
-@app.prompt(
-    name="tool_search_collections_prompt",
-    description="Usage for search_collections tool",
-    meta={
-        "schema": {
-            "type": "object",
-            "properties": {
-                "limit": {"type": "integer", "default": 10},
-                "catalog_url": {"type": "string"},
-            },
-            "required": [],
-        },
-        "example": {"limit": 5},
-    },
-)
+def _prompt_get_root() -> PromptMessage:
+    """Module-level prompt helper for get_root (kept for tests).
+
+    The authoritative prompt is registered dynamically by
+    `stac_mcp.prompts.register_prompts`, but tests expect a callable with
+    this name to exist on the module. Provide a minimal in-module copy so
+    test introspection succeeds.
+    """
+    schema = {"type": "object", "properties": {}, "required": []}
+    payload = {
+        "name": "get_root",
+        "description": "Return the STAC root document for a catalog.",
+        "parameters": schema,
+        "example": {},
+    }
+    human = (
+        f"Tool: get_root\nDescription: {payload['description']}\n\n"
+        "Parameters:\n"
+        f"{json.dumps(schema, indent=2)}\n\n"
+        "Example:\n"
+        f"{json.dumps(payload['example'], indent=2)}"
+    )
+    return PromptMessage(
+        role="user",
+        content=TextContent(type="text", text=human),
+        _meta={"machine_payload": payload},
+    )
+
+
 def _prompt_search_collections() -> PromptMessage:
     schema = {
         "type": "object",
@@ -138,21 +100,6 @@ def _prompt_search_collections() -> PromptMessage:
     )
 
 
-@app.prompt(
-    name="tool_get_collection_prompt",
-    description="Usage for get_collection tool",
-    meta={
-        "schema": {
-            "type": "object",
-            "properties": {
-                "collection_id": {"type": "string"},
-                "catalog_url": {"type": "string"},
-            },
-            "required": ["collection_id"],
-        },
-        "example": {"collection_id": "my-collection"},
-    },
-)
 def _prompt_get_collection() -> PromptMessage:
     schema = {
         "type": "object",
@@ -182,27 +129,6 @@ def _prompt_get_collection() -> PromptMessage:
     )
 
 
-@app.prompt(
-    name="tool_get_item_prompt",
-    description="Usage for get_item tool",
-    meta={
-        "schema": {
-            "type": "object",
-            "properties": {
-                "collection_id": {"type": "string"},
-                "item_id": {"type": "string"},
-                "output_format": {
-                    "type": "string",
-                    "enum": ["text", "json"],
-                    "default": "text",
-                },
-                "catalog_url": {"type": "string"},
-            },
-            "required": ["collection_id", "item_id"],
-        },
-        "example": {"collection_id": "c1", "item_id": "i1", "output_format": "json"},
-    },
-)
 def _prompt_get_item() -> PromptMessage:
     schema = {
         "type": "object",
@@ -238,28 +164,6 @@ def _prompt_get_item() -> PromptMessage:
     )
 
 
-@app.prompt(
-    name="tool_search_items_prompt",
-    description="Usage for search_items tool",
-    meta={
-        "schema": {
-            "type": "object",
-            "properties": {
-                "collections": {"type": "array", "items": {"type": "string"}},
-                "bbox": {
-                    "type": "array",
-                    "items": {"type": "number"},
-                    "minItems": 4,
-                    "maxItems": 4,
-                },
-                "datetime": {"type": "string"},
-                "limit": {"type": "integer", "default": 10},
-            },
-            "required": ["collections"],
-        },
-        "example": {"collections": ["c1"], "limit": 3},
-    },
-)
 def _prompt_search_items() -> PromptMessage:
     schema = {
         "type": "object",
@@ -287,7 +191,16 @@ def _prompt_search_items() -> PromptMessage:
         "Parameters:\n"
         f"{json.dumps(schema, indent=2)}\n\n"
         "Example:\n"
-        f"{json.dumps(payload['example'], indent=2)}"
+        f"{json.dumps(payload['example'], indent=2)}\n\n"
+        "Notes:\n"
+        "If get_collections has not been run yet for the target catalog, run it "
+        "first to populate the collection list.\n"
+        "On responses with zero items, validate that the colliection IDs are "
+        "correct.\n"
+        "If using 'bbox', ensure coordinates are in [minLon, minLat, maxLon, maxLat] "
+        "order.\n"
+        "Datetime should be in ISO 8601 format, e.g., '2020-01-01/2020-12-31'.\n"
+        "Limit should be a positive integer.\n"
     )
     return PromptMessage(
         role="user",
@@ -296,36 +209,6 @@ def _prompt_search_items() -> PromptMessage:
     )
 
 
-@app.prompt(
-    name="tool_estimate_data_size_prompt",
-    description="Usage for estimate_data_size tool",
-    meta={
-        "schema": {
-            "type": "object",
-            "properties": {
-                "collections": {"type": "array", "items": {"type": "string"}},
-                "bbox": {
-                    "type": "array",
-                    "items": {"type": "number"},
-                    "minItems": 4,
-                    "maxItems": 4,
-                },
-                "datetime": {"type": "string"},
-                "query": {"type": "object"},
-                "aoi_geojson": {"type": "object"},
-                "limit": {"type": "integer", "default": 100},
-                "force_metadata_only": {"type": "boolean", "default": False},
-                "output_format": {
-                    "type": "string",
-                    "enum": ["text", "json"],
-                    "default": "text",
-                },
-            },
-            "required": ["collections"],
-        },
-        "example": {"collections": ["c1"], "limit": 10, "output_format": "json"},
-    },
-)
 def _prompt_estimate_data_size() -> PromptMessage:
     schema = {
         "type": "object",
@@ -379,21 +262,6 @@ def _prompt_estimate_data_size() -> PromptMessage:
     )
 
 
-@app.prompt(
-    name="tool_get_queryables_prompt",
-    description="Usage for get_queryables tool",
-    meta={
-        "schema": {
-            "type": "object",
-            "properties": {
-                "collection_id": {"type": "string"},
-                "catalog_url": {"type": "string"},
-            },
-            "required": [],
-        },
-        "example": {"collection_id": "my-collection"},
-    },
-)
 def _prompt_get_queryables() -> PromptMessage:
     schema = {
         "type": "object",
@@ -422,29 +290,7 @@ def _prompt_get_queryables() -> PromptMessage:
         _meta={"machine_payload": payload},
     )
 
-@app.prompt(
-    name="tool_get_aggregations_prompt",
-    description="Usage for get_aggregations tool",
-    meta={
-        "schema": {
-            "type": "object",
-            "properties": {
-                "collections": {"type": "array", "items": {"type": "string"}},
-                "bbox": {
-                    "type": "array",
-                    "items": {"type": "number"},
-                    "minItems": 4,
-                    "maxItems": 4,
-                },
-                "datetime": {"type": "string"},
-                "query": {"type": "object"},
-                "catalog_url": {"type": "string"},
-            },
-            "required": ["collections"],
-        },
-        "example": {"collections": ["c1"], "datetime": "2020-01-01/2020-12-31"},
-    },
-)
+
 def _prompt_get_aggregations() -> PromptMessage:
     schema = {
         "type": "object",
@@ -464,7 +310,7 @@ def _prompt_get_aggregations() -> PromptMessage:
     }
     payload = {
         "name": "get_aggregations",
-        "description": "Get STAC aggregations.",
+        "description": "Return aggregations for STAC Items in a collection.",
         "parameters": schema,
         "example": {"collections": ["c1"], "datetime": "2020-01-01/2020-12-31"},
     }
@@ -481,40 +327,44 @@ def _prompt_get_aggregations() -> PromptMessage:
         _meta={"machine_payload": payload},
     )
 
+
 @app.tool
 async def get_root() -> list[dict[str, Any]]:
-    """Get the root STAC catalog document."""
-    return await execution.execute_tool("get_root", {}, catalog_url=None, headers=None)
+    """Return the STAC root document for a catalog."""
+    return await execution.execute_tool(
+        "get_root", arguments={}, catalog_url=None, headers=None
+    )
 
 
 @app.tool
 async def get_conformance() -> list[dict[str, Any]]:
-    """Get the conformance classes for the STAC API."""
+    """Return server conformance classes."""
     return await execution.execute_tool(
-        "get_conformance", {}, catalog_url=None, headers=None
+        "get_conformance", arguments={}, catalog_url=None, headers=None
     )
 
 
 @app.tool
 async def search_collections(
-    limit: int | None = 10,
-    catalog_url: str | None = None,
+    limit: int | None = 10, catalog_url: str | None = None
 ) -> list[dict[str, Any]]:
-    """Search for STAC collections."""
+    """Return a page of STAC collections."""
     return await execution.execute_tool(
-        "search_collections", {"limit": limit}, catalog_url=catalog_url, headers=None
+        "search_collections",
+        arguments={"limit": limit},
+        catalog_url=catalog_url,
+        headers=None,
     )
 
 
 @app.tool
 async def get_collection(
-    collection_id: str,
-    catalog_url: str | None = None,
+    collection_id: str, catalog_url: str | None = None
 ) -> list[dict[str, Any]]:
-    """Get a specific STAC collection by its ID."""
+    """Fetch a single STAC Collection by id."""
     return await execution.execute_tool(
         "get_collection",
-        {"collection_id": collection_id},
+        arguments={"collection_id": collection_id},
         catalog_url=catalog_url,
         headers=None,
     )
@@ -601,9 +451,10 @@ async def estimate_data_size(
         headers=None,
     )
 
+
 @app.tool
 async def get_queryables(
-    collection_id: str,
+    collection_id: list[str],
     catalog_url: str | None = None,
 ) -> list[dict[str, Any]]:
     """Get the queryable properties for a specific STAC collection by its ID."""
@@ -613,6 +464,7 @@ async def get_queryables(
         catalog_url=catalog_url,
         headers=None,
     )
+
 
 @app.tool
 async def get_aggregations(
@@ -632,5 +484,16 @@ async def get_aggregations(
             "query": query,
         },
         catalog_url=catalog_url,
+        headers=None,
+    )
+
+
+@app.tool
+async def get_sensor_registry_info() -> list[dict[str, Any]]:
+    """Get information about the STAC sensor registry."""
+    return await execution.execute_tool(
+        "sensor_registry_info",
+        arguments={},
+        catalog_url=None,
         headers=None,
     )
