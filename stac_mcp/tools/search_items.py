@@ -1,6 +1,7 @@
 """Tool to search for items in a STAC catalog."""
 
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 from mcp.types import TextContent
 

@@ -9,7 +9,7 @@ from stac_mcp.tools import execution
 @pytest.mark.asyncio
 async def test_execute_tool_unknown():
     with pytest.raises(ValueError):  # noqa: PT011
-        await execution.execute_tool("this_tool_does_not_exist")
+        _ = [item async for item in execution.execute_tool("this_tool_does_not_exist")]
 
 
 @pytest.mark.asyncio
@@ -25,9 +25,12 @@ async def test_execute_tool_json_modes(monkeypatch):
     def list_handler(client, arguments):  # noqa: ARG001
         return ["a", "b"]
 
-    res = await execution.execute_tool(
-        "search_items", arguments={"output_format": "json"}, handler=list_handler
-    )
+    res = [
+        item
+        async for item in execution.execute_tool(
+            "search_items", arguments={"output_format": "json"}, handler=list_handler
+        )
+    ]
     assert len(res) == 1
     payload = json.loads(res[0].text)
     assert payload["mode"] == "text_fallback"
@@ -37,9 +40,12 @@ async def test_execute_tool_json_modes(monkeypatch):
     def dict_handler(client, arguments):  # noqa: ARG001
         return {"ok": True}
 
-    res = await execution.execute_tool(
-        "search_items", arguments={"output_format": "json"}, handler=dict_handler
-    )
+    res = [
+        item
+        async for item in execution.execute_tool(
+            "search_items", arguments={"output_format": "json"}, handler=dict_handler
+        )
+    ]
     payload = json.loads(res[0].text)
     assert payload["mode"] == "json"
     assert payload["data"]["ok"] is True

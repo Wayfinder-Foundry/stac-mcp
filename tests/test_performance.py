@@ -71,12 +71,15 @@ async def test_tool_performance(tool: Any, args: dict, monkeypatch):
     original_execute = execution.execute_tool
 
     async def mock_execute(*a, **kw):
-        return await original_execute(*a, **kw)
+        async for r in original_execute(*a, **kw):
+            yield r
 
     monkeypatch.setattr(execution, "execute_tool", mock_execute)
 
     start_time = time.monotonic()
-    await call_tool(tool, **args)
+    res = await call_tool(tool, **args)
+    if tool is search_items:
+        res = [r async for r in res]
     duration = time.monotonic() - start_time
 
     assert duration < slo_seconds, f"Tool {tool.name} took too long: {duration:.2f}s"
@@ -90,7 +93,8 @@ async def test_get_root_performance(monkeypatch):
     original_execute = execution.execute_tool
 
     async def mock_execute(*a, **kw):
-        return await original_execute(*a, **kw)
+        async for r in original_execute(*a, **kw):
+            yield r
 
     monkeypatch.setattr(execution, "execute_tool", mock_execute)
 
@@ -109,12 +113,14 @@ async def test_search_items_performance(monkeypatch):
     original_execute = execution.execute_tool
 
     async def mock_execute(*a, **kw):
-        return await original_execute(*a, **kw)
+        async for r in original_execute(*a, **kw):
+            yield r
 
     monkeypatch.setattr(execution, "execute_tool", mock_execute)
 
     start_time = time.monotonic()
-    await call_tool(search_items, collections=["test"], limit=100)
+    res = await call_tool(search_items, collections=["test"], limit=100)
+    res = [r async for r in res]
     duration = time.monotonic() - start_time
 
     assert duration < slo_seconds, f"search_items took too long: {duration:.2f}s"
@@ -128,7 +134,8 @@ async def test_get_collection_performance(monkeypatch):
     original_execute = execution.execute_tool
 
     async def mock_execute(*a, **kw):
-        return await original_execute(*a, **kw)
+        async for r in original_execute(*a, **kw):
+            yield r
 
     monkeypatch.setattr(execution, "execute_tool", mock_execute)
 
@@ -147,7 +154,8 @@ async def test_get_item_performance(monkeypatch):
     original_execute = execution.execute_tool
 
     async def mock_execute(*a, **kw):
-        return await original_execute(*a, **kw)
+        async for r in original_execute(*a, **kw):
+            yield r
 
     monkeypatch.setattr(execution, "execute_tool", mock_execute)
 
@@ -168,7 +176,8 @@ async def test_get_conformance_performance(monkeypatch):
     original_execute = execution.execute_tool
 
     async def mock_execute(*a, **kw):
-        return await original_execute(*a, **kw)
+        async for r in original_execute(*a, **kw):
+            yield r
 
     monkeypatch.setattr(execution, "execute_tool", mock_execute)
 
@@ -187,7 +196,8 @@ async def test_search_collections_performance(monkeypatch):
     original_execute = execution.execute_tool
 
     async def mock_execute(*a, **kw):
-        return await original_execute(*a, **kw)
+        async for r in original_execute(*a, **kw):
+            yield r
 
     monkeypatch.setattr(execution, "execute_tool", mock_execute)
 

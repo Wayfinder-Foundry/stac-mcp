@@ -11,8 +11,8 @@ import asyncio
 import inspect
 import json
 import logging
-from collections.abc import Callable, Iterable
-from typing import Any, AsyncIterator, Iterator, NoReturn
+from collections.abc import AsyncIterator, Callable, Iterable, Iterator
+from typing import Any, NoReturn
 
 from mcp.types import TextContent
 
@@ -181,28 +181,25 @@ async def execute_tool(
         else:
             for item in raw_result:
                 normalized = _as_text_content_list(item)
-                total_bytes = sum(
-                    len(item.text.encode("utf-8")) for item in normalized
-                )
+                total_bytes = sum(len(i.text.encode("utf-8")) for i in normalized)
                 record_tool_result_size(tool_name, total_bytes)
-                for item in normalized:
-                    yield item
-    else:
-        if output_format == "json":
-            if isinstance(raw_result, list):
-                normalized = _as_text_content_list(raw_result)
-                payload = {
-                    "mode": "text_fallback",
-                    "content": [item.text for item in normalized],
-                }
-            else:
-                payload = {"mode": "json", "data": raw_result}
-            payload_text = json.dumps(payload, separators=(",", ":"))
-            record_tool_result_size(tool_name, len(payload_text.encode("utf-8")))
-            yield TextContent(type="text", text=payload_text)
-        else:
+                for i in normalized:
+                    yield i
+    elif output_format == "json":
+        if isinstance(raw_result, list):
             normalized = _as_text_content_list(raw_result)
-            total_bytes = sum(len(item.text.encode("utf-8")) for item in normalized)
-            record_tool_result_size(tool_name, total_bytes)
-            for item in normalized:
-                yield item
+            payload = {
+                "mode": "text_fallback",
+                "content": [item.text for item in normalized],
+            }
+        else:
+            payload = {"mode": "json", "data": raw_result}
+        payload_text = json.dumps(payload, separators=(",", ":"))
+        record_tool_result_size(tool_name, len(payload_text.encode("utf-8")))
+        yield TextContent(type="text", text=payload_text)
+    else:
+        normalized = _as_text_content_list(raw_result)
+        total_bytes = sum(len(item.text.encode("utf-8")) for item in normalized)
+        record_tool_result_size(tool_name, total_bytes)
+        for item in normalized:
+            yield item

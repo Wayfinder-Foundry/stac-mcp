@@ -21,12 +21,12 @@ async def call_tool(tool, *a, **kw):
     ]
     for fn in candidates:
         if fn and callable(fn):
-            coro = fn(*a, **kw)
-            if asyncio.iscoroutine(coro):
-                return await coro
-            if hasattr(coro, "__aiter__"):
-                return [item async for item in coro]
-            return coro
+            res = fn(*a, **kw)
+            if asyncio.iscoroutine(res):
+                return await res
+            if hasattr(res, "__aiter__"):
+                return [item async for item in res]
+            return res
 
     # As a fallback, scan attributes for a callable defined in this module
     for name in dir(tool):
@@ -56,7 +56,7 @@ class DummyCall:
     def __init__(self):
         self.calls = []
 
-    async def __call__(self, name, arguments=None, catalog_url=None, headers=None):
+    def __call__(self, name, arguments=None, catalog_url=None, headers=None):
         self.calls.append(
             {
                 "name": name,
@@ -65,25 +65,17 @@ class DummyCall:
                 "headers": headers,
             }
         )
-        # return a simple predictable payload
-        if name == "search_items":
-            async def _dummy_generator():
-                yield {
-                    "tool": name,
-                    "args": arguments or {},
-                    "catalog_url": catalog_url,
-                    "headers": headers,
-                }
-            return _dummy_generator()
-        else:
-            return [
-                {
-                    "tool": name,
-                    "args": arguments or {},
-                    "catalog_url": catalog_url,
-                    "headers": headers,
-                }
-            ]
+
+        async def _dummy_generator():
+            # return a simple predictable payload
+            yield {
+                "tool": name,
+                "args": arguments or {},
+                "catalog_url": catalog_url,
+                "headers": headers,
+            }
+
+        return _dummy_generator()
 
 
 @pytest.mark.asyncio
@@ -92,9 +84,7 @@ async def test_basic_tools_call_execute_tool(monkeypatch):
     monkeypatch.setattr(server.execution, "execute_tool", dummy)
 
     res = await call_tool(server.get_root)
-    assert res == [
-        {"tool": "get_root", "args": {}, "catalog_url": None, "headers": None}
-    ]
+    assert res == {"tool": "get_root", "args": {}, "catalog_url": None, "headers": None}
     assert dummy.calls[-1]["name"] == "get_root"
 
     res = await call_tool(server.get_conformance)
@@ -104,6 +94,7 @@ async def test_basic_tools_call_execute_tool(monkeypatch):
     res = await call_tool(
         server.search_collections, limit=5, catalog_url="https://example.com"
     )
+    assert isinstance(res, list)
     assert dummy.calls[-1]["name"] == "search_collections"
     assert dummy.calls[-1]["arguments"]["limit"] == ARG_LIMIT_FIVE
     assert dummy.calls[-1]["catalog_url"] == "https://example.com"
@@ -122,13 +113,14 @@ async def test_get_and_search_items_variants(monkeypatch):
     assert dummy.calls[-1]["arguments"]["output_format"] == "text"
 
     # search_items with multiple params
-    res = await call_tool(  # noqa: F841
+    res = await call_tool(
         server.search_items,
         collections=["c1", "c2"],
         bbox=[0.0, 0.0, 1.0, 1.0],
         datetime=None,
         limit=2,
     )
+    assert isinstance(res, list)
     assert dummy.calls[-1]["name"] == "search_items"
     assert dummy.calls[-1]["arguments"]["collections"] == ["c1", "c2"]
     assert dummy.calls[-1]["arguments"]["limit"] == ARG_LIMIT_TWO

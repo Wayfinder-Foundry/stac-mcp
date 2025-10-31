@@ -100,14 +100,15 @@ def test_search_items(stac_client, monkeypatch):
     search_mock = MagicMock()
     # Underlying pystac-client search may provide an object with items() or
     # items_as_dict(). Ensure our mock exposes items_as_dict() as used by code.
-    search_mock.items_as_dict.return_value = [
-        _mk_item("i1", "c1"),
-        _mk_item("i2", "c1"),
+    search_mock.items_as_dicts.return_value = [
+        _mk_item("i1", "c1").to_dict(),
+        _mk_item("i2", "c1").to_dict(),
     ]
     mock_client = MagicMock()
     mock_client.search.return_value = search_mock
     monkeypatch.setattr(stac_client, "_client", mock_client)
-    res = stac_client.search_items(collections=["c1"], limit=5)
+    res_gen = stac_client.search_items(collections=["c1"], limit=5)
+    res = list(res_gen)
     assert len(res) == NUM_ITEMS
     assert isinstance(res, list)
     assert isinstance(res[0], dict)
@@ -151,7 +152,7 @@ def test_get_item_collection_not_found(stac_client, monkeypatch):
 def test_search_items_with_query_checks_conformance(stac_client, monkeypatch):
     # Mock underlying search and conformance check
     search_mock = MagicMock()
-    search_mock.items.return_value = []
+    search_mock.items_as_dicts.return_value = []
     mock_client = MagicMock()
     mock_client.search.return_value = search_mock
     monkeypatch.setattr(stac_client, "_client", mock_client)
@@ -159,18 +160,18 @@ def test_search_items_with_query_checks_conformance(stac_client, monkeypatch):
     monkeypatch.setattr(stac_client, "_conformance", CONFORMANCE_QUERY)
 
     # Should not raise
-    stac_client.search_items(query={"proj:epsg": {"eq": 4326}})
+    list(stac_client.search_items(query={"proj:epsg": {"eq": 4326}}))
 
     # Check that it fails without the right conformance
     monkeypatch.setattr(stac_client, "_conformance", ["core"])
     with pytest.raises(ConformanceError):
-        stac_client.search_items(query={"proj:epsg": {"eq": 4326}})
+        list(stac_client.search_items(query={"proj:epsg": {"eq": 4326}}))
 
 
 def test_search_items_with_sortby_checks_conformance(stac_client, monkeypatch):
     # Mock underlying search and conformance check
     search_mock = MagicMock()
-    search_mock.items.return_value = []
+    search_mock.items_as_dicts.return_value = []
     mock_client = MagicMock()
     mock_client.search.return_value = search_mock
     monkeypatch.setattr(stac_client, "_client", mock_client)
@@ -179,7 +180,7 @@ def test_search_items_with_sortby_checks_conformance(stac_client, monkeypatch):
 
     # Should not raise
     sort_spec = [("properties.datetime", "desc")]
-    stac_client.search_items(sortby=sort_spec)
+    list(stac_client.search_items(sortby=sort_spec))
     mock_client.search.assert_called_with(
         collections=None,
         bbox=None,
@@ -192,7 +193,7 @@ def test_search_items_with_sortby_checks_conformance(stac_client, monkeypatch):
     # Check that it fails without the right conformance
     monkeypatch.setattr(stac_client, "_conformance", ["core"])
     with pytest.raises(ConformanceError):
-        stac_client.search_items(sortby=sort_spec)
+        list(stac_client.search_items(sortby=sort_spec))
 
 
 def test_get_queryables_raises_if_unsupported(stac_client, monkeypatch):

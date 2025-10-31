@@ -42,7 +42,7 @@ class TestExecuteToolSuccess:
         )
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
         assert len(result) == 2  # noqa: PLR2004
@@ -59,7 +59,7 @@ class TestExecuteToolSuccess:
         )
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
         assert len(result) == 1
@@ -72,7 +72,7 @@ class TestExecuteToolSuccess:
         mock_handler = MagicMock(return_value="Plain text result")
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
         assert len(result) == 1
@@ -84,7 +84,7 @@ class TestExecuteToolSuccess:
         mock_handler = MagicMock(return_value=[])
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         # Should return at least one TextContent with empty or default message
         assert isinstance(result, list)
@@ -104,7 +104,7 @@ class TestExecuteToolErrors:
 
         mock_tool("failing_tool", failing_handler)
         with pytest.raises(ValueError, match="Handler failed"):
-            await execution.execute_tool("failing_tool", {})
+            _ = [item async for item in execution.execute_tool("failing_tool", {})]
 
     @pytest.mark.asyncio
     async def test_execute_tool_handler_returns_none(self, mock_tool):
@@ -112,7 +112,7 @@ class TestExecuteToolErrors:
         mock_handler = MagicMock(return_value=None)
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         # Should handle None gracefully
         assert isinstance(result, list)
@@ -123,7 +123,7 @@ class TestExecuteToolErrors:
         mock_handler = MagicMock(return_value=12345)  # Integer
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         # Should convert to string or handle gracefully
         assert isinstance(result, list)
@@ -139,7 +139,7 @@ class TestExecuteToolWithArguments:
         mock_tool("test_tool", mock_handler)
         args = {"param1": "value1", "param2": 42}
 
-        await execution.execute_tool("test_tool", args)
+        _ = [item async for item in execution.execute_tool("test_tool", args)]
 
         mock_handler.assert_called_once()
         call_args = mock_handler.call_args
@@ -156,7 +156,7 @@ class TestExecuteToolWithArguments:
             "collections": ["col1", "col2"],
         }
 
-        result = await execution.execute_tool("test_tool", args)
+        result = [item async for item in execution.execute_tool("test_tool", args)]
 
         assert result is not None
 
@@ -166,7 +166,7 @@ class TestExecuteToolWithArguments:
         mock_handler = MagicMock(return_value="Result")
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert result is not None
 
@@ -185,12 +185,15 @@ class TestExecuteToolOutputFormats:
         )
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool(
-            "test_tool",
-            {
-                "output_format": "json",
-            },
-        )
+        result = [
+            item
+            async for item in execution.execute_tool(
+                "test_tool",
+                {
+                    "output_format": "json",
+                },
+            )
+        ]
 
         assert isinstance(result, list)
         assert len(result) == 1
@@ -208,12 +211,15 @@ class TestExecuteToolOutputFormats:
         )
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool(
-            "test_tool",
-            {
-                "output_format": "text",
-            },
-        )
+        result = [
+            item
+            async for item in execution.execute_tool(
+                "test_tool",
+                {
+                    "output_format": "text",
+                },
+            )
+        ]
 
         assert isinstance(result, list)
         assert result[0].text == "Text output"
@@ -230,7 +236,7 @@ class TestExecuteToolOutputFormats:
         )
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert len(result) == 3  # noqa: PLR2004
 
@@ -245,7 +251,12 @@ class TestExecuteToolWithClient:
         mock_handler = MagicMock(return_value="Result")
         mock_tool("test_tool", mock_handler)
 
-        await execution.execute_tool("test_tool", {}, client=mock_client)
+        _ = [
+            item
+            async for item in execution.execute_tool(
+                "test_tool", {}, client=mock_client
+            )
+        ]
 
         # Handler should be called with client as first argument
         mock_handler.assert_called_once()
@@ -258,7 +269,7 @@ class TestExecuteToolWithClient:
         mock_handler = MagicMock(return_value="Result")
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         # Should still work with None client
         assert result is not None
@@ -278,7 +289,7 @@ class TestExecuteToolReturnTypes:
         )
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
         # Should convert to TextContent
@@ -300,7 +311,7 @@ class TestExecuteToolReturnTypes:
         )
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
 
@@ -310,7 +321,7 @@ class TestExecuteToolReturnTypes:
         mock_handler = MagicMock(return_value=True)
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
         # Should convert boolean to string
@@ -327,7 +338,7 @@ class TestExecuteToolEdgeCases:
         mock_handler = MagicMock(return_value=long_text)
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
         assert len(result[0].text) == 10000  # noqa: PLR2004
@@ -338,7 +349,7 @@ class TestExecuteToolEdgeCases:
         mock_handler = MagicMock(return_value="Test with émojis 🌍 and 中文")
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
         assert "🌍" in result[0].text
@@ -349,7 +360,7 @@ class TestExecuteToolEdgeCases:
         mock_handler = MagicMock(return_value="")
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
         # Should handle empty string gracefully
@@ -361,7 +372,7 @@ class TestExecuteToolEdgeCases:
         mock_handler = MagicMock(return_value="   \n\t  ")
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
 
@@ -376,7 +387,7 @@ class TestExecuteToolPerformance:
         mock_handler = MagicMock(return_value=large_list)
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
         assert len(result) <= 1000  # noqa: PLR2004 - May be truncated or limited
@@ -394,7 +405,7 @@ class TestExecuteToolPerformance:
         mock_handler = MagicMock(return_value=nested_data)
         mock_tool("test_tool", mock_handler)
 
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert isinstance(result, list)
 
@@ -409,7 +420,7 @@ class TestExecuteToolWithLogging:
         mock_tool("test_tool", mock_handler)
 
         # Execute tool (logging would happen internally)
-        result = await execution.execute_tool("test_tool", {})
+        result = [item async for item in execution.execute_tool("test_tool", {})]
 
         assert result is not None
         # Actual logging verification would require log capture
@@ -424,7 +435,7 @@ class TestExecuteToolWithLogging:
 
         mock_tool("failing_tool", failing_handler)
         with pytest.raises(RuntimeError):
-            await execution.execute_tool("failing_tool", {})
+            _ = [item async for item in execution.execute_tool("failing_tool", {})]
 
         # Error should be logged (verification would require log capture)
 
@@ -446,7 +457,9 @@ class TestExecuteToolMetrics:
         )
         mock_tool("metrics_text_tool", mock_handler)
 
-        result = await execution.execute_tool("metrics_text_tool", {})
+        result = [
+            item async for item in execution.execute_tool("metrics_text_tool", {})
+        ]
         combined = "".join(item.text for item in result)
         expected_bytes = len(combined.encode("utf-8"))
 
@@ -477,10 +490,13 @@ class TestExecuteToolMetrics:
         mock_handler = MagicMock(return_value=payload)
         mock_tool("metrics_json_tool", mock_handler)
 
-        result = await execution.execute_tool(
-            "metrics_json_tool",
-            {"output_format": "json"},
-        )
+        result = [
+            item
+            async for item in execution.execute_tool(
+                "metrics_json_tool",
+                {"output_format": "json"},
+            )
+        ]
 
         assert result
         output_text = result[0].text

@@ -8,9 +8,12 @@ import os
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 import requests
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 from pystac_client.exceptions import APIError
 
 from .sensor_dtypes import SensorDtypeRegistry
