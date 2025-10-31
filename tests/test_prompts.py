@@ -1,91 +1,33 @@
 import pytest
-from fastmcp.prompts.prompt import PromptMessage
+from fastmcp.client import Client
 
-from stac_mcp import server
+from stac_mcp.server import app
 
-PROMPT_NAMES = [
-    "_prompt_get_root",
-    "_prompt_get_conformance",
-    "_prompt_search_collections",
-    "_prompt_get_collection",
-    "_prompt_get_item",
-    "_prompt_search_items",
-    "_prompt_estimate_data_size",
+NEW_PROMPTS = [
+    "catalog_discovery_prompt",
+    "collection_alias_resolution_prompt",
+    "estimate_size_strategy_prompt",
+    "explain_tool_output_prompt",
+    "sensor_registry_info_prompt",
 ]
 
 
-@pytest.mark.parametrize("name", PROMPT_NAMES)
-def test_prompt_functions_exist_and_return_helpful_text(name: str):
-    """Each prompt function should exist and return a helpful string.
-
-    We don't assert on exact wording (prompts are documentation) but ensure
-    they contain at least an Example section and Parameters/Notes guidance so
-    agent callers can parse them.
-    """
-    assert hasattr(server, name), f"Missing prompt function: {name}"
-    func = getattr(server, name)
-    # The decorator may replace the original function with a prompt object
-    # (FunctionPrompt). Try multiple strategies to obtain human-help text.
-    text = None
-    # 1. If the attribute is directly callable, call it.
-    if callable(func):
-        try:
-            text = func()
-        except TypeError:
-            # Some wrappers are callable but require args; ignore and try other
-            # accessors below.
-            text = None
-
-    # 2. If the wrapper exposes the original function under common names,
-    # call it.
-    if text is None:
-        for candidate in ("func", "fn", "function"):
-            if hasattr(func, candidate):
-                orig = getattr(func, candidate)
-                if callable(orig):
-                    text = orig()
-                    break
-
-    # 3. If the wrapper stores a template or renderable string, try common
-    # attributes.
-    if text is None:
-        for attr_name in ("template", "render", "text", "body"):
-            if hasattr(func, attr_name):
-                val = getattr(func, attr_name)
-                # call if callable
-                text = val() if callable(val) else val
-                break
-
-    # 4. Fall back to descriptive metadata on the prompt object.
-    if text is None:
-        # Ensure the prompt object at least exposes a short description and name
-        assert hasattr(func, "description") or hasattr(func, "name"), (
-            f"Prompt object {name!r} lacks callable/template/description"
-        )
-        # Use the description for a minimal assertion
-        desc = getattr(func, "description", None)
-        assert isinstance(desc, (str, type(None)))
-        # If no full text available, consider this a minimal pass.
-        return
-
-    # Accept either a plain string or a PromptMessage-like object (machine
-    # readable). If a PromptMessage is returned, extract its text content for
-    # the same human-helpfulness checks.
-    content_text = None
-    if isinstance(text, PromptMessage):
-        # PromptMessage.content is typically a TextContent with a `text` field
-        cont = getattr(text, "content", None)
-        content_text = getattr(cont, "text", None) if cont is not None else None
-    elif hasattr(text, "content") and hasattr(text.content, "text"):
-        content_text = text.content.text
-    elif isinstance(text, str):
-        content_text = text
-
-    assert isinstance(content_text, str), (
-        "Prompt must return a string or PromptMessage with text content"
-    )
-    # Basic sanity checks for helpfulness
-    assert "Example" in content_text, "Prompt should include an Example section"
-    assert ("Parameters" in content_text) or ("Description" in content_text), (
-        "Prompt should include Parameters or Description"
-    )
+@pytest.mark.asyncio
+async def test_prompts_registered_and_return_machine_payload():
+    client = Client(app)
+    async with client:
+        for name in NEW_PROMPTS:
+            # get_prompt expects the registered prompt name (for example,
+            # 'catalog_discovery_prompt')
+            res = await client.get_prompt(name)
+            assert hasattr(res, "messages")
+            assert len(res.messages) > 0
+            msg = res.messages[0]
+            machine_meta = getattr(msg, "_meta", None) or getattr(msg, "meta", None)
+            assert machine_meta is not None, f"Prompt {name} should expose _meta/meta"
+            assert "machine_payload" in machine_meta, (
+                f"Prompt {name} should include machine_payload"
+            )
+            payload = machine_meta["machine_payload"]
+            assert isinstance(payload, dict)
+            assert "name" in payload

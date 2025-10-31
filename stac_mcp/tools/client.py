@@ -244,7 +244,7 @@ class STACClient:
         bbox: list[float] | None = None,
         datetime: str | None = None,
         query: dict[str, Any] | None = None,
-        sortby: list[dict[str, str]] | None = None,
+        sortby: list[str] | list[dict[str, str]] | None = None,
         limit: int = 10,
     ) -> list[Any]:
         """Run a search and cache the resulting item list per-client.
@@ -281,7 +281,7 @@ class STACClient:
             sortby=sortby,
             limit=limit,
         )
-        items = list(search.items())
+        items = search.items_as_dicts()
         # Store the list for reuse within this client/session along with timestamp.
         self._search_cache[key] = (now, items)
         return items
@@ -441,7 +441,7 @@ class STACClient:
         bbox: list[float] | None = None,
         datetime: str | None = None,
         query: dict[str, Any] | None = None,
-        sortby: list[tuple[str, str]] | None = None,
+        sortby: list[str] | list[dict[str, str]] | None = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
         if query:
@@ -450,7 +450,7 @@ class STACClient:
             self._check_conformance(CONFORMANCE_SORT)
         try:
             # Use cached search results (per-client) when available.
-            pystac_items = self._cached_search(
+            items = self._cached_search(
                 collections=collections,
                 bbox=bbox,
                 datetime=datetime,
@@ -458,37 +458,33 @@ class STACClient:
                 sortby=sortby,
                 limit=limit,
             )
-            items = pystac_items.items_as_dicts()
-            # for item in pystac_items:
-            #     # Be permissive when normalizing items: tests and alternate
-            #     # client implementations may provide SimpleNamespace-like
-            #     # objects without all attributes. Use getattr with sensible
-            #     # defaults to avoid AttributeError during normalization.
-            #     items.append(
-            #         {
-            #             "id": getattr(item, "id", None),
-            #             "collection": getattr(item, "collection_id", None),
-            #             "geometry": getattr(item, "geometry", None),
-            #             "bbox": getattr(item, "bbox", None),
-            #             "datetime": (
-            #                 item.datetime.isoformat()
-            #                 if getattr(item, "datetime", None)
-            #                 else None
-            #             ),
-            #             "properties": getattr(item, "properties", {}) or {},
-            #             "assets": {
-            #                 k: v.to_dict()
-            #                 for k, v in getattr(item, "assets", {}).items()
-            #             },
-            #         }
-            #     )
-            #     if limit and limit > 0 and len(items) >= limit:
-            #         break
         except APIError:  # pragma: no cover - network dependent
             logger.exception("Error searching items")
             raise
-        else:
-            return items
+
+        if not items:
+            return []
+        # Normalize items to dicts for consistent output.
+        normalized_items = []
+        for item in items:
+            normalized_items.append(
+                {
+                    "id": getattr(item, "id", None),
+                    "collection": getattr(item, "collection_id", None),
+                    "geometry": getattr(item, "geometry", None),
+                    "bbox": getattr(item, "bbox", None),
+                    "datetime": (
+                        item.datetime.isoformat()
+                        if getattr(item, "datetime", None)
+                        else None
+                    ),
+                    "properties": getattr(item, "properties", {}) or {},
+                    "assets": {
+                        k: v.to_dict() for k, v in getattr(item, "assets", {}).items()
+                    },
+                }
+            )
+        return normalized_items
 
     def get_item(self, collection_id: str, item_id: str) -> dict[str, Any]:
         try:

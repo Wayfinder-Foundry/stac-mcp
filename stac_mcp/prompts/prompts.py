@@ -693,3 +693,494 @@ def register_prompts(app: Any) -> None:
             content=TextContent(type="text", text=human),
             _meta={"machine_payload": payload},
         )
+
+    @app.prompt(
+        name="tool_get_conformance_prompt",
+        description="Usage for get_conformance tool",
+        meta={
+            "schema": {"type": "object", "properties": {}, "required": []},
+            "example": {},
+        },
+    )
+    def _prompt_get_conformance() -> PromptMessage:
+        schema = {"type": "object", "properties": {}, "required": []}
+        payload = {
+            "name": "get_conformance",
+            "description": "Return server conformance classes.",
+            "parameters": schema,
+            "example": {},
+        }
+        human = (
+            f"Tool: get_conformance\nDescription: {payload['description']}\n\n"
+            "Parameters:\n"
+            f"{json.dumps(schema, indent=2)}\n\n"
+            "Example:\n"
+            f"{json.dumps(payload['example'], indent=2)}"
+        )
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=human),
+            _meta={"machine_payload": payload},
+        )
+
+    @app.prompt(
+        name="tool_get_root_prompt",
+        description="Usage for get_root tool",
+        meta={
+            "schema": {"type": "object", "properties": {}, "required": []},
+            "example": {},
+        },
+    )
+    def _prompt_get_root() -> PromptMessage:
+        """Module-level prompt helper for get_root (kept for tests).
+
+        The authoritative prompt is registered dynamically by
+        `stac_mcp.prompts.register_prompts`, but tests expect a callable with
+        this name to exist on the module. Provide a minimal in-module copy so
+        test introspection succeeds.
+        """
+        schema = {"type": "object", "properties": {}, "required": []}
+        payload = {
+            "name": "get_root",
+            "description": "Return the STAC root document for a catalog.",
+            "parameters": schema,
+            "example": {},
+        }
+        human = (
+            f"Tool: get_root\nDescription: {payload['description']}\n\n"
+            "Parameters:\n"
+            f"{json.dumps(schema, indent=2)}\n\n"
+            "Example:\n"
+            f"{json.dumps(payload['example'], indent=2)}"
+        )
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=human),
+            _meta={"machine_payload": payload},
+        )
+
+    @app.prompt(
+        name="tool_search_collections_prompt",
+        description="Usage for search_collections tool",
+        meta={
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "default": 10},
+                    "catalog_url": {"type": "string"},
+                },
+                "required": [
+                    "catalog_url",
+                ],
+            },
+            "example": {"limit": 5},
+        },
+    )
+    def _prompt_search_collections() -> PromptMessage:
+        schema = {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "default": 10},
+                "catalog_url": {"type": "string"},
+            },
+            "required": [],
+        }
+        payload = {
+            "name": "search_collections",
+            "description": "Return a page of STAC collections.",
+            "parameters": schema,
+            "example": {"limit": 5},
+        }
+        human = (
+            f"Tool: search_collections\nDescription: {payload['description']}\n\n"
+            "Parameters:\n"
+            f"{json.dumps(schema, indent=2)}\n\n"
+            "Example:\n"
+            f"{json.dumps(payload['example'], indent=2)}"
+        )
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=human),
+            _meta={"machine_payload": payload},
+        )
+
+    @app.prompt(
+        name="tool_get_collection_prompt",
+        description="Usage for get_collection tool",
+        meta={
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "collection_id": {"type": "string"},
+                    "catalog_url": {"type": "string"},
+                },
+                "required": ["collection_id"],
+            },
+            "example": {"collection_id": "my-collection"},
+        },
+    )
+    def _prompt_get_collection() -> PromptMessage:
+        schema = {
+            "type": "object",
+            "properties": {
+                "collection_id": {"type": "string"},
+                "catalog_url": {"type": "string"},
+            },
+            "required": ["collection_id"],
+        }
+        payload = {
+            "name": "get_collection",
+            "description": "Fetch a single STAC Collection by id.",
+            "parameters": schema,
+            "example": {"collection_id": "my-collection"},
+        }
+        human = (
+            f"Tool: get_collection\nDescription: {payload['description']}\n\n"
+            "Parameters:\n"
+            f"{json.dumps(schema, indent=2)}\n\n"
+            "Example:\n"
+            f"{json.dumps(payload['example'], indent=2)}"
+        )
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=human),
+            _meta={"machine_payload": payload},
+        )
+
+    @app.prompt(
+        name="tool_get_item_prompt",
+        description="Usage for get_item tool",
+        meta={
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "collection_id": {"type": "string"},
+                    "item_id": {"type": "string"},
+                    "output_format": {
+                        "type": "string",
+                        "enum": ["text", "json"],
+                        "default": "text",
+                    },
+                    "catalog_url": {"type": "string"},
+                },
+                "required": ["collection_id", "item_id"],
+            },
+            "example": {
+                "collection_id": "c1",
+                "item_id": "i1",
+                "output_format": "json",
+            },
+        },
+    )
+    def _prompt_get_item() -> PromptMessage:
+        schema = {
+            "type": "object",
+            "properties": {
+                "collection_id": {"type": "string"},
+                "item_id": {"type": "string"},
+                "output_format": {
+                    "type": "string",
+                    "enum": ["text", "json"],
+                    "default": "text",
+                },
+                "catalog_url": {"type": "string"},
+            },
+            "required": ["collection_id", "item_id"],
+        }
+        payload = {
+            "name": "get_item",
+            "description": "Retrieve a single STAC Item.",
+            "parameters": schema,
+            "example": {
+                "collection_id": "c1",
+                "item_id": "i1",
+                "output_format": "json",
+            },
+        }
+        human = (
+            f"Tool: get_item\nDescription: {payload['description']}\n\n"
+            "Parameters:\n"
+            f"{json.dumps(schema, indent=2)}\n\n"
+            "Example:\n"
+            f"{json.dumps(payload['example'], indent=2)}"
+        )
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=human),
+            _meta={"machine_payload": payload},
+        )
+
+    @app.prompt(
+        name="tool_search_items_prompt",
+        description="Usage for search_items tool",
+        meta={
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "collections": {"type": "array", "items": {"type": "string"}},
+                    "bbox": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 4,
+                        "maxItems": 4,
+                    },
+                    "datetime": {"type": "string"},
+                    "limit": {"type": "integer", "default": 10},
+                },
+                "required": ["collections"],
+            },
+            "example": {
+                "collections": ["c1"],
+                "bbox": [100.0, 0.0, 101.0, 1.0],
+                "datetime": "2020-01-01/2020-12-31",
+                "limit": 3,
+            },
+        },
+    )
+    def _prompt_search_items() -> PromptMessage:
+        schema = {
+            "type": "object",
+            "properties": {
+                "collections": {"type": "array", "items": {"type": "string"}},
+                "bbox": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 4,
+                    "maxItems": 4,
+                },
+                "datetime": {"type": "string"},
+                "limit": {"type": "integer", "default": 10},
+            },
+            "required": ["collections", "bbox", "datetime"],
+        }
+        payload = {
+            "name": "search_items",
+            "description": "Search for STAC Items.",
+            "parameters": schema,
+            "example": {"collections": ["c1"], "limit": 3},
+        }
+        human = (
+            f"Tool: search_items\nDescription: {payload['description']}\n\n"
+            "Parameters:\n"
+            f"{json.dumps(schema, indent=2)}\n\n"
+            "Example:\n"
+            f"{json.dumps(payload['example'], indent=2)}\n\n"
+            "Notes:\n"
+            "If get_collections has not been run yet for the target catalog, "
+            "run it first to populate the collection list.\n"
+            "On responses with zero items, validate that the collection IDs are "
+            "correct.\n"
+            "If using 'bbox', ensure coordinates are in [minLon, minLat, "
+            "maxLon, maxLat] order.\n"
+            "Datetime should be in ISO 8601 format, e.g., '2020-01-01/2020-12-31'.\n"
+            "Limit should be a positive integer.\n"
+        )
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=human),
+            _meta={"machine_payload": payload},
+        )
+
+    @app.prompt(
+        name="tool_estimate_data_size_prompt",
+        description="Usage for estimate_data_size tool",
+        meta={
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "collections": {"type": "array", "items": {"type": "string"}},
+                    "bbox": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 4,
+                        "maxItems": 4,
+                    },
+                    "datetime": {"type": "string"},
+                    "query": {"type": "object"},
+                    "aoi_geojson": {"type": "object"},
+                    "limit": {"type": "integer", "default": 10},
+                    "force_metadata_only": {"type": "boolean", "default": False},
+                    "output_format": {
+                        "type": "string",
+                        "enum": ["text", "json"],
+                        "default": "text",
+                    },
+                },
+                "required": ["collections"],
+            },
+            "example": {
+                "collections": ["c1"],
+                "bbox": [100.0, 0.0, 101.0, 1.0],
+                "datetime": "2020-01-01/2020-12-31",
+                "query": {},
+                "aoi_geojson": {
+                    "type": "Polygon",
+                    "coordinates": [
+                        [
+                            [100.0, 0.0],
+                            [101.0, 0.0],
+                            [101.0, 1.0],
+                            [100.0, 1.0],
+                            [100.0, 0.0],
+                        ]
+                    ],
+                },
+                "limit": 10,
+                "force_metadata_only": True,
+                "output_format": "json",
+            },
+        },
+    )
+    def _prompt_estimate_data_size() -> PromptMessage:
+        schema = {
+            "type": "object",
+            "properties": {
+                "collections": {"type": "array", "items": {"type": "string"}},
+                "bbox": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 4,
+                    "maxItems": 4,
+                },
+                "datetime": {"type": "string"},
+                "query": {"type": "object"},
+                "aoi_geojson": {"type": "object"},
+                "limit": {"type": "integer", "default": 100},
+                "force_metadata_only": {"type": "boolean", "default": False},
+                "output_format": {
+                    "type": "string",
+                    "enum": ["text", "json"],
+                    "default": "text",
+                },
+            },
+            "required": ["collections"],
+        }
+        payload = {
+            "name": "estimate_data_size",
+            "description": "Estimate data size for a STAC query.",
+            "parameters": schema,
+            "example": {"collections": ["c1"], "limit": 10, "output_format": "json"},
+        }
+        # Note for users: this tool returns both the DataArray-reported size
+        # (reported_bytes from .data.nbytes) and a registry-corrected size
+        # (registry_bytes) when the sensor registry suggests a different
+        # instrument-native dtype. The numeric totals are computed from the
+        # reported values by default; check 'registry_bytes' for storage-native
+        # estimates.
+        human = (
+            f"Tool: estimate_data_size\nDescription: {payload['description']}\n\n"
+            "Parameters:\n"
+            f"{json.dumps(schema, indent=2)}\n\n"
+            "Note: The response includes per-variable fields 'reported_bytes' and\n"
+            "'registry_bytes' when applicable. Use 'registry_bytes' to estimate\n"
+            "instrument-native storage sizes.\n\n"
+            "Example:\n"
+            f"{json.dumps(payload['example'], indent=2)}"
+        )
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=human),
+            _meta={"machine_payload": payload},
+        )
+
+    @app.prompt(
+        name="tool_get_queryables_prompt",
+        description="Usage for get_queryables tool",
+        meta={
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "collection_id": {"type": "string"},
+                    "catalog_url": {"type": "string"},
+                },
+                "required": [],
+            },
+            "example": {"collection_id": "my-collection"},
+        },
+    )
+    def _prompt_get_queryables() -> PromptMessage:
+        schema = {
+            "type": "object",
+            "properties": {
+                "collection_id": {"type": "string"},
+                "catalog_url": {"type": "string"},
+            },
+            "required": [],
+        }
+        payload = {
+            "name": "get_queryables",
+            "description": "Fetch STAC API (or collection) queryables.",
+            "parameters": schema,
+            "example": {"collection_id": "my-collection"},
+        }
+        human = (
+            f"Tool: get_queryables\nDescription: {payload['description']}\n\n"
+            "Parameters:\n"
+            f"{json.dumps(schema, indent=2)}\n\n"
+            "Example:\n"
+            f"{json.dumps(payload['example'], indent=2)}"
+        )
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=human),
+            _meta={"machine_payload": payload},
+        )
+
+    @app.prompt(
+        name="tool_get_aggregations_prompt",
+        description="Usage for get_aggregations tool",
+        meta={
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "collections": {"type": "array", "items": {"type": "string"}},
+                    "bbox": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 4,
+                        "maxItems": 4,
+                    },
+                    "datetime": {"type": "string"},
+                    "query": {"type": "object"},
+                    "catalog_url": {"type": "string"},
+                },
+                "required": ["collections"],
+            },
+            "example": {"collections": ["c1"], "datetime": "2020-01-01/2020-12-31"},
+        },
+    )
+    def _prompt_get_aggregations() -> PromptMessage:
+        schema = {
+            "type": "object",
+            "properties": {
+                "collections": {"type": "array", "items": {"type": "string"}},
+                "bbox": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "minItems": 4,
+                    "maxItems": 4,
+                },
+                "datetime": {"type": "string"},
+                "query": {"type": "object"},
+                "catalog_url": {"type": "string"},
+            },
+            "required": ["collections"],
+        }
+        payload = {
+            "name": "get_aggregations",
+            "description": "Return aggregations for STAC Items in a collection.",
+            "parameters": schema,
+            "example": {"collections": ["c1"], "datetime": "2020-01-01/2020-12-31"},
+        }
+        human = (
+            f"Tool: get_aggregations\nDescription: {payload['description']}\n\n"
+            "Parameters:\n"
+            f"{json.dumps(schema, indent=2)}\n\n"
+            "Example:\n"
+            f"{json.dumps(payload['example'], indent=2)}"
+        )
+        return PromptMessage(
+            role="user",
+            content=TextContent(type="text", text=human),
+            _meta={"machine_payload": payload},
+        )
