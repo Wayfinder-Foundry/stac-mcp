@@ -469,19 +469,13 @@ class STACClient:
         for item in items:
             normalized_items.append(
                 {
-                    "id": getattr(item, "id", None),
-                    "collection": getattr(item, "collection_id", None),
-                    "geometry": getattr(item, "geometry", None),
-                    "bbox": getattr(item, "bbox", None),
-                    "datetime": (
-                        item.datetime.isoformat()
-                        if getattr(item, "datetime", None)
-                        else None
-                    ),
-                    "properties": getattr(item, "properties", {}) or {},
-                    "assets": {
-                        k: v.to_dict() for k, v in getattr(item, "assets", {}).items()
-                    },
+                    "id": item.get("id"),
+                    "collection": item.get("collection"),
+                    "geometry": item.get("geometry"),
+                    "bbox": item.get("bbox"),
+                    "datetime": item.get("datetime"),
+                    "properties": item.get("properties", {}),
+                    "assets": item.get("assets", {}),
                 }
             )
         return normalized_items
