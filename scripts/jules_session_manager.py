@@ -64,7 +64,7 @@ def send_fix_message(session_name):
 
     print(f"Sending message to session {session_name} to initiate fix...")
     try:
-        response = requests.post(send_message_url, headers=HEADERS, json=payload)
+        response = requests.post(send_message_url, headers=HEADERS, json=payload, timeout=30)
         response.raise_for_status()
         print("Successfully sent fix message to existing session.")
     except requests.exceptions.RequestException as e:
