@@ -24,7 +24,7 @@ def find_active_session():
     print(f"Searching for active sessions in {REPO_NAME} on branch {BRANCH_NAME}...")
 
     try:
-        response = requests.get(list_url, headers=HEADERS, params={"pageSize": 50})
+        response = requests.get(list_url, headers=HEADERS, params={"pageSize": 50}, timeout=30)
         response.raise_for_status()
         sessions_data = response.json().get("sessions", [])
     except requests.exceptions.RequestException as e:
