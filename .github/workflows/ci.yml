@@ -118,10 +118,14 @@ jobs:
       github.event_name == 'pull_request' &&
       always() &&
       needs.test.result == 'failure' &&
-      github.event.pull_request.user.login == 'google-labs-jules[bot]'
+      github.event.pull_request.user.login == 'bnjam'
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get latest commit author
+        id: get_author
+        run: echo "commit_author=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -139,6 +143,7 @@ jobs:
         run: pip install requests # Need 'requests' to talk to the Jules API
 
       - name: 💬 Check/Message Existing Jules Session
+        if: steps.get_author.outputs.commit_author == 'google-labs-jules[bot]' || steps.get_author.outputs.commit_author == 'bnjam'
         env:
           JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
           REPO_NAME: ${{ github.repository }}
