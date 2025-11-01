@@ -8,12 +8,10 @@ import os
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TYPE_CHECKING, Any
+from itertools import tee
+from typing import Any
 
 import requests
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 from pystac_client.exceptions import APIError
 
 from .sensor_dtypes import SensorDtypeRegistry
@@ -249,7 +247,7 @@ class STACClient:
         query: dict[str, Any] | None = None,
         sortby: list[str] | list[dict[str, str]] | None = None,
         limit: int = 10,
-    ) -> Iterator[dict[str, Any]]:
+    ):
         """Run a search and cache the resulting item list per-client.
 
         Returns a list of pystac.Item objects (as returned by the underlying
@@ -285,10 +283,11 @@ class STACClient:
             sortby=sortby,
             limit=limit,
         )
-        items = list(search.items_as_dicts())
-        # Store the list for reuse within this client/session along with timestamp.
-        self._search_cache[key] = (now, items)
-        yield from items
+        items_iterator = search.items_as_dicts()
+        # Create a tee of the iterator to cache the results
+        items1, items2 = tee(items_iterator)
+        self._search_cache[key] = (now, list(items1))
+        yield from items2
 
     def _cached_collections(self, limit: int = 10) -> list[dict[str, Any]]:
         key = f"collections:limit={int(limit)}"
@@ -447,7 +446,7 @@ class STACClient:
         query: dict[str, Any] | None = None,
         sortby: list[str] | list[dict[str, str]] | None = None,
         limit: int = 10,
-    ) -> Iterator[dict[str, Any]]:
+    ):
         if query:
             self._check_conformance(CONFORMANCE_QUERY)
         if sortby:

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import inspect
 import logging
-from collections.abc import AsyncIterator  # noqa: TC003
+from collections.abc import AsyncIterator  # noqa: TCH003
 from typing import Any
 
 from fastmcp.server.server import FastMCP
@@ -20,27 +21,19 @@ register_prompts(app)
 
 
 @app.tool
-async def get_root() -> dict[str, Any]:
+async def get_root() -> list[dict[str, Any]]:
     """Return the STAC root document for a catalog."""
-    res = [
-        item
-        async for item in execution.execute_tool(
-            "get_root", arguments={}, catalog_url=None, headers=None
-        )
-    ]
-    return res[0] if res else {}
+    return await execution.execute_tool(
+        "get_root", arguments={}, catalog_url=None, headers=None
+    )
 
 
 @app.tool
-async def get_conformance() -> dict[str, Any]:
+async def get_conformance() -> list[dict[str, Any]]:
     """Return server conformance classes."""
-    res = [
-        item
-        async for item in execution.execute_tool(
-            "get_conformance", arguments={}, catalog_url=None, headers=None
-        )
-    ]
-    return res[0] if res else {}
+    return await execution.execute_tool(
+        "get_conformance", arguments={}, catalog_url=None, headers=None
+    )
 
 
 @app.tool
@@ -48,32 +41,25 @@ async def search_collections(
     limit: int | None = 10, catalog_url: str | None = None
 ) -> list[dict[str, Any]]:
     """Return a page of STAC collections."""
-    return [
-        item
-        async for item in execution.execute_tool(
-            "search_collections",
-            arguments={"limit": limit},
-            catalog_url=catalog_url,
-            headers=None,
-        )
-    ]
+    return await execution.execute_tool(
+        "search_collections",
+        arguments={"limit": limit},
+        catalog_url=catalog_url,
+        headers=None,
+    )
 
 
 @app.tool
 async def get_collection(
     collection_id: str, catalog_url: str | None = None
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     """Fetch a single STAC Collection by id."""
-    res = [
-        item
-        async for item in execution.execute_tool(
-            "get_collection",
-            arguments={"collection_id": collection_id},
-            catalog_url=catalog_url,
-            headers=None,
-        )
-    ]
-    return res[0] if res else {}
+    return await execution.execute_tool(
+        "get_collection",
+        arguments={"collection_id": collection_id},
+        catalog_url=catalog_url,
+        headers=None,
+    )
 
 
 @app.tool
@@ -82,22 +68,18 @@ async def get_item(
     item_id: str,
     output_format: str | None = "text",
     catalog_url: str | None = None,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     """Get a specific STAC Item by collection and item ID."""
-    res = [
-        item
-        async for item in execution.execute_tool(
-            "get_item",
-            arguments={
-                "collection_id": collection_id,
-                "item_id": item_id,
-                "output_format": output_format,
-            },
-            catalog_url=catalog_url,
-            headers=None,
-        )
-    ]
-    return res[0] if res else {}
+    return await execution.execute_tool(
+        "get_item",
+        arguments={
+            "collection_id": collection_id,
+            "item_id": item_id,
+            "output_format": output_format,
+        },
+        catalog_url=catalog_url,
+        headers=None,
+    )
 
 
 @app.tool
@@ -121,13 +103,18 @@ async def search_items(
             "output_format": output_format,
         }
     )
-    async for item in execution.execute_tool(
+    result = await execution.execute_tool(
         "search_items",
         arguments=arguments,
         catalog_url=catalog_url,
         headers=None,
-    ):
-        yield item
+    )
+    if inspect.isasyncgen(result):
+        async for item in result:
+            yield item
+    elif inspect.isgenerator(result):
+        for item in result:
+            yield item
 
 
 @app.tool
@@ -141,7 +128,7 @@ async def estimate_data_size(
     force_metadata_only: bool | None = False,
     output_format: str | None = "text",
     catalog_url: str | None = None,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     """Estimate the data size for a STAC query."""
     arguments = preprocess_parameters(
         {
@@ -155,34 +142,26 @@ async def estimate_data_size(
             "output_format": output_format,
         }
     )
-    res = [
-        item
-        async for item in execution.execute_tool(
-            "estimate_data_size",
-            arguments=arguments,
-            catalog_url=catalog_url,
-            headers=None,
-        )
-    ]
-    return res[0] if res else {}
+    return await execution.execute_tool(
+        "estimate_data_size",
+        arguments=arguments,
+        catalog_url=catalog_url,
+        headers=None,
+    )
 
 
 @app.tool
 async def get_queryables(
-    collection_id: str,
+    collection_id: list[str],
     catalog_url: str | None = None,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     """Get the queryable properties for a specific STAC collection by its ID."""
-    res = [
-        item
-        async for item in execution.execute_tool(
-            "get_queryables",
-            {"collection_id": collection_id},
-            catalog_url=catalog_url,
-            headers=None,
-        )
-    ]
-    return res[0] if res else {}
+    return await execution.execute_tool(
+        "get_queryables",
+        {"collection_id": collection_id},
+        catalog_url=catalog_url,
+        headers=None,
+    )
 
 
 @app.tool
@@ -192,35 +171,27 @@ async def get_aggregations(
     datetime: str | None = None,
     query: dict[str, Any] | None = None,
     catalog_url: str | None = None,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     """Get aggregations for STAC items."""
-    res = [
-        item
-        async for item in execution.execute_tool(
-            "get_aggregations",
-            arguments={
-                "collections": collections,
-                "bbox": bbox,
-                "datetime": datetime,
-                "query": query,
-            },
-            catalog_url=catalog_url,
-            headers=None,
-        )
-    ]
-    return res[0] if res else {}
+    return await execution.execute_tool(
+        "get_aggregations",
+        arguments={
+            "collections": collections,
+            "bbox": bbox,
+            "datetime": datetime,
+            "query": query,
+        },
+        catalog_url=catalog_url,
+        headers=None,
+    )
 
 
 @app.tool
-async def get_sensor_registry_info() -> dict[str, Any]:
+async def get_sensor_registry_info() -> list[dict[str, Any]]:
     """Get information about the STAC sensor registry."""
-    res = [
-        item
-        async for item in execution.execute_tool(
-            "sensor_registry_info",
-            arguments={},
-            catalog_url=None,
-            headers=None,
-        )
-    ]
-    return res[0] if res else {}
+    return await execution.execute_tool(
+        "sensor_registry_info",
+        arguments={},
+        catalog_url=None,
+        headers=None,
+    )

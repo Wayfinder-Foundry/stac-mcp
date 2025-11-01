@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import PropertyMock, patch
 
 import pytest
+from fastmcp import Client
 
 from stac_mcp.server import app
 
@@ -45,9 +46,7 @@ async def test_search_cache_hit():
         new_callable=PropertyMock,
         return_value=SimpleNamespace(search=search_fn),
     ):
-        # Get the tool function from the app
         search_items_tool = app._tool_manager._tools["search_items"].fn  # noqa: SLF001
-
         # first call - should invoke underlying search
         res1 = search_items_tool(collections=["c1"], limit=5)
         _ = [r async for r in res1]
@@ -99,9 +98,7 @@ async def test_search_cache_ttl_expiry(monkeypatch):
         new_callable=PropertyMock,
         return_value=SimpleNamespace(search=search_fn),
     ):
-        # Get the tool function from the app
         search_items_tool = app._tool_manager._tools["search_items"].fn  # noqa: SLF001
-
         res1 = search_items_tool(collections=["c1"], limit=5)
         _ = [r async for r in res1]
         # wait for TTL to expire

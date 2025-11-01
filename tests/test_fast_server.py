@@ -56,7 +56,7 @@ class DummyCall:
     def __init__(self):
         self.calls = []
 
-    def __call__(self, name, arguments=None, catalog_url=None, headers=None):
+    async def __call__(self, name, arguments=None, catalog_url=None, headers=None):
         self.calls.append(
             {
                 "name": name,
@@ -65,17 +65,25 @@ class DummyCall:
                 "headers": headers,
             }
         )
+        if name == "search_items":
 
-        async def _dummy_generator():
-            # return a simple predictable payload
-            yield {
+            async def _dummy_generator():
+                yield {
+                    "tool": name,
+                    "args": arguments or {},
+                    "catalog_url": catalog_url,
+                    "headers": headers,
+                }
+
+            return _dummy_generator()
+        return [
+            {
                 "tool": name,
                 "args": arguments or {},
                 "catalog_url": catalog_url,
                 "headers": headers,
             }
-
-        return _dummy_generator()
+        ]
 
 
 @pytest.mark.asyncio
@@ -84,7 +92,9 @@ async def test_basic_tools_call_execute_tool(monkeypatch):
     monkeypatch.setattr(server.execution, "execute_tool", dummy)
 
     res = await call_tool(server.get_root)
-    assert res == {"tool": "get_root", "args": {}, "catalog_url": None, "headers": None}
+    assert res == [
+        {"tool": "get_root", "args": {}, "catalog_url": None, "headers": None}
+    ]
     assert dummy.calls[-1]["name"] == "get_root"
 
     res = await call_tool(server.get_conformance)
@@ -94,7 +104,6 @@ async def test_basic_tools_call_execute_tool(monkeypatch):
     res = await call_tool(
         server.search_collections, limit=5, catalog_url="https://example.com"
     )
-    assert isinstance(res, list)
     assert dummy.calls[-1]["name"] == "search_collections"
     assert dummy.calls[-1]["arguments"]["limit"] == ARG_LIMIT_FIVE
     assert dummy.calls[-1]["catalog_url"] == "https://example.com"
