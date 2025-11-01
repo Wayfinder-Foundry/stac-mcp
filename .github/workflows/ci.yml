@@ -5,10 +5,6 @@ on:
     branches: [main]
   pull_request:
 
-# Prevent duplicate parallel runs for same branch/PR (e.g. when pushing multiple commits in succession to a PR)
-# or when a PR is opened while a push to the same branch is being processed.
-# Cancels any in-progress runs for the same branch/PR when a new run is triggered.
-# See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#concurrency
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -28,27 +24,60 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install uv
+      - name: Install uv and tools
         uses: astral-sh/setup-uv@v3
       - name: Sync dependencies (dev + extras)
-        run: |
-          uv sync --all-extras --dev
+        run: uv sync --all-extras --dev
+
+      # --- LINT STEP ---
       - name: Lint
+        id: lint_step
+        continue-on-error: true
         run: |
           uv run ruff format stac_mcp/ tests/
           uv run ruff check stac_mcp/ tests/ --fix --no-cache
+
+      # --- BUILD STEP ---
       - name: Build (hatchling via uv) to validate packaging
-        run: |
-          uv build
+        id: build_step
+        continue-on-error: true
+        run: uv build
+
+      # --- TESTS + COVERAGE STEPS ---
       - name: Tests + coverage
+        id: tests_step
+        continue-on-error: true
         run: |
           uv run coverage run -m pytest -v
           uv run coverage xml
           uv run python scripts/generate_coverage_badge.py coverage.xml coverage-badge.svg
           uv run coverage report
+
       - name: Check coverage threshold
+        id: coverage_threshold_step
+        continue-on-error: true
+        run: uv run coverage report --fail-under=85
+
+      # --- JULES FIX TRIGGER (Error Reporting) ---
+      - name: 📝 Export Failure Context
+        if: failure()
         run: |
-          uv run coverage report --fail-under=85
+          mkdir -p failure-context
+          ERROR_MESSAGE=""
+          if ${{ steps.lint_step.outcome == 'failure' }}; then
+            ERROR_MESSAGE="${ERROR_MESSAGE}🚨 The Lint step failed. Please run 'uv run ruff check --fix' to resolve formatting and style issues.\n"
+          fi
+          if ${{ steps.build_step.outcome == 'failure' }}; then
+            ERROR_MESSAGE="${ERROR_MESSAGE}🏗️ The Build step failed. This often indicates a packaging or dependency issue.\n"
+          fi
+          if ${{ steps.tests_step.outcome == 'failure' }}; then
+            ERROR_MESSAGE="${ERROR_MESSAGE}🐞 The Tests step failed. There are broken tests that need fixing. Run 'uv run pytest'.\n"
+          fi
+          if ${{ steps.coverage_threshold_step.outcome == 'failure' }}; then
+            ERROR_MESSAGE="${ERROR_MESSAGE}📉 The Coverage check failed. The current coverage is below the required 85% threshold. Please add more tests.\n"
+          fi
+          printf "%s" "$ERROR_MESSAGE" > failure-context/error_message.txt
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -56,6 +85,14 @@ jobs:
           path: |
             coverage.xml
             coverage-badge.svg
+
+      - name: 📤 Upload Failure Context
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-context-${{ matrix.python-version }}
+          path: failure-context/
+
       - name: Commit badge (main only)
         if: github.ref == 'refs/heads/main' && matrix.python-version == '3.12'
         run: |
@@ -69,6 +106,50 @@ jobs:
             git pull --rebase origin main
             git push
           fi
+
+  jules_autofix:
+    name: 🤖 Jules Fix Session
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      pull-requests: write # Needed to comment on the PR if necessary
+
+    if: |
+      github.event_name == 'pull_request' &&
+      always() &&
+      needs.test.result == 'failure' &&
+      github.event.pull_request.user.login == 'google-labs-jules[bot]'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 📥 Download Failure Context
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: failure-context-3.12
+          path: failure-context
+
+      - name: Install dependencies for API interaction
+        run: pip install requests # Need 'requests' to talk to the Jules API
+
+      - name: 💬 Check/Message Existing Jules Session
+        env:
+          JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+          REPO_NAME: ${{ github.repository }}
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          if [ -f failure-context/error_message.txt ]; then
+            export ERROR_MESSAGE=$(cat failure-context/error_message.txt)
+          else
+            export ERROR_MESSAGE="CI failed, but could not retrieve specific error message from artifacts."
+          fi
+          python ./scripts/jules_session_manager.py
 
   codeql:
     name: CodeQL Analysis
