@@ -95,17 +95,21 @@ def test_asset_to_dict():
 
 def test_size_from_metadata():
     client = STACClient()
+    size1 = 123
+    size2 = 456
+    size3 = 789
+    size4 = 1024
 
     # Test with different keys in extra_fields
-    asset1 = {"extra_fields": {"file:size": 123}}
-    assert client._size_from_metadata(asset1) == 123
+    asset1 = {"extra_fields": {"file:size": size1}}
+    assert client._size_from_metadata(asset1) == size1
 
-    asset2 = {"extra_fields": {"file:bytes": 456}}
-    assert client._size_from_metadata(asset2) == 456
+    asset2 = {"extra_fields": {"file:bytes": size2}}
+    assert client._size_from_metadata(asset2) == size2
 
     # Test with keys directly in the asset
-    asset3 = {"size": 789}
-    assert client._size_from_metadata(asset3) == 789
+    asset3 = {"size": size3}
+    assert client._size_from_metadata(asset3) == size3
 
     # Test with a non-integer value
     asset4 = {"size": "not-a-number"}
@@ -116,8 +120,8 @@ def test_size_from_metadata():
     assert client._size_from_metadata(asset5) is None
 
     # Test with an object instead of a dict
-    asset_obj = SimpleNamespace(extra_fields={"file:size": 1024})
-    assert client._size_from_metadata(asset_obj) == 1024
+    asset_obj = SimpleNamespace(extra_fields={"file:size": size4})
+    assert client._size_from_metadata(asset_obj) == size4
 
 
 def test_sign_href(monkeypatch):
@@ -129,12 +133,12 @@ def test_sign_href(monkeypatch):
     assert client._sign_href(href) == href
 
     # Test when planetary_computer is available and returns a string
-    pc_mock_str = SimpleNamespace(sign=lambda x: "signed-url")
+    pc_mock_str = SimpleNamespace(sign=lambda _: "signed-url")
     monkeypatch.setitem(__import__("sys").modules, "planetary_computer", pc_mock_str)
     assert client._sign_href(href) == "signed-url"
 
     # Test when planetary_computer is available and returns a dict
-    pc_mock_dict = SimpleNamespace(sign=lambda x: {"url": "signed-url-from-dict"})
+    pc_mock_dict = SimpleNamespace(sign=lambda _: {"url": "signed-url-from-dict"})
     monkeypatch.setitem(__import__("sys").modules, "planetary_computer", pc_mock_dict)
     assert client._sign_href(href) == "signed-url-from-dict"
 
