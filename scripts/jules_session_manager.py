@@ -24,7 +24,7 @@ def find_active_session():
     print(f"Searching for active sessions in {REPO_NAME} on branch {BRANCH_NAME}...")
 
     try:
-        response = requests.get(list_url, headers=HEADERS, params={"pageSize": 50}, timeout=30)
+        response = requests.get(list_url, headers=HEADERS, params={"pageSize": 50})
         response.raise_for_status()
         sessions_data = response.json().get("sessions", [])
     except requests.exceptions.RequestException as e:
@@ -64,7 +64,7 @@ def send_fix_message(session_name):
 
     print(f"Sending message to session {session_name} to initiate fix...")
     try:
-        response = requests.post(send_message_url, headers=HEADERS, json=payload, timeout=30)
+        response = requests.post(send_message_url, headers=HEADERS, json=payload)
         response.raise_for_status()
         print("Successfully sent fix message to existing session.")
     except requests.exceptions.RequestException as e:
