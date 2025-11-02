@@ -281,7 +281,7 @@ class STACClient:
             sortby=sortby,
             limit=limit,
         )
-        items = search.items_as_dicts()
+        items = search.items_as_dict()
         # Store the list for reuse within this client/session along with timestamp.
         self._search_cache[key] = (now, items)
         return items
