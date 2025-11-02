@@ -67,16 +67,16 @@ jobs:
         run: |
           mkdir -p failure-context
           ERROR_MESSAGE=""
-          if ${{ steps.lint_step.outcome == 'failure' }}; then
+          if [ "${{ steps.lint_step.outcome }}" = "failure" ]; then
             ERROR_MESSAGE="${ERROR_MESSAGE}🚨 The Lint step failed. Please run 'uv run ruff check --fix' to resolve formatting and style issues.\n"
           fi
-          if ${{ steps.build_step.outcome == 'failure' }}; then
+          if [ "${{ steps.build_step.outcome }}" = "failure" ]; then
             ERROR_MESSAGE="${ERROR_MESSAGE}🏗️ The Build step failed. This often indicates a packaging or dependency issue.\n"
           fi
-          if ${{ steps.tests_step.outcome == 'failure' }}; then
+          if [ "${{ steps.tests_step.outcome }}" = "failure" ]; then
             ERROR_MESSAGE="${ERROR_MESSAGE}🐞 The Tests step failed. There are broken tests that need fixing. Run 'uv run pytest'.\n"
           fi
-          if ${{ steps.coverage_threshold_step.outcome == 'failure' }}; then
+          if [ "${{ steps.coverage_threshold_step.outcome }}" = "failure" ]; then
             ERROR_MESSAGE="${ERROR_MESSAGE}📉 The Coverage check failed. The current coverage is below the required 85% threshold. Please add more tests.\n"
           fi
           printf "%s" "$ERROR_MESSAGE" > failure-context/error_message.txt
