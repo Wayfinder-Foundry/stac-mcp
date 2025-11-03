@@ -80,13 +80,13 @@ jobs:
           fi
           printf "%s" "$ERROR_MESSAGE" > failure-context/error_message.txt
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-artifacts-${{ matrix.python-version }}
-          path: |
-            coverage.xml
-            coverage-badge.svg
+      # - name: Upload artifacts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: coverage-artifacts-${{ matrix.python-version }}
+      #     path: |
+      #       coverage.xml
+      #       coverage-badge.svg
 
       - name: 📤 Upload Failure Context
         if: failure()
@@ -95,19 +95,19 @@ jobs:
           name: failure-context-${{ matrix.python-version }}
           path: failure-context/
 
-      - name: Commit badge (main only)
-        if: github.ref == 'refs/heads/main' && matrix.python-version == '3.12'
-        run: |
-          if git diff --quiet coverage-badge.svg 2>/dev/null; then
-            echo 'No badge changes'
-          else
-            git config user.name 'github-actions'
-            git config user.email 'actions@github.com'
-            git add coverage-badge.svg
-            git commit -m 'chore(ci): update coverage badge'
-            git pull --rebase origin main
-            git push
-          fi
+      # - name: Commit badge (main only)
+      #   if: github.ref == 'refs/heads/main' && matrix.python-version == '3.12'
+      #   run: |
+      #     if git diff --quiet coverage-badge.svg 2>/dev/null; then
+      #       echo 'No badge changes'
+      #     else
+      #       git config user.name 'github-actions'
+      #       git config user.email 'actions@github.com'
+      #       git add coverage-badge.svg
+      #       git commit -m 'chore(ci): update coverage badge'
+      #       git pull --rebase origin main
+      #       git push
+      #     fi
 
   get_commit_author:
     name: Get Commit Author
