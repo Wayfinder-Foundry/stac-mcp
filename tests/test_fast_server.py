@@ -5,8 +5,8 @@ from typing import Any, Literal
 import pytest
 from fastmcp import Client
 
-from stac_mcp import fast_server
-from stac_mcp.fast_server import app
+from stac_mcp import server
+from stac_mcp.server import app
 from tests import ARG_LIMIT_FIVE, ARG_LIMIT_TWO
 
 
@@ -32,10 +32,7 @@ async def call_tool(tool, *a, **kw):
             attr = getattr(tool, name)
         except AttributeError:
             continue
-        if (
-            callable(attr)
-            and getattr(attr, "__module__", None) == "stac_mcp.fast_server"
-        ):
+        if callable(attr) and getattr(attr, "__module__", None) == "stac_mcp.server":
             coro = attr(*a, **kw)
             if asyncio.iscoroutine(coro):
                 return await coro
@@ -47,7 +44,7 @@ async def call_tool(tool, *a, **kw):
 def test_tool_introspection():
     # Ensure the tool object exposes something we can use in tests;
     # print dir for debugging
-    t = fast_server.get_root
+    t = server.get_root
     attrs = set(dir(t))
     # assert some likely properties exist so we fail clearly if not
     assert "name" in attrs or "__class__" in attrs
@@ -80,20 +77,20 @@ class DummyCall:
 @pytest.mark.asyncio
 async def test_basic_tools_call_execute_tool(monkeypatch):
     dummy = DummyCall()
-    monkeypatch.setattr(fast_server.execution, "execute_tool", dummy)
+    monkeypatch.setattr(server.execution, "execute_tool", dummy)
 
-    res = await call_tool(fast_server.get_root)
+    res = await call_tool(server.get_root)
     assert res == [
         {"tool": "get_root", "args": {}, "catalog_url": None, "headers": None}
     ]
     assert dummy.calls[-1]["name"] == "get_root"
 
-    res = await call_tool(fast_server.get_conformance)
+    res = await call_tool(server.get_conformance)
     assert dummy.calls[-1]["name"] == "get_conformance"
 
     # search_collections with explicit limit and catalog_url
     res = await call_tool(
-        fast_server.search_collections, limit=5, catalog_url="https://example.com"
+        server.search_collections, limit=5, catalog_url="https://example.com"
     )
     assert dummy.calls[-1]["name"] == "search_collections"
     assert dummy.calls[-1]["arguments"]["limit"] == ARG_LIMIT_FIVE
@@ -103,10 +100,10 @@ async def test_basic_tools_call_execute_tool(monkeypatch):
 @pytest.mark.asyncio
 async def test_get_and_search_items_variants(monkeypatch):
     dummy = DummyCall()
-    monkeypatch.setattr(fast_server.execution, "execute_tool", dummy)
+    monkeypatch.setattr(server.execution, "execute_tool", dummy)
 
     # get_item default output_format
-    res = await call_tool(fast_server.get_item, "col-1", "item-1")
+    res = await call_tool(server.get_item, "col-1", "item-1")
     assert dummy.calls[-1]["name"] == "get_item"
     assert dummy.calls[-1]["arguments"]["collection_id"] == "col-1"
     assert dummy.calls[-1]["arguments"]["item_id"] == "item-1"
@@ -114,7 +111,7 @@ async def test_get_and_search_items_variants(monkeypatch):
 
     # search_items with multiple params
     res = await call_tool(  # noqa: F841
-        fast_server.search_items,
+        server.search_items,
         collections=["c1", "c2"],
         bbox=[0.0, 0.0, 1.0, 1.0],
         datetime=None,

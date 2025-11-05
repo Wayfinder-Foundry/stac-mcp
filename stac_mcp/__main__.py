@@ -1,6 +1,6 @@
 """Entry point for running the STAC MCP server as ``python -m stac_mcp``."""
 
-from stac_mcp.fast_server import app
+from stac_mcp.server import app
 
 
 def main() -> None:

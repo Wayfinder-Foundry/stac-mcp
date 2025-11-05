@@ -244,7 +244,7 @@ class STACClient:
         bbox: list[float] | None = None,
         datetime: str | None = None,
         query: dict[str, Any] | None = None,
-        sortby: list[dict[str, str]] | None = None,
+        sortby: list[str] | list[dict[str, str]] | None = None,
         limit: int = 10,
     ) -> list[Any]:
         """Run a search and cache the resulting item list per-client.
@@ -281,7 +281,7 @@ class STACClient:
             sortby=sortby,
             limit=limit,
         )
-        items = list(search.items())
+        items = search.items_as_dict()
         # Store the list for reuse within this client/session along with timestamp.
         self._search_cache[key] = (now, items)
         return items
@@ -441,7 +441,7 @@ class STACClient:
         bbox: list[float] | None = None,
         datetime: str | None = None,
         query: dict[str, Any] | None = None,
-        sortby: list[tuple[str, str]] | None = None,
+        sortby: list[str] | list[dict[str, str]] | None = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
         if query:
@@ -450,7 +450,7 @@ class STACClient:
             self._check_conformance(CONFORMANCE_SORT)
         try:
             # Use cached search results (per-client) when available.
-            pystac_items = self._cached_search(
+            items = self._cached_search(
                 collections=collections,
                 bbox=bbox,
                 datetime=datetime,
@@ -458,37 +458,33 @@ class STACClient:
                 sortby=sortby,
                 limit=limit,
             )
-            items = []
-            for item in pystac_items:
-                # Be permissive when normalizing items: tests and alternate
-                # client implementations may provide SimpleNamespace-like
-                # objects without all attributes. Use getattr with sensible
-                # defaults to avoid AttributeError during normalization.
-                items.append(
-                    {
-                        "id": getattr(item, "id", None),
-                        "collection": getattr(item, "collection_id", None),
-                        "geometry": getattr(item, "geometry", None),
-                        "bbox": getattr(item, "bbox", None),
-                        "datetime": (
-                            item.datetime.isoformat()
-                            if getattr(item, "datetime", None)
-                            else None
-                        ),
-                        "properties": getattr(item, "properties", {}) or {},
-                        "assets": {
-                            k: v.to_dict()
-                            for k, v in getattr(item, "assets", {}).items()
-                        },
-                    }
-                )
-                if limit and limit > 0 and len(items) >= limit:
-                    break
         except APIError:  # pragma: no cover - network dependent
             logger.exception("Error searching items")
             raise
-        else:
-            return items
+
+        if not items:
+            return []
+        # Normalize items to dicts for consistent output.
+        normalized_items = []
+        for item in items:
+            normalized_items.append(
+                {
+                    "id": getattr(item, "id", None),
+                    "collection": getattr(item, "collection_id", None),
+                    "geometry": getattr(item, "geometry", None),
+                    "bbox": getattr(item, "bbox", None),
+                    "datetime": (
+                        item.datetime.isoformat()
+                        if getattr(item, "datetime", None)
+                        else None
+                    ),
+                    "properties": getattr(item, "properties", {}) or {},
+                    "assets": {
+                        k: v.to_dict() for k, v in getattr(item, "assets", {}).items()
+                    },
+                }
+            )
+        return normalized_items
 
     def get_item(self, collection_id: str, item_id: str) -> dict[str, Any]:
         try:
@@ -957,31 +953,90 @@ class STACClient:
         return {"conformsTo": conforms, "checks": checks}
 
     def get_queryables(self, collection_id: str | None = None) -> dict[str, Any]:
-        self._check_conformance(CONFORMANCE_QUERYABLES)
+        # Some STAC servers expose a /queryables endpoint via a link on the root
+        # document but may omit the exact conformance URI from the conformance
+        # list. Try the strict conformance check first; if it fails, fall back
+        # to inspecting the root document for an explicit queryables link and
+        # allow the call to proceed when such a link is present.
+        try:
+            self._check_conformance(CONFORMANCE_QUERYABLES)
+        except ConformanceError:
+            # If the conformance check fails, see if the root advertises a
+            # queryables link. If it does, proceed; otherwise re-raise the
+            # ConformanceError.
+            root = self.get_root_document()
+            links = root.get("links", [])
+            for link in links:
+                rel = link.get("rel")
+                href = link.get("href", "")
+                # If we find a queryables link, break and allow the call to proceed.
+                # We do not validate the href here; the subsequent request may still
+                # fail.
+                # opengis.net link is preferred, but some servers use custom rels with
+                # /queryables in href.
+                if rel == "http://www.opengis.net/def/rel/ogc/1.0/queryables" or (
+                    isinstance(href, str) and "/queryables" in href
+                ):
+                    break
+            else:
+                # No queryables conformance and no link advertised -> fail.
+                raise
+
         path = (
             f"/collections/{collection_id}/queryables"
             if collection_id
             else "/queryables"
         )
-        base = self.catalog_url.replace("catalog.json", "").rstrip("/")
+        base = self.catalog_url
+        if base.endswith("/catalog.json"):
+            base = base[: -len("/catalog.json")]
+        base = base.rstrip("/")
         url = f"{base}{path}"
         request_headers = self.headers.copy()
         request_headers.setdefault("Accept", "application/json")
         try:
             res = requests.get(url, headers=request_headers, timeout=30)
-            if res.status_code == HTTP_404 or not res.ok:
-                return {
-                    "queryables": {},
-                    "collection_id": collection_id,
-                    "message": "Queryables not available",
-                }
-            q = res.json() if res.content else {}
-        except requests.RequestException:
+            # If the collection-scoped endpoint returns 404 and we were trying a
+            # collection-specific path, some servers instead expose the root
+            # /queryables endpoint and accept a `collection` query parameter.
+            # Try that fallback before giving up.
+            if not res.ok:
+                if res.status_code == HTTP_404 and collection_id is not None:
+                    fallback_url = f"{base}/queryables?collection={collection_id}"
+                    try:
+                        res2 = requests.get(
+                            fallback_url, headers=request_headers, timeout=30
+                        )
+                        if not res2.ok:
+                            return {
+                                "queryables": {},
+                                "collection_id": collection_id,
+                                "message": f"Queryables not available (HTTP \
+                                    {res2.status_code})",
+                            }
+                        q = res2.json() if res2.content else {}
+                    except requests.RequestException as e:
+                        logger.exception("Failed to fetch queryables %s", fallback_url)
+                        return {
+                            "queryables": {},
+                            "collection_id": collection_id,
+                            "message": f"Queryables not available \
+                                (request failed: {e})",
+                        }
+                else:
+                    return {
+                        "queryables": {},
+                        "collection_id": collection_id,
+                        "message": f"Queryables not available (HTTP {res.status_code})",
+                    }
+            else:
+                q = res.json() if res.content else {}
+        except requests.RequestException as e:
             logger.exception("Failed to fetch queryables %s", url)
             return {
                 "queryables": {},
                 "collection_id": collection_id,
-                "message": "Queryables not available",
+                "message": f"Queryables not available (request failed: {e})",
             }
         props = q.get("properties") or q.get("queryables") or {}
         return {"queryables": props, "collection_id": collection_id}
@@ -989,66 +1044,72 @@ class STACClient:
     def get_aggregations(
         self,
         collections: list[str] | None = None,
+        ids: list[str] | None = None,
         bbox: list[float] | None = None,
+        intersects: dict[str, Any] | None = None,
         datetime: str | None = None,
         query: dict[str, Any] | None = None,
+        filter_lang: str | None = None,  # noqa: ARG002
+        filter_expr: dict[str, Any] | None = None,  # noqa: ARG002
         fields: list[str] | None = None,
-        operations: list[str] | None = None,
+        sortby: list[dict[str, Any]] | None = None,
         limit: int = 0,
     ) -> dict[str, Any]:
-        # Use the STAC API search endpoint via requests rather than relying on
-        # private pystac_client IO helpers. This uses the public HTTP contract.
-        # Ensure the server advertises aggregation capability
         self._check_conformance(CONFORMANCE_AGGREGATION)
-        base = self.catalog_url.replace("catalog.json", "").rstrip("/")
+        base = self.catalog_url
+        if base.endswith("/catalog.json"):
+            base = base[: -len("/catalog.json")]
+        base = base.rstrip("/")
         url = f"{base}/search"
+
         request_headers = self.headers.copy()
         request_headers["Accept"] = "application/json"
-        # Construct the search request body according to STAC Search API
+
         body: dict[str, Any] = {}
         if collections:
             body["collections"] = collections
+        if ids:
+            body["ids"] = ids
         if bbox:
             body["bbox"] = bbox
+        if intersects:
+            body["intersects"] = intersects
         if datetime:
             body["datetime"] = datetime
         if query:
             body["query"] = query
+        if sortby:
+            body["sortby"] = sortby
         if limit and limit > 0:
             body["limit"] = limit
 
-        # Aggregation request shape is not strictly standardized across
-        # implementations; include a simple aggregations object when fields
-        # or operations are provided. Servers supporting aggregation will
-        # respond with an `aggregations` field in the search response.
-        if fields or operations:
-            body["aggregations"] = {
-                "fields": fields or [],
-                "operations": operations or [],
-            }
+        # Aggregation-specific part of the request
+        if fields:
+            body["aggregations"] = [{"name": f, "params": {}} for f in fields]
 
         try:
-            resp = requests.post(url, json=body, headers=request_headers, timeout=30)
+            resp = requests.post(url, json=body, headers=request_headers, timeout=60)
             if not resp.ok:
                 return {
                     "supported": False,
                     "aggregations": {},
-                    "message": "Search endpoint unavailable",
+                    "message": f"Search endpoint unavailable (HTTP {resp.status_code})",
                     "parameters": body,
                 }
             res_json = resp.json() if resp.content else {}
             aggs_result = res_json.get("aggregations") or {}
             return {
-                "supported": bool(aggs_result),
+                "supported": "aggregations" in res_json,
                 "aggregations": aggs_result,
-                # any additional metadata preserved
+                "meta": res_json.get("meta", {}),
+                "links": res_json.get("links", []),
             }
-        except requests.RequestException:
+        except requests.RequestException as e:
             logger.exception("Aggregation request failed %s", url)
             return {
                 "supported": False,
                 "aggregations": {},
-                "message": "Search endpoint unavailable",
+                "message": f"Search endpoint unavailable (request failed: {e})",
                 "parameters": body,
             }
 
