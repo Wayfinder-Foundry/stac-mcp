@@ -100,7 +100,7 @@ def test_search_items(stac_client, monkeypatch):
     search_mock = MagicMock()
     # Underlying pystac-client search may provide an object with items() or
     # items_as_dict(). Ensure our mock exposes items_as_dict() as used by code.
-    search_mock.items_as_dict.return_value = [
+    search_mock.items.return_value = [
         _mk_item("i1", "c1"),
         _mk_item("i2", "c1"),
     ]
@@ -111,7 +111,7 @@ def test_search_items(stac_client, monkeypatch):
     assert len(res) == NUM_ITEMS
     assert isinstance(res, list)
     assert isinstance(res[0], dict)
-    assert res[0]["id"] == "i1"
+    assert res[0].get("id") == "i1"
 
 
 def test_get_item(stac_client, monkeypatch):
