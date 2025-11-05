@@ -88,9 +88,7 @@ def test_asset_to_dict():
 
     # Test with a simple object
     simple_obj = SimpleNamespace(href="http://example.com/asset.tif")
-    assert client._asset_to_dict(simple_obj) == {
-        "href": "http://example.com/asset.tif"
-    }
+    assert client._asset_to_dict(simple_obj) == {"href": "http://example.com/asset.tif"}
 
 
 def test_size_from_metadata():

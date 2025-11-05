@@ -694,5 +694,3 @@ def register_prompts(app: Any) -> None:
             content=TextContent(type="text", text=human),
             _meta={"machine_payload": payload},
         )
-
-    

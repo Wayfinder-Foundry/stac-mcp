@@ -953,7 +953,35 @@ class STACClient:
         return {"conformsTo": conforms, "checks": checks}
 
     def get_queryables(self, collection_id: str | None = None) -> dict[str, Any]:
-        self._check_conformance(CONFORMANCE_QUERYABLES)
+        # Some STAC servers expose a /queryables endpoint via a link on the root
+        # document but may omit the exact conformance URI from the conformance
+        # list. Try the strict conformance check first; if it fails, fall back
+        # to inspecting the root document for an explicit queryables link and
+        # allow the call to proceed when such a link is present.
+        try:
+            self._check_conformance(CONFORMANCE_QUERYABLES)
+        except ConformanceError:
+            # If the conformance check fails, see if the root advertises a
+            # queryables link. If it does, proceed; otherwise re-raise the
+            # ConformanceError.
+            root = self.get_root_document()
+            links = root.get("links", [])
+            for link in links:
+                rel = link.get("rel")
+                href = link.get("href", "")
+                # If we find a queryables link, break and allow the call to proceed.
+                # We do not validate the href here; the subsequent request may still
+                # fail.
+                # opengis.net link is preferred, but some servers use custom rels with
+                # /queryables in href.
+                if rel == "http://www.opengis.net/def/rel/ogc/1.0/queryables" or (
+                    isinstance(href, str) and "/queryables" in href
+                ):
+                    break
+            else:
+                # No queryables conformance and no link advertised -> fail.
+                raise
+
         path = (
             f"/collections/{collection_id}/queryables"
             if collection_id
@@ -968,13 +996,41 @@ class STACClient:
         request_headers.setdefault("Accept", "application/json")
         try:
             res = requests.get(url, headers=request_headers, timeout=30)
+            # If the collection-scoped endpoint returns 404 and we were trying a
+            # collection-specific path, some servers instead expose the root
+            # /queryables endpoint and accept a `collection` query parameter.
+            # Try that fallback before giving up.
             if not res.ok:
-                return {
-                    "queryables": {},
-                    "collection_id": collection_id,
-                    "message": f"Queryables not available (HTTP {res.status_code})",
-                }
-            q = res.json() if res.content else {}
+                if res.status_code == HTTP_404 and collection_id is not None:
+                    fallback_url = f"{base}/queryables?collection={collection_id}"
+                    try:
+                        res2 = requests.get(
+                            fallback_url, headers=request_headers, timeout=30
+                        )
+                        if not res2.ok:
+                            return {
+                                "queryables": {},
+                                "collection_id": collection_id,
+                                "message": f"Queryables not available (HTTP \
+                                    {res2.status_code})",
+                            }
+                        q = res2.json() if res2.content else {}
+                    except requests.RequestException as e:
+                        logger.exception("Failed to fetch queryables %s", fallback_url)
+                        return {
+                            "queryables": {},
+                            "collection_id": collection_id,
+                            "message": f"Queryables not available \
+                                (request failed: {e})",
+                        }
+                else:
+                    return {
+                        "queryables": {},
+                        "collection_id": collection_id,
+                        "message": f"Queryables not available (HTTP {res.status_code})",
+                    }
+            else:
+                q = res.json() if res.content else {}
         except requests.RequestException as e:
             logger.exception("Failed to fetch queryables %s", url)
             return {
