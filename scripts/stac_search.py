@@ -1,4 +1,3 @@
-
 from pystac_client import Client as STACClient
 
 if __name__ == "__main__":
