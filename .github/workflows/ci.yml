@@ -34,7 +34,7 @@ jobs:
       # --- LINT STEP ---
       - name: Lint
         id: lint_step
-        continue-on-error: true
+        continue-on-error: false
         run: |
           uv run ruff format stac_mcp/ tests/
           uv run ruff check stac_mcp/ tests/ --fix --no-cache
@@ -42,13 +42,13 @@ jobs:
       # --- BUILD STEP ---
       - name: Build (hatchling via uv) to validate packaging
         id: build_step
-        continue-on-error: true
+        continue-on-error: false
         run: uv build
 
       # --- TESTS + COVERAGE STEPS ---
       - name: Tests + coverage
         id: tests_step
-        continue-on-error: true
+        continue-on-error: false
         run: |
           uv run coverage run -m pytest -v
           uv run coverage xml
@@ -57,7 +57,7 @@ jobs:
 
       - name: Check coverage threshold
         id: coverage_threshold_step
-        continue-on-error: true
+        continue-on-error: false
         run: uv run coverage report --fail-under=85
 
       # --- JULES FIX TRIGGER (Error Reporting) ---
