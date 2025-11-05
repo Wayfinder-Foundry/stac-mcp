@@ -28,6 +28,7 @@ def handle_search_items(
     if arguments.get("output_format") == "json":
         return {"type": "item_list", "count": len(items), "items": items}
     result_text = f"Found {len(items)} items:\n\n"
+    asset_keys = set()
     for item in items:
         item_id = item.get("id", "unknown")
         collection_id = item.get("collection", "unknown")
@@ -42,6 +43,12 @@ def handle_search_items(
                 f"[{bbox[0]:.2f}, {bbox[1]:.2f}, {bbox[2]:.2f}, {bbox[3]:.2f}]\n"
             )
         assets = item.get("assets") or {}
+        asset_keys.update(assets.keys())
         asset_count = len(assets) if hasattr(assets, "__len__") else 0
         result_text += f"  Assets: {asset_count}\n\n"
+        result_text += "\n"
+    if asset_keys:
+        result_text += "Assets found across items:\n"
+        for key in sorted(asset_keys):
+            result_text += f" - {key}\n"
     return [TextContent(type="text", text=result_text)]

@@ -297,6 +297,12 @@ def register_prompts(app: Any) -> None:
                     },
                     "datetime": {"type": "string"},
                     "limit": {"type": "integer", "default": 10},
+                    "query": {"type": "object"},
+                    "output_format": {
+                        "type": "string",
+                        "enum": ["text", "json"],
+                        "default": "text",
+                    },
                 },
                 "required": _common_required,
             },
@@ -316,6 +322,12 @@ def register_prompts(app: Any) -> None:
                 },
                 "datetime": {"type": "string"},
                 "limit": {"type": "integer", "default": 10},
+                "query": {"type": "object"},
+                "output_format": {
+                    "type": "string",
+                    "enum": ["text", "json"],
+                    "default": "text",
+                },
             },
             "required": _common_required,
         }
@@ -408,6 +420,8 @@ def register_prompts(app: Any) -> None:
             "example": {"collections": ["c1"], "limit": 10, "output_format": "json"},
         }
         human = (
+            f"This tool should be run only after search_items has been used to "
+            "validate collection IDs and sampling parameters.\n\n"
             f"Tool: estimate_data_size\nDescription: {payload['description']}\n\n"
             "Parameters:\n"
             f"{json.dumps(schema, indent=2)}\n\n"

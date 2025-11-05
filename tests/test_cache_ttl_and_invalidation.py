@@ -12,33 +12,10 @@ from stac_mcp.server import app
 async def test_search_cache_hit():
     calls = {"n": 0}
 
-    items = [
-        SimpleNamespace(
-            id="i1",
-            collection_id="c1",
-            datetime=None,
-            assets={},
-            to_dict=lambda: {
-                "id": "i1",
-                "collection": "c1",
-                "datetime": None,
-                "assets": {},
-            },
-        )
-    ]
-
     def search_fn(**_):
         calls["n"] += 1
         return SimpleNamespace(
-            items_as_dict=lambda: [
-                {
-                    "id": item.id,
-                    "collection": item.collection_id,
-                    "datetime": None,
-                    "assets": {},
-                }
-                for item in items
-            ]
+            items=lambda: iter([]),
         )
 
     with patch(
@@ -60,33 +37,10 @@ async def test_search_cache_hit():
 async def test_search_cache_ttl_expiry(monkeypatch):
     calls = {"n": 0}
 
-    items = [
-        SimpleNamespace(
-            id="i1",
-            collection_id="c1",
-            datetime=None,
-            assets={},
-            to_dict=lambda: {
-                "id": "i1",
-                "collection": "c1",
-                "datetime": None,
-                "assets": {},
-            },
-        )
-    ]
-
     def search_fn(**_):
         calls["n"] += 1
         return SimpleNamespace(
-            items_as_dict=lambda: [
-                {
-                    "id": item.id,
-                    "collection": item.collection_id,
-                    "datetime": None,
-                    "assets": {},
-                }
-                for item in items
-            ]
+            items=lambda: iter([]),
         )
 
     # set TTL to 1 second

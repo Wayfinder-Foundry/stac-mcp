@@ -44,11 +44,11 @@ def test_cached_search_expiry_and_refresh():
             return self._items
 
     def _search_a(**_kw):
-        return FakeSearch([SimpleNamespace(id="a")])
+        return FakeSearch([SimpleNamespace(id="a", to_dict=lambda: {"id": "a"})])
 
     client._client = SimpleNamespace(search=_search_a)
     items1 = client._cached_search(collections=["c1"], limit=1)
-    assert items1[0].id == "a"
+    assert items1[0].get("id") == "a"
 
     # Force cached timestamp to be old so next call triggers refresh
     key = client._search_cache_key(["c1"], None, None, None, 1)
@@ -56,11 +56,11 @@ def test_cached_search_expiry_and_refresh():
     client._search_cache[key] = (old_ts - 10000, val)
 
     def _search_b(**_kw):
-        return FakeSearch([SimpleNamespace(id="b")])
+        return FakeSearch([SimpleNamespace(id="b", to_dict=lambda: {"id": "b"})])
 
     client._client = SimpleNamespace(search=_search_b)
     items2 = client._cached_search(collections=["c1"], limit=1)
-    assert items2[0].id == "b"
+    assert items2[0].get("id") == "b"
 
 
 def test_check_conformance_raises():
