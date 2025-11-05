@@ -246,7 +246,7 @@ class STACClient:
         query: dict[str, Any] | None = None,
         sortby: list[str] | list[dict[str, str]] | None = None,
         limit: int = 10,
-    ) -> list[Any]:
+    ):  # -> list[dict[str, Any]]:
         """Run a search and cache the resulting item list per-client.
 
         Returns a list of pystac.Item objects (as returned by the underlying
@@ -281,8 +281,9 @@ class STACClient:
             sortby=sortby,
             limit=limit,
         )
-        items = search.items_as_dict()
-        # Store the list for reuse within this client/session along with timestamp.
+        items = []
+        for _item in search.items():
+            items.append(_item if isinstance(_item, dict) else _item.to_dict())
         self._search_cache[key] = (now, items)
         return items
 
@@ -443,48 +444,27 @@ class STACClient:
         query: dict[str, Any] | None = None,
         sortby: list[str] | list[dict[str, str]] | None = None,
         limit: int = 10,
-    ) -> list[dict[str, Any]]:
+    ) -> list[Any] | list[dict[str, Any]]:
+        extra_args = {}
         if query:
             self._check_conformance(CONFORMANCE_QUERY)
+            extra_args["query"] = query
         if sortby:
             self._check_conformance(CONFORMANCE_SORT)
+            extra_args["sortby"] = sortby
         try:
             # Use cached search results (per-client) when available.
             items = self._cached_search(
                 collections=collections,
                 bbox=bbox,
                 datetime=datetime,
-                query=query,
-                sortby=sortby,
                 limit=limit,
+                **extra_args,
             )
         except APIError:  # pragma: no cover - network dependent
             logger.exception("Error searching items")
             raise
-
-        if not items:
-            return []
-        # Normalize items to dicts for consistent output.
-        normalized_items = []
-        for item in items:
-            normalized_items.append(
-                {
-                    "id": getattr(item, "id", None),
-                    "collection": getattr(item, "collection_id", None),
-                    "geometry": getattr(item, "geometry", None),
-                    "bbox": getattr(item, "bbox", None),
-                    "datetime": (
-                        item.datetime.isoformat()
-                        if getattr(item, "datetime", None)
-                        else None
-                    ),
-                    "properties": getattr(item, "properties", {}) or {},
-                    "assets": {
-                        k: v.to_dict() for k, v in getattr(item, "assets", {}).items()
-                    },
-                }
-            )
-        return normalized_items
+        return items
 
     def get_item(self, collection_id: str, item_id: str) -> dict[str, Any]:
         try:
@@ -594,7 +574,6 @@ class STACClient:
         # If the caller requested metadata-only behaviour, skip the odc/xarray
         # eager load path and jump straight to the metadata/HEAD fallback
         # implemented later in this function.
-        odc_exc = False
         if not force_metadata_only:
             # Try to perform a per-item odc.stac load and compute sizes.
             try:
@@ -817,7 +796,6 @@ class STACClient:
                 # odc may fail when tests pass in lightweight objects; log and
                 # fall back to metadata/HEAD-based aggregation below.
                 logger.exception("odc.stac eager estimate failed")
-                odc_exc = True
 
         # Fallback estimator: aggregate sizes from asset metadata (file:size)
         # and, when missing, use HEAD requests to probe Content-Length. This
