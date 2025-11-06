@@ -12,7 +12,7 @@ if __name__ == "__main__":
             "bbox": [-123.0, 45.0, -122.0, 46.0],
             "sortby": ["properties.datetime", "desc"],
             "limit": 3,
-            "output_type": "text",
+            "output_type": "json",
         },
     )
     for item in items:

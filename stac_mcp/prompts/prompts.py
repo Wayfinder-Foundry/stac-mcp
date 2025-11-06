@@ -352,6 +352,15 @@ def register_prompts(app: Any) -> None:
             "maxLat] order.\n"
             "Datetime should be in ISO 8601 format, e.g., '2020-01-01/2020-12-31'.\n"
             "Limit should be a positive integer.\n"
+            "Unlike `pystac-client`, this `limit` is a hard cutoff on the number "
+            "of items returned post-search, not a page size.\n"
+            "If a user specifies 'latest' for datetime, interpret it as the "
+            "most recent available data for the specified collections and "
+            "use a limit=1.\n"
+            "To prevent excessive data retrieval, enforce a maximum limit of 10. "
+            "Requests exceeding this limit should be adjusted down to 10 and batched.\n"
+            "If 'query' is provided, ensure it conforms to the STAC API "
+            "filter specification."
         )
         return PromptMessage(
             role="user",
