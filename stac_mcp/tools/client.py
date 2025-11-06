@@ -10,6 +10,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
+from pystac import Item
 import requests
 from pystac_client.exceptions import APIError
 
@@ -282,8 +283,11 @@ class STACClient:
             limit=limit,
         )
         items = []
-        for _item in search.items():
+        for idx, _item in enumerate(search.items()):
             items.append(_item if isinstance(_item, dict) else _item.to_dict())
+            if idx + 1 >= limit:
+                break
+
         self._search_cache[key] = (now, items)
         return items
 
@@ -464,6 +468,7 @@ class STACClient:
         except APIError:  # pragma: no cover - network dependent
             logger.exception("Error searching items")
             raise
+
         return items
 
     def get_item(self, collection_id: str, item_id: str) -> dict[str, Any]:
