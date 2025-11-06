@@ -10,7 +10,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-from pystac import Item
 import requests
 from pystac_client.exceptions import APIError
 

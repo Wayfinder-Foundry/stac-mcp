@@ -36,12 +36,12 @@ def handle_search_items(
         dt_value = item.get("datetime")
         if dt_value:
             result_text += f"  Date: {dt_value}\n"
-        # bbox = item.get("bbox")
-        # if isinstance(bbox, list | tuple) and len(bbox) >= BBOX_MIN_COORDS:
-        #     result_text += (
-        #         "  BBox: "
-        #         f"[{bbox[0]:.2f}, {bbox[1]:.2f}, {bbox[2]:.2f}, {bbox[3]:.2f}]\n"
-        #     )
+        bbox = item.get("bbox")
+        if isinstance(bbox, list | tuple) and len(bbox) >= BBOX_MIN_COORDS:
+            result_text += (
+                "  BBox: "
+                f"[{bbox[0]:.2f}, {bbox[1]:.2f}, {bbox[2]:.2f}, {bbox[3]:.2f}]\n"
+            )
         assets = item.get("assets") or {}
         asset_keys.update(assets.keys())
         asset_count = len(assets) if hasattr(assets, "__len__") else 0
