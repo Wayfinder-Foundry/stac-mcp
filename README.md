@@ -14,6 +14,10 @@
 
 An MCP (Model Context Protocol) Server that provides access to STAC (SpatioTemporal Asset Catalog) APIs for geospatial data discovery and access. Supports dual output modes (`text` and structured `json`) for all tools.
 
+<a href="https://glama.ai/mcp/servers/@BnJam/stac-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@BnJam/stac-mcp/badge" alt="STAC Server MCP server" />
+</a>
+
 > The coverage badge is updated automatically on pushes to `main` by the CI workflow.
 
 ## Overview
@@ -274,4 +278,3 @@ These documents provide guidance for:
 ## License
 
 Apache 2.0 - see [LICENSE](LICENSE) file for details.
-
