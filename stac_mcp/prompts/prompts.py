@@ -78,17 +78,29 @@ def register_prompts(app: Any) -> None:
         name="tool_get_root_prompt",
         description="Usage for get_root tool",
         meta={
-            "schema": {"type": "object", "properties": {}, "required": []},
-            "example": {},
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "catalog_url": {"type": "string"},
+                },
+                "required": [],
+            },
+            "example": {"catalog_url": "https://earth-search.aws.element84.com/v1"},
         },
     )
     def _prompt_get_root() -> PromptMessage:
-        schema = {"type": "object", "properties": {}, "required": []}
+        schema = {
+            "type": "object",
+            "properties": {
+                "catalog_url": {"type": "string"},
+            },
+            "required": [],
+        }
         payload = {
             "name": "get_root",
             "description": "Return the STAC root document for a catalog.",
             "parameters": schema,
-            "example": {},
+            "example": {"catalog_url": "https://earth-search.aws.element84.com/v1"},
         }
         human = (
             f"Tool: get_root\nDescription: {payload['description']}\n\n"
@@ -107,12 +119,24 @@ def register_prompts(app: Any) -> None:
         name="tool_get_conformance_prompt",
         description="Usage for get_conformance tool",
         meta={
-            "schema": {"type": "object", "properties": {}, "required": []},
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "catalog_url": {"type": "string"},
+                },
+                "required": [],
+            },
             "example": {},
         },
     )
     def _prompt_get_conformance() -> PromptMessage:
-        schema = {"type": "object", "properties": {}, "required": []}
+        schema = {
+            "type": "object",
+            "properties": {
+                "catalog_url": {"type": "string"},
+            },
+            "required": [],
+        }
         payload = {
             "name": "get_conformance",
             "description": "Return server conformance classes.",
