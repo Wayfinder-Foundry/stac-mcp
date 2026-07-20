@@ -30,6 +30,10 @@ RUN uv sync
 RUN uv build
 RUN pip install dist/stac_mcp-*.whl
 
-# Set the entry point for the application
-ENTRYPOINT ["python", "-m", "stac_mcp.server"]
-CMD ["--help"]
+# Set the entry point for the application.
+# Use the console script declared in pyproject.toml ([project.scripts]),
+# not `python -m stac_mcp.server` - server.py only defines the FastMCP app
+# and registers tools, it has no `if __name__ == "__main__":` block, so
+# running it as a script just imports it and exits cleanly (exit 0) without
+# ever starting the server.
+ENTRYPOINT ["stac-mcp"]
