@@ -19,18 +19,22 @@ register_prompts(app)
 
 
 @app.tool
-async def get_root() -> list[dict[str, Any]]:
+async def get_root(
+    catalog_url: str | None = None,
+) -> list[dict[str, Any]]:
     """Return the STAC root document for a catalog."""
     return await execution.execute_tool(
-        "get_root", arguments={}, catalog_url=None, headers=None
+        "get_root", arguments={}, catalog_url=catalog_url, headers=None
     )
 
 
 @app.tool
-async def get_conformance() -> list[dict[str, Any]]:
+async def get_conformance(
+    catalog_url: str | None = None,
+) -> list[dict[str, Any]]:
     """Return server conformance classes."""
     return await execution.execute_tool(
-        "get_conformance", arguments={}, catalog_url=None, headers=None
+        "get_conformance", arguments={}, catalog_url=catalog_url, headers=None
     )
 
 
