@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from unittest.mock import patch
@@ -14,6 +15,34 @@ def test_main_entry_point():
     with patch("stac_mcp.server.app.run") as mock_run:
         main()
         mock_run.assert_called_once()
+
+
+def test_main_entry_point_stdio_is_default():
+    """Test that an unset STAC_MCP_TRANSPORT still calls app.run() bare."""
+    with patch.dict(os.environ, clear=False):
+        os.environ.pop("STAC_MCP_TRANSPORT", None)
+        with patch("stac_mcp.server.app.run") as mock_run:
+            main()
+            mock_run.assert_called_once_with()
+
+
+def test_main_entry_point_http_transport():
+    """Test that STAC_MCP_TRANSPORT=http forwards transport/host/port."""
+    env = {
+        "STAC_MCP_TRANSPORT": "http",
+        "STAC_MCP_HOST": "0.0.0.0",  # noqa: S104
+        "STAC_MCP_PORT": "9000",
+    }
+    with (
+        patch.dict(os.environ, env, clear=False),
+        patch("stac_mcp.server.app.run") as mock_run,
+    ):
+        main()
+        mock_run.assert_called_once_with(
+            transport="http",
+            host="0.0.0.0",  # noqa: S104
+            port=9000,
+        )
 
 
 def test_main_module_execution():
