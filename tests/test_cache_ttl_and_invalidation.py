@@ -6,10 +6,16 @@ import pytest
 from fastmcp import Client
 
 from stac_mcp.server import app
+from stac_mcp.tools import execution
 
 
 @pytest.mark.asyncio
 async def test_search_cache_hit():
+    # _get_cached_client keys on (catalog_url, headers); both are None/None
+    # here (the defaults), so a stale client from a prior test would be
+    # reused otherwise, along with its already-populated _search_cache.
+    execution._CLIENT_CACHE.clear()  # noqa: SLF001
+
     calls = {"n": 0}
 
     def search_fn(**_):
@@ -35,6 +41,12 @@ async def test_search_cache_hit():
 
 @pytest.mark.asyncio
 async def test_search_cache_ttl_expiry(monkeypatch):
+    # Same isolation reasoning as test_search_cache_hit above: without this,
+    # a client (and its _search_cache) left over from a prior test can be
+    # reused here, making the TTL-expiry assertion flaky depending on
+    # CPython id() reuse for the mocked client object between tests.
+    execution._CLIENT_CACHE.clear()  # noqa: SLF001
+
     calls = {"n": 0}
 
     def search_fn(**_):
