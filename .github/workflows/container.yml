@@ -45,8 +45,15 @@ jobs:
           MERGE_MSG=$(git log -1 --pretty=format:"%s")
           echo "Merge message: $MERGE_MSG"
 
-          # Extract PR number from merge message
+          # Extract PR number from merge message. Supports both merge-commit
+          # style ("Merge pull request #123 from ...") and squash-merge style
+          # ("<PR title> (#123)", GitHub's default squash message) - without
+          # the second pattern, every squash-merged PR silently skips version
+          # bump/build/release with no error, which is easy to miss.
           PR_NUM=$(echo "$MERGE_MSG" | grep -oP "Merge pull request #\K\d+" || echo "")
+          if [ -z "$PR_NUM" ]; then
+            PR_NUM=$(echo "$MERGE_MSG" | grep -oP "\(#\K\d+(?=\)$)" || echo "")
+          fi
 
           if [ -z "$PR_NUM" ]; then
             echo "No PR number found in merge commit, skipping version bump"
